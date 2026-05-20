@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import sqlite3
+import folium
+from streamlit_folium import st_folium
 
 st.set_page_config(page_title="LEX EUROPE Threat Map", layout="wide")
 st.title("🔴 LEX EUROPE - Linksextremismus Threat Map")
@@ -25,80 +27,57 @@ def init_db():
 
 init_db()
 
-# ==================== ROTIERENDER GLOBUS (nur Europa/DACH/Schweiz) ====================
-st.subheader("🌍 Europa Threat Globe – Linksextremismus")
+# ==================== TABS ====================
+tab1, tab2, tab3, tab4 = st.tabs(["🗺️ Live Map", "📋 Protokoll", "🔮 Forecasts", "✉️ Kontakt"])
 
-globe_html = """
-<!DOCTYPE html>
-<html>
-<head>
-  <script src="https://unpkg.com/three-globe@2.31.0/dist/three-globe.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
-  <style>body { margin:0; background:#000; overflow:hidden; }</style>
-</head>
-<body>
-  <div id="globe"></div>
-  <script>
-    const Globe = new ThreeGlobe()
-      .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
-      .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
-      .pointAltitude(0.1)
-      .pointColor(() => '#ff2222')
-      .pointRadius(1.0);
-
-    // Nur relevante Punkte für Linksextremismus in DACH / Schweiz / Europa
-    Globe.pointsData([
-      {lat: 47.3769, lng: 8.5417, size: 1.4, name: 'Zürich'},
-      {lat: 47.5596, lng: 7.5886, size: 1.1, name: 'Basel'},
-      {lat: 46.9481, lng: 7.4474, size: 1.0, name: 'Bern'},
-      {lat: 52.5200, lng: 13.4050, size: 1.3, name: 'Berlin'},
-      {lat: 51.3397, lng: 12.3731, size: 1.3, name: 'Leipzig'},
-      {lat: 53.5511, lng: 9.9937, size: 1.1, name: 'Hamburg'},
-      {lat: 48.1372, lng: 11.5755, size: 1.0, name: 'München'},
-      {lat: 50.1109, lng: 8.6821, size: 0.9, name: 'Frankfurt'}
-    ]);
-
-    const scene = new THREE.Scene();
-    scene.add(Globe);
-
-    const renderer = new THREE.WebGLRenderer({antialias: true});
-    renderer.setSize(window.innerWidth, 750);
-    document.getElementById('globe').appendChild(renderer.domElement);
-
-    const camera = new THREE.PerspectiveCamera(50, window.innerWidth/750, 1, 2000);
-    camera.position.set(0, 0, 320);
-
-    let angle = 0.8;
-    function animate() {
-      angle += 0.0004;
-      Globe.rotation.y = angle;
-      renderer.render(scene, camera);
-      requestAnimationFrame(animate);
-    }
-    animate();
-  </script>
-</body>
-</html>
-"""
-
-st.components.v1.html(globe_html, height=750)
-
-# ==================== UNTERER TEIL ====================
-tab1, tab2 = st.tabs(["📊 Archiv", "📩 Neue Meldung"])
-
+# ==================== LIVE MAP + EVENT FEED ====================
 with tab1:
-    df = pd.read_sql("SELECT date, location, category, description FROM incidents ORDER BY date DESC", conn)
-    st.dataframe(df, use_container_width=True)
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        st.subheader("Europa Threat Map")
+        m = folium.Map(location=[47.5, 8.5], zoom_start=6, tiles="cartodb dark_matter")
+        
+        df = pd.read_sql("SELECT * FROM incidents ORDER BY date DESC", conn)
+        for _, row in df.iterrows():
+            color = "red" if "Brand" in row['category'] or "Gewalt" in row['category'] else "orange"
+            folium.Marker(
+                location=[row.get('lat', 47.5), row.get('lon', 8.5)],
+                popup=f"<b>{row['date']}</b><br>{row['location']}<br><b>{row['category']}</b><br>{row['description']}",
+                icon=folium.Icon(color=color, icon="exclamation-triangle")
+            ).add_to(m)
+        
+        st_folium(m, width=1100, height=650)
+    
+    with col2:
+        st.subheader("Event Feed (neueste Vorfälle)")
+        if not df.empty:
+            latest = df.head(10)
+            for _, row in latest.iterrows():
+                st.caption(f"**{row['date']}** — {row['location']}")
+                st.write(f"**{row['category']}** | {row['description'][:80]}...")
+                st.divider()
+        else:
+            st.info("Noch keine Vorfälle vorhanden.")
 
+# ==================== PROTOKOLL ====================
 with tab2:
-    st.subheader("Neue Meldung eintragen")
-    with st.form("meldung"):
-        date = st.date_input("Datum", datetime.today())
-        location = st.text_input("Ort (z.B. Langstrasse Zürich)")
-        category = st.selectbox("Kategorie", ["Schmiererei", "Farbbeutel", "Brandanschlag", "Sabotage", "Gewalt", "Sonstiges"])
-        desc = st.text_area("Kurze Beschreibung")
-        if st.form_submit_button("Speichern"):
-            st.success("Gespeichert (wird später auf dem Globus angezeigt)")
-            st.rerun()
+    st.subheader("Vollständiges Protokoll")
+    df_full = pd.read_sql("SELECT date, location, category, description, source FROM incidents ORDER BY date DESC", conn)
+    st.dataframe(df_full, use_container_width=True)
 
-st.caption("Globus dreht sich automatisch – nur Europa/DACH/Schweiz Fokus")
+# ==================== FORECASTS ====================
+with tab3:
+    st.subheader("🔮 Forecasts & Trends")
+    st.info("Hier kommen später Vorhersagen, Hotspot-Analysen und Risikobewertungen.")
+    st.write("Aktuell noch in Entwicklung.")
+
+# ==================== KONTAKT ====================
+with tab4:
+    st.subheader("✉️ Gewalttätiger Extremismus melden")
+    st.markdown("### Kontakt")
+    st.write("**Email:** contact-lexmap@proton.me")   # Du kannst das später ändern
+    st.write("Meldungen werden vertraulich behandelt und nur öffentliche Vorfälle verarbeitet.")
+    st.caption("Keine persönlichen Daten. Nur öffentliche Aktivitäten.")
+
+st.caption("LEX EUROPE Threat Map • Läuft auf Streamlit Cloud")
