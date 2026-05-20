@@ -1,6 +1,7 @@
-import os, logging, json, time, hashlib
+import os, logging, json, time, hashlib, re
 from datetime import datetime, timedelta
-from urllib.parse import urljoin
+from urllib.parse import urljoin, quote_plus
+import xml.etree.ElementTree as ET
 
 import requests
 from bs4 import BeautifulSoup
@@ -32,6 +33,16 @@ def get_db():
     return c
 
 db = get_db()
+
+# ==================== HTTP HEADERS ====================
+HEADERS_WEB = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
+    "Accept-Encoding": "gzip, deflate, br",
+    "DNT": "1",
+    "Connection": "keep-alive",
+}
 
 # ==================== GEOCODING ====================
 _last_geo = [0.0]
@@ -67,23 +78,22 @@ def geocode(location, country):
     return None, None
 
 # ==================== GROK ====================
-HEADERS_WEB = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36",
-    "Accept-Language": "de-DE,de;q=0.9,en;q=0.8"
-}
-
 def classify(text):
     api_key = os.getenv("GROK_API_KEY")
     if not api_key:
         log.error("GROK_API_KEY not set!")
         return {"land": "Unbekannt", "kategorie": "Unklassifiziert", "ort": "Unbekannt", "relevant": False}
-    prompt = f"""Analysiere folgenden Text auf linksextreme Gewalttat/Aktion in Europa.
-Gib NUR gültiges JSON zurück, kein Markdown.
+    prompt = f"""Analysiere folgenden Medienbericht auf eine konkrete linksextreme/linksradikale Gewalttat oder militante Aktion in Europa.
+Gib NUR gültiges JSON zurück, kein Markdown, keine Erklärung.
 
-Text: {text[:1500]}
+Text: {text[:1800]}
 
-Format: {{"land":"DE|AT|CH|FR|IT|Andere","kategorie":"Brandanschlag|Sabotage|Gewalt|Schmiererei|Aufruf zu Gewalt|Militante Aktion|Sonstiges|Unklassifiziert","ort":"Stadt oder Region","relevant":true/false}}
-relevant=true nur wenn konkrete Tat/Aktion beschrieben, nicht nur Meinungsartikel."""
+Format: {{"land":"DE|AT|CH|FR|IT|GR|ES|UK|Andere","kategorie":"Brandanschlag|Sabotage|Gewalt|Schmiererei|Aufruf zu Gewalt|Militante Aktion|Sachbeschädigung|Sonstiges|Unklassifiziert","ort":"Stadt oder Region","relevant":true/false}}
+
+relevant=true NUR wenn:
+- konkrete Tat/Aktion beschrieben (mit Ort, Zeit, Tathergang)
+- Täter linksextrem/linksradikal/autonom/antifa zuzuordnen
+- KEIN reiner Meinungsartikel/Kommentar/Hintergrundbericht ohne Tat"""
     raw = ""
     try:
         r = requests.post(
@@ -118,12 +128,19 @@ def mark_crawled():
     db.execute("INSERT OR REPLACE INTO metadata VALUES ('last_crawl',?)", (datetime.now().isoformat(),))
     db.commit()
 
-# ==================== HELPERS ====================
+# ==================== KEYWORDS ====================
 KEYWORDS = [
     "brandanschlag", "sabotage", "schmiererei", "graffiti", "molotow", "farbbeutel",
     "militant", "direkte aktion", "anschlag", "feuer gelegt", "blockade", "besetzung",
     "störaktion", "angriff", "attackier", "zerstör", "beschädig", "barrikade",
-    "anti-repression", "linksextrem", "linksradikal", "autonome", "antifa", "schwarzer block"
+    "anti-repression", "linksextrem", "linksradikal", "autonome", "antifa", "schwarzer block",
+    "bekennerschreiben", "brandsatz", "in brand gesetzt", "scheibe eingeworfen",
+    "rigaer", "rote flora", "köpi", "anarchist", "extremlinks", "schwarzer block"
+]
+
+EXCLUDE_HINTS = [
+    "rechtsextrem", "neonazi", "afd-anhänger", "rechtsradikal", "rechte szene",
+    "islamist", "reichsbürger", "putin", "trump"
 ]
 
 def chash(text, url):
@@ -148,7 +165,15 @@ def save_incident(ai, text, source, url, date_str=None):
     return True
 
 def kwmatch(text):
-    return any(kw in text.lower() for kw in KEYWORDS)
+    t = text.lower()
+    if not any(kw in t for kw in KEYWORDS):
+        return False
+    # Wenn fast nur rechte/andere Stichworte → skip
+    left_hits = sum(1 for kw in ["linksextrem","linksradikal","autonome","antifa","militant","schwarzer block","anarchist"] if kw in t)
+    right_hits = sum(1 for kw in EXCLUDE_HINTS if kw in t)
+    if right_hits >= 2 and left_hits == 0:
+        return False
+    return True
 
 def fetch_url(url, timeout=20):
     r = requests.get(url, timeout=timeout, headers=HEADERS_WEB)
@@ -159,16 +184,26 @@ def get_article_text(url):
     try:
         html = fetch_url(url)
         soup = BeautifulSoup(html, 'html.parser')
-        for t in soup(['script','style','nav','footer','header','aside']):
+        for t in soup(['script','style','nav','footer','header','aside','form','iframe']):
             t.decompose()
         el = (soup.find('article') or soup.find('main') or
-              soup.find('div', class_='content') or soup.find('div', class_='node'))
-        return (el or soup).get_text(" ", strip=True)[:3000]
+              soup.find('div', class_=re.compile(r'(content|article|node|story|text|body)', re.I)))
+        return (el or soup).get_text(" ", strip=True)[:4000]
     except Exception as e:
         log.warning(f"article_text fail {url}: {e}")
         return ""
 
-# ==================== SCRAPERS ====================
+def extract_date_from_url(url):
+    """Extract YYYY-MM-DD or YYYY/MM/DD from URL."""
+    m = re.search(r'(20\d{2})[/-](\d{1,2})[/-](\d{1,2})', url)
+    if m:
+        try:
+            return datetime(int(m.group(1)), int(m.group(2)), int(m.group(3))).strftime("%Y-%m-%d")
+        except Exception:
+            return None
+    return None
+
+# ==================== GENERIC SCRAPER (Indymedia/Barrikade) ====================
 def scrape_source(name, base_url, max_check=15):
     log.info(f"Crawling {name} ...")
     inserted = 0
@@ -195,12 +230,167 @@ def scrape_source(name, base_url, max_check=15):
             log.info(f"{name} match: {url}")
             ai = classify(text)
             if ai.get("relevant") and ai["kategorie"] not in ("Unklassifiziert", "Sonstiges"):
-                if save_incident(ai, text, name, url):
+                if save_incident(ai, text, name, url, extract_date_from_url(url)):
                     inserted += 1
             time.sleep(0.5)
     except Exception as e:
         log.error(f"{name} fail: {e}")
     log.info(f"{name}: +{inserted} incidents")
+    return inserted
+
+# ==================== RSS FEED SCRAPER ====================
+RSS_FEEDS = [
+    # Deutschland
+    ("tagesschau.de", "https://www.tagesschau.de/inland/index~rss2.xml"),
+    ("spiegel.de", "https://www.spiegel.de/politik/deutschland/index.rss"),
+    ("welt.de", "https://www.welt.de/feeds/section/politik.rss"),
+    ("zeit.de", "https://newsfeed.zeit.de/politik/index"),
+    ("faz.net", "https://www.faz.net/rss/aktuell/politik/"),
+    ("sueddeutsche.de", "https://rss.sueddeutsche.de/rss/Politik"),
+    ("focus.de", "https://rss.focus.de/politik/"),
+    ("rbb24.de", "https://www.rbb24.de/index/rss.xml/index.xml"),
+    ("ndr.de", "https://www.ndr.de/nachrichten/index-rss.xml"),
+    # Schweiz
+    ("srf.ch", "https://www.srf.ch/news/bnf/rss/1646"),
+    ("nzz.ch", "https://www.nzz.ch/recent.rss"),
+    ("watson.ch", "https://www.watson.ch/api/feeds/rss/schweiz"),
+    ("20min.ch", "https://api.20min.ch/rss/view/1"),
+    # Österreich
+    ("orf.at", "https://rss.orf.at/news.xml"),
+    ("derstandard.at", "https://www.derstandard.at/rss/inland"),
+    ("krone.at", "https://www.krone.at/feed/news"),
+]
+
+def parse_rss(xml_text):
+    """Return list of (title, link, description, pubDate)."""
+    items = []
+    try:
+        root = ET.fromstring(xml_text)
+        # RSS 2.0
+        for item in root.iter('item'):
+            title = (item.findtext('title') or "").strip()
+            link = (item.findtext('link') or "").strip()
+            desc = (item.findtext('description') or "").strip()
+            pub = (item.findtext('pubDate') or "").strip()
+            if link:
+                items.append((title, link, desc, pub))
+        # Atom fallback
+        if not items:
+            ns = {'a': 'http://www.w3.org/2005/Atom'}
+            for entry in root.iter('{http://www.w3.org/2005/Atom}entry'):
+                title = (entry.findtext('a:title', namespaces=ns) or "").strip()
+                link_el = entry.find('a:link', namespaces=ns)
+                link = link_el.get('href') if link_el is not None else ""
+                desc = (entry.findtext('a:summary', namespaces=ns) or "").strip()
+                pub = (entry.findtext('a:updated', namespaces=ns) or "").strip()
+                if link:
+                    items.append((title, link, desc, pub))
+    except Exception as e:
+        log.warning(f"RSS parse fail: {e}")
+    return items
+
+def parse_rss_date(s):
+    """Try various RSS date formats → YYYY-MM-DD."""
+    if not s:
+        return None
+    for fmt in ("%a, %d %b %Y %H:%M:%S %z", "%a, %d %b %Y %H:%M:%S GMT",
+                "%a, %d %b %Y %H:%M:%S %Z", "%Y-%m-%dT%H:%M:%S%z",
+                "%Y-%m-%dT%H:%M:%SZ"):
+        try:
+            return datetime.strptime(s.strip(), fmt).strftime("%Y-%m-%d")
+        except Exception:
+            continue
+    return None
+
+def scrape_rss_feeds(max_per_feed=8):
+    log.info("RSS scrape ...")
+    total_inserted = 0
+    for source_name, feed_url in RSS_FEEDS:
+        try:
+            xml = fetch_url(feed_url, timeout=15)
+            items = parse_rss(xml)
+            log.info(f"RSS {source_name}: {len(items)} items")
+            checked = 0
+            for title, link, desc, pub in items:
+                if checked >= max_per_feed:
+                    break
+                # Vorfilter auf Titel/Description (spart Article-Fetch)
+                preview = (title + " " + desc).lower()
+                if not any(kw in preview for kw in
+                           ["link","autonom","antifa","brand","sabotag","militant","anschlag",
+                            "extrem","barrikade","molotow","besetz","rigaer","schwarz"]):
+                    continue
+                checked += 1
+                text = get_article_text(link)
+                if len(text) < 200:
+                    continue
+                if not kwmatch(text):
+                    continue
+                log.info(f"RSS {source_name} match: {link}")
+                ai = classify(text)
+                if ai.get("relevant") and ai["kategorie"] not in ("Unklassifiziert", "Sonstiges"):
+                    date_str = parse_rss_date(pub) or extract_date_from_url(link)
+                    if save_incident(ai, text, source_name, link, date_str):
+                        total_inserted += 1
+                time.sleep(0.6)
+        except Exception as e:
+            log.warning(f"RSS {source_name} fail: {e}")
+        time.sleep(0.4)
+    log.info(f"RSS total: +{total_inserted}")
+    return total_inserted
+
+# ==================== GOOGLE NEWS RSS SEARCH ====================
+GNEWS_QUERIES = [
+    ("DE", "linksextremismus brandanschlag"),
+    ("DE", "autonome anschlag deutschland"),
+    ("DE", "antifa gewalt"),
+    ("DE", "militante linke aktion"),
+    ("CH", "linksextrem schweiz anschlag"),
+    ("CH", "autonome zürich brandanschlag"),
+    ("CH", "militante linke schweiz"),
+    ("AT", "linksextremismus österreich"),
+    ("AT", "autonome wien anschlag"),
+    ("FR", "black bloc attaque France"),
+    ("IT", "anarchici attentato italia"),
+    ("GR", "anarchists attack greece"),
+]
+
+def scrape_google_news(max_per_query=6):
+    log.info("Google News RSS scrape ...")
+    inserted = 0
+    for country, q in GNEWS_QUERIES:
+        url = f"https://news.google.com/rss/search?q={quote_plus(q)}&hl=de&gl={country}&ceid={country}:de"
+        try:
+            xml = fetch_url(url, timeout=15)
+            items = parse_rss(xml)
+            log.info(f"GNews '{q}' [{country}]: {len(items)} items")
+            checked = 0
+            for title, link, desc, pub in items:
+                if checked >= max_per_query:
+                    break
+                preview = (title + " " + desc).lower()
+                if not any(kw in preview for kw in
+                           ["link","autonom","antifa","brand","sabotag","militant","anschlag",
+                            "extrem","anarch","molotow","barrikade","black bloc"]):
+                    continue
+                checked += 1
+                # Google News leitet weiter — Original-Link extrahieren
+                real_link = link
+                text = get_article_text(real_link)
+                if len(text) < 200 or not kwmatch(text):
+                    continue
+                log.info(f"GNews match: {real_link}")
+                ai = classify(text)
+                if ai.get("relevant") and ai["kategorie"] not in ("Unklassifiziert", "Sonstiges"):
+                    source_host = real_link.split('/')[2] if '://' in real_link else "google-news"
+                    date_str = parse_rss_date(pub) or extract_date_from_url(real_link)
+                    if save_incident(ai, text, source_host, real_link, date_str):
+                        inserted += 1
+                time.sleep(0.8)
+        except Exception as e:
+            log.warning(f"GNews '{q}' fail: {e}")
+        time.sleep(0.5)
+    log.info(f"Google News total: +{inserted}")
     return inserted
 
 # ==================== TAGESANZEIGER 2026 ====================
@@ -213,66 +403,40 @@ TA_SEARCH_TERMS = [
     "linksextrem angriff",
 ]
 
-def scrape_tagesanzeiger_2026():
-    """Pull Tagesanzeiger articles about left-wing violence from 2026."""
-    log.info("Tagesanzeiger 2026 historical scrape ...")
+def scrape_tagesanzeiger():
+    log.info("Tagesanzeiger scrape ...")
     inserted = 0
     candidate_urls = set()
-
     for term in TA_SEARCH_TERMS:
         for search_url in [
-            f"https://www.tagesanzeiger.ch/suche?q={term.replace(' ','+')}&sort=Datum",
-            f"https://www.tagesanzeiger.ch/suche?q={term.replace(' ','+')}+2026&sort=Datum",
+            f"https://www.tagesanzeiger.ch/suche?q={quote_plus(term)}&sort=Datum",
         ]:
             try:
                 html = fetch_url(search_url)
                 soup = BeautifulSoup(html, 'html.parser')
                 for a in soup.find_all('a', href=True):
-                    href = a['href']
-                    full = urljoin("https://www.tagesanzeiger.ch", href)
-                    # Accept article paths
-                    if any(s in full for s in ['/artikel/','/news/','/schweiz/','/politik/','/panorama/']):
-                        if 'tagesanzeiger.ch' in full:
-                            candidate_urls.add(full)
-                log.info(f"TA search '{term}': {len(candidate_urls)} total candidates so far")
+                    full = urljoin("https://www.tagesanzeiger.ch", a['href'])
+                    if 'tagesanzeiger.ch' in full and any(s in full for s in
+                            ['/artikel/','/news/','/schweiz/','/politik/','/panorama/','/zuerich/']):
+                        candidate_urls.add(full)
                 time.sleep(1.5)
             except Exception as e:
                 log.warning(f"TA search fail '{term}': {e}")
-
-    log.info(f"Tagesanzeiger: processing {len(candidate_urls)} URLs")
+    log.info(f"TA: {len(candidate_urls)} URLs to process")
     for url in list(candidate_urls)[:40]:
         try:
             text = get_article_text(url)
             if len(text) < 200 or not kwmatch(text):
                 continue
-
-            # Try to extract date from URL (TA URLs often contain /YYYY-MM-DD/)
-            date_str = None
-            for part in url.split('/'):
-                if len(part) == 10 and part.count('-') == 2:
-                    try:
-                        d = datetime.strptime(part, "%Y-%m-%d")
-                        if d.year == 2026:
-                            date_str = part
-                            break
-                    except Exception:
-                        pass
-
-            # Only keep 2026 articles (if date in URL is present and not 2026, skip)
-            if date_str is None:
-                # No date in URL — still include, let Grok decide
-                pass
-
             ai = classify(text)
             if ai.get("relevant") and ai["kategorie"] not in ("Unklassifiziert", "Sonstiges"):
-                if save_incident(ai, text, "tagesanzeiger.ch", url, date_str):
+                if save_incident(ai, text, "tagesanzeiger.ch", url, extract_date_from_url(url)):
                     inserted += 1
                     log.info(f"TA saved: {url}")
             time.sleep(1.0)
         except Exception as e:
             log.warning(f"TA article fail {url}: {e}")
-
-    log.info(f"Tagesanzeiger 2026: +{inserted} incidents")
+    log.info(f"Tagesanzeiger: +{inserted}")
     return inserted
 
 # ==================== MASTER CRAWLER ====================
@@ -281,9 +445,21 @@ def run_crawler(force=False):
         log.info("Crawler: skipped (< 23h)")
         return
     log.info("===== CRAWLER START =====")
-    scrape_source("de.indymedia.org", "https://de.indymedia.org/")
-    scrape_source("barrikade.info", "https://barrikade.info/")
-    scrape_tagesanzeiger_2026()
+    try:
+        scrape_source("de.indymedia.org", "https://de.indymedia.org/")
+    except Exception as e: log.error(f"indymedia: {e}")
+    try:
+        scrape_source("barrikade.info", "https://barrikade.info/")
+    except Exception as e: log.error(f"barrikade: {e}")
+    try:
+        scrape_rss_feeds()
+    except Exception as e: log.error(f"rss: {e}")
+    try:
+        scrape_google_news()
+    except Exception as e: log.error(f"gnews: {e}")
+    try:
+        scrape_tagesanzeiger()
+    except Exception as e: log.error(f"ta: {e}")
     mark_crawled()
     log.info("===== CRAWLER DONE =====")
 
@@ -315,12 +491,9 @@ async def get_stats():
     last = db.execute("SELECT value FROM metadata WHERE key='last_crawl'").fetchone()
     geocoded = db.execute("SELECT COUNT(*) FROM incidents WHERE lat IS NOT NULL").fetchone()[0]
     return JSONResponse({
-        "total": total,
-        "geocoded": geocoded,
+        "total": total, "geocoded": geocoded,
         "last_crawl": last[0] if last else None,
-        "by_country": by_country,
-        "by_cat": by_cat,
-        "by_source": by_source,
+        "by_country": by_country, "by_cat": by_cat, "by_source": by_source,
     })
 
 @app.post("/api/crawl")
