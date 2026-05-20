@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LEX EUROPE — Threat Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+/* ===== RESET & BASE ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #07070d;
+  --panel:     #0c0c16;
+  --panel2:    #10101e;
+  --border:    #1c1c30;
+  --border2:   #262640;
+  --red:       #e8001c;
+  --red-dim:   #7a000f;
+  --red-glow:  rgba(232,0,28,0.15);
+  --amber:     #e8900a;
+  --amber-dim: #7a4a00;
+  --green:     #00e87a;
+  --text:      #c8c8d8;
+  --text-dim:  #5a5a78;
+  --text-bright: #eeeef8;
+  --mono: 'Share Tech Mono', monospace;
+  --head: 'Bebas Neue', cursive;
+  --body: 'Barlow Condensed', sans-serif;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--body);
+  font-size: 14px;
+  overflow: hidden;
+}
+
+/* ===== SCANLINES ===== */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.08) 2px,
+    rgba(0,0,0,0.08) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ===== LAYOUT ===== */
+#app {
+  display: grid;
+  grid-template-rows: 52px 1fr 38px;
+  grid-template-columns: 240px 1fr 320px;
+  height: 100vh;
+  gap: 0;
+}
+
+/* ===== TOPBAR ===== */
+#topbar {
+  grid-column: 1 / -1;
+  background: linear-gradient(90deg, #0a0018 0%, #0d000f 40%, #0a0018 100%);
+  border-bottom: 1px solid var(--red-dim);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+#topbar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg, transparent, transparent 80px,
+    rgba(232,0,28,0.03) 80px, rgba(232,0,28,0.03) 81px
+  );
+  pointer-events: none;
+}
+
+.logo-block {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.logo-icon {
+  width: 28px; height: 28px;
+  border: 2px solid var(--red);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  color: var(--red);
+  font-family: var(--mono);
+  position: relative;
+}
+.logo-icon::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  background: var(--red-glow);
+  animation: pulse-bg 2s ease-in-out infinite;
+}
+@keyframes pulse-bg {
+  0%,100% { opacity: 0.3; } 50% { opacity: 1; }
+}
+
+.logo-text {
+  font-family: var(--head);
+  font-size: 24px;
+  letter-spacing: 3px;
+  color: var(--text-bright);
+  text-shadow: 0 0 20px rgba(232,0,28,0.4);
+}
+
+.tagline {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding-left: 10px;
+  border-left: 1px solid var(--border2);
+}
+
+.topbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.live-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--green);
+  letter-spacing: 1px;
+}
+
+.live-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: blink 1.2s ease-in-out infinite;
+}
+@keyframes blink {
+  0%,100% { opacity: 1; box-shadow: 0 0 8px var(--green); }
+  50% { opacity: 0.3; box-shadow: none; }
+}
+
+.stat-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.stat-pill .num {
+  color: var(--red);
+  font-size: 16px;
+  font-weight: bold;
+  text-shadow: 0 0 10px var(--red);
+}
+.stat-pill .label {
+  color: var(--text-dim);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.time-display {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+
+/* ===== SIDEBAR LEFT ===== */
+#sidebar {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+#sidebar::-webkit-scrollbar { width: 3px; }
+#sidebar::-webkit-scrollbar-track { background: transparent; }
+#sidebar::-webkit-scrollbar-thumb { background: var(--border2); }
+
+.section-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--red);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--red-dim);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.section-label::before {
+  content: '▸';
+  font-size: 8px;
+}
+
+/* Filters */
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.filter-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-family: var(--mono);
+}
+
+select {
+  background: var(--panel2);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  padding: 5px 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  width: 100%;
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235a5a78'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  transition: border-color 0.2s;
+}
+select:focus, select:hover {
+  border-color: var(--red-dim);
+}
+
+/* Stats bars */
+.stat-bar-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+.stat-bar-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.stat-bar-name {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+}
+.stat-bar-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--red);
+}
+.bar-track {
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--red-dim), var(--red));
+  border-radius: 2px;
+  transition: width 0.6s ease;
+  box-shadow: 0 0 6px var(--red);
+}
+
+/* Category badges */
+.cat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.cat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 6px;
+  background: var(--panel2);
+  border-left: 2px solid transparent;
+}
+.cat-item.high { border-left-color: var(--red); }
+.cat-item.med  { border-left-color: var(--amber); }
+.cat-name {
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--text);
+}
+.cat-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* Source indicators */
+.source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.source-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.source-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 5px var(--green);
+  flex-shrink: 0;
+}
+
+/* Action buttons */
+.btn {
+  width: 100%;
+  padding: 8px;
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.2s;
+  text-align: center;
+}
+.btn:hover {
+  border-color: var(--red);
+  color: var(--red);
+  background: var(--red-glow);
+  box-shadow: 0 0 10px var(--red-glow);
+}
+.btn.danger:hover {
+  border-color: var(--amber);
+  color: var(--amber);
+  background: rgba(232,144,10,0.1);
+}
+.btn-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Last crawl */
+.crawl-time {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 4px;
+  border: 1px solid var(--border);
+  background: var(--panel2);
+}
+
+/* ===== MAP ===== */
+#map-container {
+  position: relative;
+  background: #050510;
+}
+
+#map {
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+/* Leaflet popup override */
+.leaflet-popup-content-wrapper {
+  background: rgba(12,12,22,0.97);
+  border: 1px solid var(--border2);
+  border-radius: 0;
+  color: var(--text);
+  font-family: var(--body);
+  box-shadow: 0 0 20px rgba(0,0,0,0.8);
+}
+.leaflet-popup-tip {
+  background: var(--border2);
+}
+.popup-date { font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-bottom: 4px; }
+.popup-loc { font-family: var(--head); font-size: 18px; color: var(--text-bright); letter-spacing: 1px; }
+.popup-cat { font-family: var(--mono); font-size: 11px; margin: 4px 0; }
+.popup-cat.high { color: var(--red); }
+.popup-cat.med  { color: var(--amber); }
+.popup-desc { font-size: 12px; color: var(--text-dim); margin-top: 6px; line-height: 1.5; max-width: 260px; }
+.popup-link { display: inline-block; margin-top: 8px; font-family: var(--mono); font-size: 10px; color: var(--red); text-decoration: none; letter-spacing: 1px; }
+.popup-link:hover { text-shadow: 0 0 8px var(--red); }
+
+/* Map corner overlay */
+#map-overlay-tl {
+  position: absolute;
+  top: 12px; left: 12px;
+  z-index: 400;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  pointer-events: none;
+  text-shadow: 0 0 4px rgba(0,0,0,1);
+}
+
+/* ===== INCIDENT FEED ===== */
+#feed {
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#feed-header {
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+#feed-title {
+  font-family: var(--head);
+  font-size: 18px;
+  letter-spacing: 2px;
+  color: var(--text-bright);
+}
+
+#feed-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+#feed-list {
+  overflow-y: auto;
+  flex: 1;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#feed-list::-webkit-scrollbar { width: 3px; }
+#feed-list::-webkit-scrollbar-track { background: transparent; }
+#feed-list::-webkit-scrollbar-thumb { background: var(--border2); }
+
+.incident-card {
+  padding: 8px 10px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border2);
+  cursor: pointer;
+  transition: all 0.15s;
+  animation: slide-in 0.3s ease;
+}
+@keyframes slide-in {
+  from { opacity: 0; transform: translateX(8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.incident-card:hover {
+  border-color: var(--border2);
+  background: #14142a;
+}
+.incident-card.high { border-left-color: var(--red); }
+.incident-card.med  { border-left-color: var(--amber); }
+
+.card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.card-cat {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 2px 5px;
+  border: 1px solid;
+  line-height: 1;
+}
+.card-cat.high { color: var(--red); border-color: var(--red-dim); background: rgba(232,0,28,0.08); }
+.card-cat.med  { color: var(--amber); border-color: var(--amber-dim); background: rgba(232,144,10,0.08); }
+
+.card-date {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.card-loc {
+  font-family: var(--head);
+  font-size: 15px;
+  letter-spacing: 1px;
+  color: var(--text-bright);
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-desc {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.4;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.card-source {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 4px;
+  opacity: 0.6;
+}
+
+/* No data state */
+#no-data {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 12px;
+  color: var(--text-dim);
+}
+#no-data .icon { font-size: 32px; opacity: 0.3; }
+#no-data .msg { font-family: var(--mono); font-size: 11px; letter-spacing: 1px; text-align: center; }
+
+/* ===== STATUSBAR ===== */
+#statusbar {
+  grid-column: 1 / -1;
+  background: #060610;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 24px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.status-item .key { color: var(--text-dim); }
+.status-item .val { color: var(--text); }
+
+#crawl-status-msg {
+  margin-left: auto;
+  color: var(--green);
+  transition: opacity 0.5s;
+}
+
+/* ===== TOAST ===== */
+#toast {
+  position: fixed;
+  bottom: 50px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--panel2);
+  border: 1px solid var(--red);
+  padding: 8px 20px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0;
+  transition: all 0.3s;
+  pointer-events: none;
+  z-index: 9998;
+  letter-spacing: 1px;
+  box-shadow: 0 0 20px var(--red-glow);
+}
+#toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ===== DEBUG PANEL ===== */
+#debug-panel {
+  display: none;
+  position: fixed;
+  inset: 52px 0 38px 240px;
+  background: rgba(7,7,13,0.97);
+  z-index: 500;
+  padding: 24px;
+  overflow-y: auto;
+  border: 1px solid var(--border2);
+}
+#debug-panel.open { display: block; }
+#debug-close {
+  position: absolute;
+  top: 12px; right: 16px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--red);
+  cursor: pointer;
+  letter-spacing: 1px;
+}
+.debug-title {
+  font-family: var(--head);
+  font-size: 20px;
+  letter-spacing: 2px;
+  margin-bottom: 20px;
+  color: var(--text-bright);
+}
+.debug-section {
+  margin-bottom: 20px;
+}
+.debug-section h3 {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--red);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 4px;
+}
+.debug-output {
+  background: #030308;
+  border: 1px solid var(--border);
+  padding: 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+  white-space: pre-wrap;
+  min-height: 40px;
+  max-height: 200px;
+  overflow-y: auto;
+  line-height: 1.6;
+}
+.debug-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.debug-btn {
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: all 0.2s;
+}
+.debug-btn:hover {
+  border-color: var(--red);
+  color: var(--red);
+  background: var(--red-glow);
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ===== TOPBAR ===== -->
+  <div id="topbar">
+    <div class="logo-block">
+      <div class="logo-icon">▲</div>
+      <div class="logo-text">LEX EUROPE</div>
+    </div>
+    <div class="tagline">Threat Intelligence • Gewalttätiger Linksextremismus • DACH / Europa</div>
+    <div class="topbar-right">
+      <div class="live-badge">
+        <div class="live-dot"></div>
+        <span>LIVE</span>
+      </div>
+      <div class="stat-pill">
+        <span class="num" id="top-total">—</span>
+        <span class="label">Incidents</span>
+      </div>
+      <div class="stat-pill">
+        <span class="num" id="top-geocoded" style="color:var(--amber)">—</span>
+        <span class="label">Geocodiert</span>
+      </div>
+      <div class="time-display" id="clock">—</div>
+    </div>
+  </div>
+
+  <!-- ===== SIDEBAR ===== -->
+  <div id="sidebar">
+
+    <!-- Filters -->
+    <div>
+      <div class="section-label">Filter</div>
+      <div class="filter-group">
+        <div class="filter-label">Land</div>
+        <select id="filter-country" onchange="applyFilters()">
+          <option value="">Alle Länder</option>
+          <option value="DE">🇩🇪 Deutschland</option>
+          <option value="AT">🇦🇹 Österreich</option>
+          <option value="CH">🇨🇭 Schweiz</option>
+          <option value="FR">🇫🇷 Frankreich</option>
+          <option value="Andere">Andere</option>
+        </select>
+      </div>
+      <div class="filter-group" style="margin-top:8px">
+        <div class="filter-label">Kategorie</div>
+        <select id="filter-cat" onchange="applyFilters()">
+          <option value="">Alle Kategorien</option>
+          <option value="Brandanschlag">Brandanschlag</option>
+          <option value="Sabotage">Sabotage</option>
+          <option value="Gewalt">Gewalt</option>
+          <option value="Militante Aktion">Militante Aktion</option>
+          <option value="Aufruf zu Gewalt">Aufruf zu Gewalt</option>
+          <option value="Schmiererei">Schmiererei</option>
+        </select>
+      </div>
+      <div class="filter-group" style="margin-top:8px">
+        <div class="filter-label">Quelle</div>
+        <select id="filter-source" onchange="applyFilters()">
+          <option value="">Alle Quellen</option>
+          <option value="de.indymedia.org">Indymedia</option>
+          <option value="barrikade.info">Barrikade</option>
+          <option value="tagesanzeiger.ch">Tagesanzeiger</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Country stats -->
+    <div>
+      <div class="section-label">Länder</div>
+      <div id="country-bars"></div>
+    </div>
+
+    <!-- Category stats -->
+    <div>
+      <div class="section-label">Kategorien</div>
+      <div class="cat-list" id="cat-list"></div>
+    </div>
+
+    <!-- Sources -->
+    <div>
+      <div class="section-label">Quellen</div>
+      <div class="source-list">
+        <div class="source-item"><div class="source-dot"></div>de.indymedia.org</div>
+        <div class="source-item"><div class="source-dot"></div>barrikade.info</div>
+        <div class="source-item"><div class="source-dot" style="background:var(--amber);box-shadow:0 0 5px var(--amber)"></div>tagesanzeiger.ch</div>
+      </div>
+    </div>
+
+    <!-- Last crawl -->
+    <div>
+      <div class="section-label">Crawler</div>
+      <div class="crawl-time" id="last-crawl-display">Lade...</div>
+    </div>
+
+    <!-- Actions -->
+    <div>
+      <div class="section-label">Aktionen</div>
+      <div class="btn-group">
+        <button class="btn" onclick="triggerCrawl()">⟳ Jetzt crawlen</button>
+        <button class="btn" onclick="toggleDebug()">⌥ Debug Panel</button>
+        <button class="btn danger" onclick="clearDB()">✕ Datenbank leeren</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ===== MAP ===== -->
+  <div id="map-container">
+    <div id="map"></div>
+    <div id="map-overlay-tl">COORD SYS: WGS84 • PROJ: EPSG:3857 • TILES: CARTO DARK</div>
+  </div>
+
+  <!-- ===== FEED ===== -->
+  <div id="feed">
+    <div id="feed-header">
+      <div id="feed-title">INCIDENT LOG</div>
+      <div id="feed-count">0 Einträge</div>
+    </div>
+    <div id="feed-list">
+      <div id="no-data" style="display:flex">
+        <div class="icon">◈</div>
+        <div class="msg">Lade Daten...<br>Crawler startet im Hintergrund</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== STATUSBAR ===== -->
+  <div id="statusbar">
+    <div class="status-item"><span class="key">SYS:</span><span class="val">ONLINE</span></div>
+    <div class="status-item"><span class="key">DB:</span><span class="val" id="sb-db">—</span></div>
+    <div class="status-item"><span class="key">API:</span><span class="val" id="sb-api" style="color:var(--green)">GROK-4</span></div>
+    <div class="status-item"><span class="key">REFRESH:</span><span class="val">5 MIN</span></div>
+    <div id="crawl-status-msg"></div>
+  </div>
+
+</div><!-- #app -->
+
+<!-- ===== TOAST ===== -->
+<div id="toast"></div>
+
+<!-- ===== DEBUG PANEL ===== -->
+<div id="debug-panel">
+  <div id="debug-close" onclick="toggleDebug()">✕ SCHLIESSEN</div>
+  <div class="debug-title">DEBUG PANEL</div>
+  <div class="debug-grid">
+    <div class="debug-section">
+      <h3>Grok API Test</h3>
+      <button class="debug-btn" onclick="testGrok()">▸ Grok testen</button>
+      <div class="debug-output" id="grok-output">—</div>
+    </div>
+    <div class="debug-section">
+      <h3>Stats</h3>
+      <div class="debug-output" id="stats-output">—</div>
+    </div>
+    <div class="debug-section">
+      <h3>Letzte 5 Incidents</h3>
+      <div class="debug-output" id="recent-output">—</div>
+    </div>
+  </div>
+</div>
+
+<div id="clock-worker"></div>
+
+<script>
+// ===== STATE =====
+let allIncidents = [];
+let map, markersLayer;
+const HIGH_CATS = ["Brandanschlag","Sabotage","Gewalt","Militante Aktion","Aufruf zu Gewalt"];
+
+const FLAG = {DE:"🇩🇪",AT:"🇦🇹",CH:"🇨🇭",FR:"🇫🇷",IT:"🇮🇹",Andere:"🌍"};
+
+// ===== MAP INIT =====
+function initMap() {
+  map = L.map('map', {
+    center: [49.5, 11.0],
+    zoom: 5,
+    zoomControl: false,
+    attributionControl: false
+  });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19
+  }).addTo(map);
+
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+  markersLayer = L.layerGroup().addTo(map);
+}
+
+// ===== CUSTOM MARKERS =====
+function makeMarker(lat, lon, incident) {
+  const isHigh = HIGH_CATS.includes(incident.category);
+  const color = isHigh ? '#e8001c' : '#e8900a';
+  const glow  = isHigh ? 'rgba(232,0,28,0.4)' : 'rgba(232,144,10,0.4)';
+
+  const icon = L.divIcon({
+    className: '',
+    html: `<div style="
+      width:12px;height:12px;
+      border-radius:50%;
+      background:${color};
+      box-shadow:0 0 8px ${glow},0 0 16px ${glow};
+      border:1px solid rgba(255,255,255,0.3);
+      animation: pulse-marker 2s ease-in-out infinite;
+    "></div>
+    <style>@keyframes pulse-marker{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.3);opacity:0.7}}</style>`,
+    iconSize: [12, 12],
+    iconAnchor: [6, 6]
+  });
+
+  const catClass = isHigh ? 'high' : 'med';
+  const popup = `
+    <div class="popup-date">${incident.date || '—'} · ${incident.source || ''}</div>
+    <div class="popup-loc">${incident.location || 'Unbekannt'}, ${incident.country || '—'}</div>
+    <div class="popup-cat ${catClass}">${incident.category}</div>
+    <div class="popup-desc">${(incident.description || '').substring(0,240)}...</div>
+    ${incident.url ? `<a class="popup-link" href="${incident.url}" target="_blank">▸ QUELLE ÖFFNEN</a>` : ''}
+  `;
+
+  return L.marker([lat, lon], { icon })
+    .bindPopup(popup, { maxWidth: 300, className: 'lex-popup' });
+}
+
+// ===== RENDER INCIDENTS =====
+function renderIncidents(incidents) {
+  markersLayer.clearLayers();
+  const list = document.getElementById('feed-list');
+  const noData = document.getElementById('no-data');
+
+  // Remove old cards
+  Array.from(list.querySelectorAll('.incident-card')).forEach(c => c.remove());
+
+  if (incidents.length === 0) {
+    noData.style.display = 'flex';
+    document.getElementById('feed-count').textContent = '0 Einträge';
+    return;
+  }
+  noData.style.display = 'none';
+  document.getElementById('feed-count').textContent = `${incidents.length} Einträge`;
+
+  incidents.forEach(inc => {
+    // Map marker
+    if (inc.lat && inc.lon && !isNaN(inc.lat) && !isNaN(inc.lon)) {
+      makeMarker(inc.lat, inc.lon, inc).addTo(markersLayer);
+    }
+
+    // Feed card
+    const isHigh = HIGH_CATS.includes(inc.category);
+    const card = document.createElement('div');
+    card.className = `incident-card ${isHigh ? 'high' : 'med'}`;
+    card.innerHTML = `
+      <div class="card-top">
+        <span class="card-cat ${isHigh ? 'high' : 'med'}">${inc.category}</span>
+        <span class="card-date">${inc.date || '—'}</span>
+      </div>
+      <div class="card-loc">${FLAG[inc.country] || '🌍'} ${inc.location || 'Unbekannt'}, ${inc.country || '—'}</div>
+      <div class="card-desc">${inc.description || ''}</div>
+      <div class="card-source">${inc.source || ''}</div>
+    `;
+    card.onclick = () => {
+      if (inc.lat && inc.lon) {
+        map.setView([inc.lat, inc.lon], 10, { animate: true });
+      }
+    };
+    list.appendChild(card);
+  });
+}
+
+// ===== APPLY FILTERS =====
+function applyFilters() {
+  const country = document.getElementById('filter-country').value;
+  const cat     = document.getElementById('filter-cat').value;
+  const source  = document.getElementById('filter-source').value;
+  const filtered = allIncidents.filter(inc => {
+    if (country && inc.country !== country) return false;
+    if (cat && inc.category !== cat) return false;
+    if (source && inc.source !== source) return false;
+    return true;
+  });
+  renderIncidents(filtered);
+}
+
+// ===== LOAD STATS =====
+async function loadStats() {
+  try {
+    const r = await fetch('/api/stats');
+    const s = await r.json();
+
+    document.getElementById('top-total').textContent = s.total;
+    document.getElementById('top-geocoded').textContent = s.geocoded;
+    document.getElementById('sb-db').textContent = s.total + ' rows';
+
+    // Last crawl
+    const lc = document.getElementById('last-crawl-display');
+    if (s.last_crawl) {
+      const d = new Date(s.last_crawl);
+      lc.textContent = 'Letzter Crawl: ' + d.toLocaleString('de-DE', {timeZone:'Europe/Zurich'});
+    } else {
+      lc.textContent = 'Kein Crawl durchgeführt';
+    }
+
+    // Country bars
+    const maxN = s.by_country[0]?.n || 1;
+    const barEl = document.getElementById('country-bars');
+    barEl.innerHTML = s.by_country.slice(0,6).map(c => `
+      <div class="stat-bar-item">
+        <div class="stat-bar-row">
+          <span class="stat-bar-name">${FLAG[c.country]||'🌍'} ${c.country || 'Unbekannt'}</span>
+          <span class="stat-bar-count">${c.n}</span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:${Math.round(c.n/maxN*100)}%"></div>
+        </div>
+      </div>
+    `).join('');
+
+    // Category list
+    const catEl = document.getElementById('cat-list');
+    catEl.innerHTML = s.by_cat.slice(0,8).map(c => {
+      const isHigh = HIGH_CATS.includes(c.category);
+      return `<div class="cat-item ${isHigh?'high':'med'}">
+        <span class="cat-name">${c.category}</span>
+        <span class="cat-count">${c.n}</span>
+      </div>`;
+    }).join('');
+
+    // Debug stats
+    document.getElementById('stats-output').textContent =
+      `Total: ${s.total}\nGeocoded: ${s.geocoded}\n\nBy Country:\n` +
+      s.by_country.map(c => `  ${c.country}: ${c.n}`).join('\n') +
+      `\n\nBy Source:\n` +
+      s.by_source.map(c => `  ${c.source}: ${c.n}`).join('\n');
+
+  } catch(e) {
+    console.error('Stats error:', e);
+  }
+}
+
+// ===== LOAD INCIDENTS =====
+async function loadIncidents() {
+  try {
+    const r = await fetch('/api/incidents');
+    allIncidents = await r.json();
+    applyFilters();
+
+    // Debug: last 5
+    document.getElementById('recent-output').textContent =
+      allIncidents.slice(0,5).map(i =>
+        `${i.date} | ${i.category}\n${i.location}, ${i.country}\n${(i.description||'').substring(0,80)}...\n`
+      ).join('\n---\n');
+  } catch(e) {
+    console.error('Incidents error:', e);
+  }
+}
+
+// ===== TRIGGER CRAWL =====
+async function triggerCrawl() {
+  const msg = document.getElementById('crawl-status-msg');
+  msg.textContent = '⟳ Crawl gestartet...';
+  showToast('Crawler gestartet — läuft im Hintergrund');
+  try {
+    await fetch('/api/crawl', { method: 'POST' });
+    msg.textContent = '✓ Crawl läuft';
+    setTimeout(() => { msg.textContent = ''; }, 10000);
+  } catch(e) {
+    msg.textContent = '✕ Fehler';
+    console.error(e);
+  }
+}
+
+// ===== CLEAR DB =====
+async function clearDB() {
+  if (!confirm('Datenbank wirklich leeren?')) return;
+  await fetch('/api/clear', { method: 'POST' });
+  allIncidents = [];
+  renderIncidents([]);
+  loadStats();
+  showToast('Datenbank geleert');
+}
+
+// ===== GROK TEST =====
+async function testGrok() {
+  document.getElementById('grok-output').textContent = 'Teste Grok API...';
+  try {
+    const r = await fetch('/api/grok-test', { method: 'POST' });
+    const d = await r.json();
+    document.getElementById('grok-output').textContent = JSON.stringify(d, null, 2);
+  } catch(e) {
+    document.getElementById('grok-output').textContent = 'Fehler: ' + e.message;
+  }
+}
+
+// ===== DEBUG PANEL =====
+function toggleDebug() {
+  document.getElementById('debug-panel').classList.toggle('open');
+  if (document.getElementById('debug-panel').classList.contains('open')) {
+    loadStats();
+  }
+}
+
+// ===== TOAST =====
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ===== CLOCK =====
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleTimeString('de-CH', {timeZone:'Europe/Zurich', hour:'2-digit', minute:'2-digit', second:'2-digit'});
+}
+
+// ===== INIT =====
+initMap();
+loadStats();
+loadIncidents();
+updateClock();
+
+setInterval(updateClock, 1000);
+setInterval(() => { loadStats(); loadIncidents(); }, 5 * 60 * 1000); // refresh every 5 min
+</script>
+</body>
+</html>
