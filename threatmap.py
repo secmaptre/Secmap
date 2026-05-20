@@ -49,6 +49,31 @@ with col2:
 DB_PATH = "/data/lex_threat.db" if os.path.isdir("/data") else "lex_threat.db"
 log.info(f"Using database at: {DB_PATH}")
 
+def migrate_schema(c):
+    """Add missing columns to existing incidents table."""
+    expected_columns = {
+        "date": "TEXT",
+        "location": "TEXT",
+        "country": "TEXT",
+        "category": "TEXT",
+        "description": "TEXT",
+        "source": "TEXT",
+        "url": "TEXT",
+        "content_hash": "TEXT",
+        "lat": "REAL",
+        "lon": "REAL",
+        "timestamp": "TEXT",
+    }
+    existing = {row[1] for row in c.execute("PRAGMA table_info(incidents)").fetchall()}
+    for col, coltype in expected_columns.items():
+        if col not in existing:
+            try:
+                c.execute(f"ALTER TABLE incidents ADD COLUMN {col} {coltype}")
+                log.info(f"Migrated: added column '{col}' to incidents")
+            except Exception as e:
+                log.warning(f"Could not add column {col}: {e}")
+    c.commit()
+
 @st.cache_resource
 def get_conn():
     c = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -63,6 +88,13 @@ def get_conn():
         query TEXT PRIMARY KEY, lat REAL, lon REAL
     )''')
     c.commit()
+    migrate_schema(c)
+    # Create unique index on content_hash if not exists (was UNIQUE in CREATE but won't apply to migrated col)
+    try:
+        c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_content_hash ON incidents(content_hash)")
+        c.commit()
+    except Exception as e:
+        log.warning(f"Index creation: {e}")
     return c
 
 conn = get_conn()
@@ -78,7 +110,6 @@ def geocode(location, country):
     if row:
         return row[0], row[1]
 
-    # Rate limit: 1 req/sec for Nominatim
     elapsed = time.time() - _last_geocode_call[0]
     if elapsed < 1.1:
         time.sleep(1.1 - elapsed)
@@ -187,7 +218,7 @@ def text_matches_keywords(text):
     t = text.lower()
     return any(kw in t for kw in KEYWORDS)
 
-# ==================== SCRAPERS (article-level) ====================
+# ==================== SCRAPERS ====================
 def extract_article_links(html, base_url):
     soup = BeautifulSoup(html, 'html.parser')
     links = set()
@@ -196,7 +227,6 @@ def extract_article_links(html, base_url):
         if href.startswith('#') or href.startswith('mailto:') or href.startswith('javascript:'):
             continue
         full = urljoin(base_url, href)
-        # filter: same domain, looks like an article
         if base_url.split('/')[2] in full:
             links.add(full)
     return list(links)
@@ -205,10 +235,8 @@ def scrape_article(url):
     try:
         html = fetch(url)
         soup = BeautifulSoup(html, 'html.parser')
-        # remove nav/footer
         for tag in soup(['script', 'style', 'nav', 'footer', 'header']):
             tag.decompose()
-        # Try common article containers
         article = (soup.find('article') or soup.find('main') or
                    soup.find('div', class_='node') or soup.find('div', class_='content'))
         text = (article.get_text(" ", strip=True) if article else soup.get_text(" ", strip=True))
@@ -225,7 +253,6 @@ def scrape_source(name, base_url, max_articles=15):
         links = extract_article_links(html, base_url)
         log.info(f"{name}: {len(links)} candidate links")
 
-        # Filter to plausible article URLs (heuristic: depth >= 2 path segments)
         candidates = [l for l in links if len(l.replace(base_url, '').strip('/').split('/')) >= 1][:max_articles * 3]
 
         checked = 0
@@ -271,23 +298,38 @@ def start_scheduler():
 
 start_scheduler()
 
+# ==================== HELPER: safe read with fallback ====================
+def safe_read_incidents(columns="*", order="ORDER BY timestamp DESC"):
+    """Read incidents, returning empty cols if missing."""
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(incidents)").fetchall()}
+    if columns == "*":
+        return pd.read_sql(f"SELECT * FROM incidents {order}", conn)
+    requested = [c.strip() for c in columns.split(",")]
+    select_parts = []
+    for c in requested:
+        if c in existing:
+            select_parts.append(c)
+        else:
+            select_parts.append(f"NULL AS {c}")
+    return pd.read_sql(f"SELECT {', '.join(select_parts)} FROM incidents {order}", conn)
+
 # ==================== TABS ====================
 tab1, tab2, tab3 = st.tabs(["🗺️ Live Threat Map", "📋 Ereignis-Protokoll", "⚙️ Status & Debug"])
 
 with tab1:
     st.subheader("Live Threat Map – Europa (DACH Fokus)")
     m = folium.Map(location=[49.0, 9.5], zoom_start=5.5, tiles="cartodb dark_matter")
-    df = pd.read_sql("SELECT * FROM incidents ORDER BY timestamp DESC", conn)
+    df = safe_read_incidents("*")
     placed = 0
     for _, row in df.iterrows():
         lat, lon = row.get("lat"), row.get("lon")
-        if not lat or not lon:
+        if not lat or not lon or pd.isna(lat) or pd.isna(lon):
             continue
-        color = "red" if row["category"] in ["Brandanschlag", "Sabotage", "Gewalt",
-                                              "Militante Aktion", "Aufruf zu Gewalt"] else "orange"
-        popup = (f"<b>{row['date']}</b><br><b>{row['location']}, {row['country']}</b><br>"
-                 f"<b>{row['category']}</b><br>{row['description'][:200]}"
-                 f"<br><a href='{row.get('url','')}' target='_blank'>Quelle</a>")
+        color = "red" if row.get("category") in ["Brandanschlag", "Sabotage", "Gewalt",
+                                                  "Militante Aktion", "Aufruf zu Gewalt"] else "orange"
+        popup = (f"<b>{row.get('date','')}</b><br><b>{row.get('location','')}, {row.get('country','')}</b><br>"
+                 f"<b>{row.get('category','')}</b><br>{str(row.get('description',''))[:200]}"
+                 f"<br><a href='{row.get('url','') or ''}' target='_blank'>Quelle</a>")
         folium.Marker(
             location=[lat, lon],
             popup=popup,
@@ -302,9 +344,7 @@ with tab1:
 
 with tab2:
     st.subheader("Vollständiges Ereignis-Protokoll")
-    df2 = pd.read_sql(
-        "SELECT date, location, country, category, description, source, url FROM incidents ORDER BY timestamp DESC",
-        conn)
+    df2 = safe_read_incidents("date, location, country, category, description, source, url")
     if df2.empty:
         st.info("Noch keine Ereignisse erfasst")
     else:
@@ -319,11 +359,19 @@ with tab3:
         st.warning("Noch kein Crawl durchgeführt")
 
     total = conn.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
-    geocoded = conn.execute("SELECT COUNT(*) FROM incidents WHERE lat IS NOT NULL").fetchone()[0]
+    try:
+        geocoded = conn.execute("SELECT COUNT(*) FROM incidents WHERE lat IS NOT NULL").fetchone()[0]
+    except Exception:
+        geocoded = 0
     c1, c2, c3 = st.columns(3)
     c1.metric("Ereignisse", total)
     c2.metric("Geocodiert", geocoded)
     c3.metric("Datenbank", os.path.basename(DB_PATH))
+
+    # Show current schema
+    with st.expander("📐 Datenbank-Schema (incidents)"):
+        schema = conn.execute("PRAGMA table_info(incidents)").fetchall()
+        st.table(pd.DataFrame(schema, columns=["cid", "name", "type", "notnull", "default", "pk"]))
 
     api_key = os.getenv("GROK_API_KEY")
     if api_key:
@@ -340,7 +388,7 @@ with tab3:
 
     st.divider()
     st.subheader("Manueller Crawl")
-    c1, c2 = st.columns(2)
+    c1, c2, c3 = st.columns(3)
     with c1:
         if st.button("🔄 Jetzt crawlen (force)"):
             with st.spinner("Crawle..."):
@@ -353,6 +401,13 @@ with tab3:
             conn.execute("DELETE FROM metadata")
             conn.commit()
             st.warning("Datenbank geleert.")
+            st.rerun()
+    with c3:
+        if st.button("💥 Tabelle komplett löschen (Reset)"):
+            conn.execute("DROP TABLE IF EXISTS incidents")
+            conn.commit()
+            get_conn.clear()  # clear cache
+            st.warning("Tabelle gelöscht — bitte App neu laden.")
             st.rerun()
 
 st.caption("LEX EUROPE • OSINT • SEC")
