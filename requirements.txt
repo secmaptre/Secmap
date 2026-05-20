@@ -5,3 +5,4 @@ streamlit-folium
 requests
 beautifulsoup4
 apscheduler
+fastapi
