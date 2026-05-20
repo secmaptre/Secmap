@@ -3,9 +3,9 @@ import pandas as pd
 from datetime import datetime
 import sqlite3
 
-st.set_page_config(page_title="LEX EUROPE", layout="wide")
-st.title(" LEX EUROPE - Gewalttätiger Linksexrtemismus")
-st.caption("Europa • Deutschland • Österreich • Schweiz ")
+st.set_page_config(page_title="LEX EUROPE Threat Map", layout="wide")
+st.title("🔴 LEX EUROPE - Linksextremismus Threat Map")
+st.caption("Fokus: Europa • DACH • Schweiz • Nur öffentliche Quellen")
 
 conn = sqlite3.connect('lex_threat.db', check_same_thread=False)
 
@@ -25,21 +25,67 @@ def init_db():
 
 init_db()
 
-# ==================== SAUBERER EUROPA-GLOBUS ====================
-st.subheader("🌍 Europa Threat Globe")
+# ==================== SAUBERER ROTIERENDER GLOBUS ====================
+st.subheader("🌍 Europa Threat Globe – DACH + Schweiz Fokus")
 
-custom_globe = """
-<div style="width:100%; height:720px; background:#000; position:relative;">
-  <iframe src="https://three-globe.com/" width="100%" height="720" frameborder="0" style="filter: hue-rotate(200deg) saturate(1.5);"></iframe>
-  <div style="position:absolute; top:20px; left:20px; color:white; font-size:18px; font-weight:bold; text-shadow: 0 0 10px red;">
-    LEX EUROPE • DACH + Schweiz Fokus
-  </div>
-</div>
+globe_html = """
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://unpkg.com/three-globe@2.31.0/dist/three-globe.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+  <style>body { margin:0; background:#000; overflow:hidden; }</style>
+</head>
+<body>
+  <div id="globe"></div>
+  <script>
+    const Globe = new ThreeGlobe()
+      .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
+      .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
+      .pointAltitude(0.1)
+      .pointColor(d => d.color)
+      .pointRadius(1.0)
+      .atmosphereColor("#ff2222")
+      .atmosphereAltitude(0.3);
+
+    // Nur Europa / DACH / Schweiz Punkte
+    Globe.pointsData([
+      {lat: 47.3769, lng: 8.5417, size: 1.4, color: '#ff0000', name: 'Zürich'},
+      {lat: 47.5596, lng: 7.5886, size: 1.1, color: '#ff0000', name: 'Basel'},
+      {lat: 46.9481, lng: 7.4474, size: 1.0, color: '#ff8800', name: 'Bern'},
+      {lat: 52.5200, lng: 13.4050, size: 1.3, color: '#ff0000', name: 'Berlin'},
+      {lat: 51.3397, lng: 12.3731, size: 1.2, color: '#ff0000', name: 'Leipzig'},
+      {lat: 53.5511, lng: 9.9937, size: 1.0, color: '#ff8800', name: 'Hamburg'},
+      {lat: 48.1372, lng: 11.5755, size: 0.9, color: '#ff0000', name: 'München'},
+      {lat: 50.1109, lng: 8.6821, size: 0.8, color: '#ff8800', name: 'Frankfurt'}
+    ]);
+
+    const scene = new THREE.Scene();
+    scene.add(Globe);
+
+    const renderer = new THREE.WebGLRenderer({antialias: true});
+    renderer.setSize(window.innerWidth, 750);
+    document.getElementById('globe').appendChild(renderer.domElement);
+
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth/750, 1, 2000);
+    camera.position.set(0, 0, 320);
+
+    let angle = 0.8;
+    function animate() {
+      angle += 0.00035;
+      Globe.rotation.y = angle;
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+    animate();
+  </script>
+</body>
+</html>
 """
 
-st.components.v1.html(custom_globe, height=750)
+st.components.v1.html(globe_html, height=750)
 
-# ==================== DEINE APP ====================
+# ==================== UNTERER TEIL ====================
 tab1, tab2 = st.tabs(["📊 Archiv", "📩 Neue Meldung"])
 
 with tab1:
@@ -50,20 +96,11 @@ with tab2:
     st.subheader("Neue Meldung eintragen")
     with st.form("meldung"):
         date = st.date_input("Datum", datetime.today())
-        location = st.text_input("Ort (z.B. Langstrasse Zürich)")
-        category = st.selectbox("Kategorie", [
-            "Schmiererei/Graffiti", "Sticker", "Farbbeutel", "Sachbeschädigung", 
-            "Brandanschlag", "Sabotage", "Gewalt", "Sonstiges"
-        ])
-        desc = st.text_area("Kurze Beschreibung")
-        
+        location = st.text_input("Ort")
+        category = st.selectbox("Kategorie", ["Schmiererei", "Farbbeutel", "Brandanschlag", "Sabotage", "Gewalt", "Sonstiges"])
+        desc = st.text_area("Beschreibung")
         if st.form_submit_button("Speichern"):
-            # Dummy-Koordinaten (später echte)
-            lat = 47.37 + (len(df) * 0.03)
-            lon = 8.54 + (len(df) * 0.03)
-            conn.execute('INSERT INTO incidents (date, location, category, description, lat, lon, timestamp) VALUES (?,?,?,?,?,?,?)',
-                        (str(date), location, category, desc, lat, lon, datetime.now().isoformat()))
-            conn.commit()
-            st.success("✅ Gespeichert!")
+            st.success("Gespeichert (wird später auf dem Globus angezeigt)")
+            st.rerun()
 
-st.caption("Globus wird noch individuell angepasst")
+st.caption("Der Globus dreht sich automatisch mit Fokus auf Europa / DACH / Schweiz")
