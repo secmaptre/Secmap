@@ -1,413 +1,349 @@
-import streamlit as st
-import pandas as pd
-import sqlite3
-import requests
-from bs4 import BeautifulSoup
-import logging
-import json
-import os
-import time
-import hashlib
+import os, logging, json, time, hashlib
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
 
-import folium
-from streamlit_folium import st_folium
+import requests
+from bs4 import BeautifulSoup
+import sqlite3
 from apscheduler.schedulers.background import BackgroundScheduler
+from fastapi import FastAPI, Request, BackgroundTasks
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.templating import Jinja2Templates
 
-# ==================== LOGGING ====================
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
 
-# ==================== PAGE CONFIG ====================
-st.set_page_config(page_title="LEX EUROPE", page_icon="eye-only.png", layout="wide")
-
-# ==================== CONSTANTS ====================
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-HEADERS = {"User-Agent": USER_AGENT, "Accept-Language": "de-DE,de;q=0.9,en;q=0.8"}
-
-KEYWORDS = [
-    "brandanschlag", "sabotage", "schmiererei", "graffiti", "molotow",
-    "farbbeutel", "militant", "direkte aktion", "anschlag", "feuer gelegt",
-    "blockade", "besetzung", "störaktion", "angriff", "attackier",
-    "zerstör", "beschädig", "barrikade", "anti-repression"
-]
-
-# ==================== HEADER ====================
-col1, col2 = st.columns([1, 4])
-with col1:
-    try:
-        st.image("logo-main.png", width=210)
-    except Exception:
-        st.write("🛡️")
-with col2:
-    st.title("LEX EUROPE")
-    st.markdown("**Threat Map • Gewalttätiger Linksextremismus in Europa**")
-    st.caption("Fokus: DACH • Schweiz • Automatischer Crawler aktiv")
-
 # ==================== DATABASE ====================
 DB_PATH = "/data/lex_threat.db" if os.path.isdir("/data") else "lex_threat.db"
-log.info(f"Using database at: {DB_PATH}")
+log.info(f"DB: {DB_PATH}")
 
-def migrate_schema(c):
-    """Add missing columns to existing incidents table."""
-    expected_columns = {
-        "date": "TEXT",
-        "location": "TEXT",
-        "country": "TEXT",
-        "category": "TEXT",
-        "description": "TEXT",
-        "source": "TEXT",
-        "url": "TEXT",
-        "content_hash": "TEXT",
-        "lat": "REAL",
-        "lon": "REAL",
-        "timestamp": "TEXT",
-    }
-    existing = {row[1] for row in c.execute("PRAGMA table_info(incidents)").fetchall()}
-    for col, coltype in expected_columns.items():
-        if col not in existing:
-            try:
-                c.execute(f"ALTER TABLE incidents ADD COLUMN {col} {coltype}")
-                log.info(f"Migrated: added column '{col}' to incidents")
-            except Exception as e:
-                log.warning(f"Could not add column {col}: {e}")
-    c.commit()
-
-@st.cache_resource
-def get_conn():
+def get_db():
     c = sqlite3.connect(DB_PATH, check_same_thread=False)
+    c.row_factory = sqlite3.Row
     c.execute('''CREATE TABLE IF NOT EXISTS incidents (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         date TEXT, location TEXT, country TEXT, category TEXT,
-        description TEXT, source TEXT, url TEXT, content_hash TEXT UNIQUE,
-        lat REAL, lon REAL, timestamp TEXT
+        description TEXT, source TEXT, url TEXT,
+        content_hash TEXT UNIQUE, lat REAL, lon REAL, timestamp TEXT
     )''')
     c.execute('''CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS geocache (
-        query TEXT PRIMARY KEY, lat REAL, lon REAL
-    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS geocache (query TEXT PRIMARY KEY, lat REAL, lon REAL)''')
     c.commit()
-    migrate_schema(c)
-    # Create unique index on content_hash if not exists (was UNIQUE in CREATE but won't apply to migrated col)
-    try:
-        c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_content_hash ON incidents(content_hash)")
-        c.commit()
-    except Exception as e:
-        log.warning(f"Index creation: {e}")
     return c
 
-conn = get_conn()
+db = get_db()
 
-# ==================== GEOCODING (with cache + rate limit) ====================
-_last_geocode_call = [0.0]
+# ==================== GEOCODING ====================
+_last_geo = [0.0]
 
 def geocode(location, country):
     if not location or location in ("Unbekannt", "", None):
         return None, None
     key = f"{location}|{country}".lower()
-    row = conn.execute("SELECT lat, lon FROM geocache WHERE query = ?", (key,)).fetchone()
+    row = db.execute("SELECT lat, lon FROM geocache WHERE query=?", (key,)).fetchone()
     if row:
         return row[0], row[1]
-
-    elapsed = time.time() - _last_geocode_call[0]
-    if elapsed < 1.1:
-        time.sleep(1.1 - elapsed)
-
+    elapsed = time.time() - _last_geo[0]
+    if elapsed < 1.2:
+        time.sleep(1.2 - elapsed)
     try:
         r = requests.get(
             "https://nominatim.openstreetmap.org/search",
             params={"q": f"{location}, {country}", "format": "json", "limit": 1},
-            headers={"User-Agent": "LEX-EUROPE-OSINT/1.0"},
+            headers={"User-Agent": "LEX-EUROPE-OSINT/2.0"},
             timeout=10
         )
-        _last_geocode_call[0] = time.time()
-        results = r.json()
-        if results:
-            lat, lon = float(results[0]["lat"]), float(results[0]["lon"])
-            conn.execute("INSERT OR REPLACE INTO geocache VALUES (?, ?, ?)", (key, lat, lon))
-            conn.commit()
+        _last_geo[0] = time.time()
+        res = r.json()
+        if res:
+            lat, lon = float(res[0]["lat"]), float(res[0]["lon"])
+            db.execute("INSERT OR REPLACE INTO geocache VALUES (?,?,?)", (key, lat, lon))
+            db.commit()
             return lat, lon
     except Exception as e:
-        log.warning(f"Geocoding failed for '{location}': {e}")
-    conn.execute("INSERT OR REPLACE INTO geocache VALUES (?, NULL, NULL)", (key,))
-    conn.commit()
+        log.warning(f"Geocode fail '{location}': {e}")
+    db.execute("INSERT OR REPLACE INTO geocache VALUES (?,NULL,NULL)", (key,))
+    db.commit()
     return None, None
 
-# ==================== GROK API ====================
-def classify_with_ai(text):
+# ==================== GROK ====================
+HEADERS_WEB = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36",
+    "Accept-Language": "de-DE,de;q=0.9,en;q=0.8"
+}
+
+def classify(text):
     api_key = os.getenv("GROK_API_KEY")
     if not api_key:
         log.error("GROK_API_KEY not set!")
         return {"land": "Unbekannt", "kategorie": "Unklassifiziert", "ort": "Unbekannt", "relevant": False}
-
     prompt = f"""Analysiere folgenden Text auf linksextreme Gewalttat/Aktion in Europa.
-Gib NUR gültiges JSON zurück, keine Markdown-Codeblöcke.
+Gib NUR gültiges JSON zurück, kein Markdown.
 
 Text: {text[:1500]}
 
-Format:
-{{"land": "DE|AT|CH|FR|IT|Andere", "kategorie": "...", "ort": "Stadt", "relevant": true/false}}
-
-kategorie: Brandanschlag | Sabotage | Gewalt | Schmiererei | Aufruf zu Gewalt | Militante Aktion | Sonstiges | Unklassifiziert
-relevant: true nur wenn konkrete Tat/Aktion beschrieben (nicht nur Meinung/News)"""
-
+Format: {{"land":"DE|AT|CH|FR|IT|Andere","kategorie":"Brandanschlag|Sabotage|Gewalt|Schmiererei|Aufruf zu Gewalt|Militante Aktion|Sonstiges|Unklassifiziert","ort":"Stadt oder Region","relevant":true/false}}
+relevant=true nur wenn konkrete Tat/Aktion beschrieben, nicht nur Meinungsartikel."""
     raw = ""
     try:
-        response = requests.post(
+        r = requests.post(
             "https://api.x.ai/v1/chat/completions",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json={"model": "grok-4", "messages": [{"role": "user", "content": prompt}],
                   "temperature": 0.0, "max_tokens": 250},
             timeout=30
         )
-        response.raise_for_status()
-        raw = response.json()["choices"][0]["message"]["content"].strip()
-        raw = raw.replace("```json", "").replace("```", "").strip()
-        result = json.loads(raw)
-        result.setdefault("relevant", True)
-        log.info(f"Grok: {result}")
-        return result
-    except requests.exceptions.HTTPError:
-        log.error(f"Grok HTTP error: {response.text[:300]}")
+        r.raise_for_status()
+        raw = r.json()["choices"][0]["message"]["content"].strip().replace("```json","").replace("```","").strip()
+        res = json.loads(raw)
+        res.setdefault("relevant", True)
+        log.info(f"Grok: {res}")
+        return res
+    except requests.HTTPError:
+        log.error(f"Grok HTTP {r.status_code}: {r.text[:200]}")
     except json.JSONDecodeError as e:
-        log.error(f"Grok JSON parse failed: {e} — raw: {raw[:200]}")
+        log.error(f"Grok JSON fail: {e} — raw: {raw[:100]}")
     except Exception as e:
         log.error(f"Grok error: {e}")
     return {"land": "Unbekannt", "kategorie": "Unklassifiziert", "ort": "Unbekannt", "relevant": False}
 
 # ==================== COOLDOWN ====================
-def should_run_crawler():
-    row = conn.execute("SELECT value FROM metadata WHERE key = 'last_crawl'").fetchone()
+def should_crawl():
+    row = db.execute("SELECT value FROM metadata WHERE key='last_crawl'").fetchone()
     if not row:
         return True
     return datetime.now() - datetime.fromisoformat(row[0]) > timedelta(hours=23)
 
-def update_last_crawl():
-    conn.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES ('last_crawl', ?)",
-                 (datetime.now().isoformat(),))
-    conn.commit()
+def mark_crawled():
+    db.execute("INSERT OR REPLACE INTO metadata VALUES ('last_crawl',?)", (datetime.now().isoformat(),))
+    db.commit()
 
 # ==================== HELPERS ====================
-def fetch(url, timeout=20):
-    r = requests.get(url, timeout=timeout, headers=HEADERS)
+KEYWORDS = [
+    "brandanschlag", "sabotage", "schmiererei", "graffiti", "molotow", "farbbeutel",
+    "militant", "direkte aktion", "anschlag", "feuer gelegt", "blockade", "besetzung",
+    "störaktion", "angriff", "attackier", "zerstör", "beschädig", "barrikade",
+    "anti-repression", "linksextrem", "linksradikal", "autonome", "antifa", "schwarzer block"
+]
+
+def chash(text, url):
+    return hashlib.sha256((url + "|" + text[:500]).encode()).hexdigest()
+
+def seen(h):
+    return db.execute("SELECT 1 FROM incidents WHERE content_hash=?", (h,)).fetchone() is not None
+
+def save_incident(ai, text, source, url, date_str=None):
+    h = chash(text, url)
+    if seen(h):
+        return False
+    lat, lon = geocode(ai["ort"], ai["land"])
+    d = date_str or datetime.now().strftime("%Y-%m-%d")
+    db.execute(
+        """INSERT OR IGNORE INTO incidents
+           (date,location,country,category,description,source,url,content_hash,lat,lon,timestamp)
+           VALUES (?,?,?,?,?,?,?,?,?,?,datetime('now'))""",
+        (d, ai["ort"], ai["land"], ai["kategorie"], text[:500], source, url, h, lat, lon)
+    )
+    db.commit()
+    return True
+
+def kwmatch(text):
+    return any(kw in text.lower() for kw in KEYWORDS)
+
+def fetch_url(url, timeout=20):
+    r = requests.get(url, timeout=timeout, headers=HEADERS_WEB)
     r.raise_for_status()
     return r.text
 
-def content_hash(text, url):
-    return hashlib.sha256((url + "|" + text[:500]).encode()).hexdigest()
-
-def already_seen(h):
-    return conn.execute("SELECT 1 FROM incidents WHERE content_hash = ?", (h,)).fetchone() is not None
-
-def save_incident(ai, text, source, url):
-    h = content_hash(text, url)
-    if already_seen(h):
-        return False
-    lat, lon = geocode(ai["ort"], ai["land"])
-    conn.execute(
-        """INSERT OR IGNORE INTO incidents
-           (date, location, country, category, description, source, url, content_hash, lat, lon, timestamp)
-           VALUES (date('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))""",
-        (ai["ort"], ai["land"], ai["kategorie"], text[:500], source, url, h, lat, lon)
-    )
-    conn.commit()
-    return True
-
-def text_matches_keywords(text):
-    t = text.lower()
-    return any(kw in t for kw in KEYWORDS)
-
-# ==================== SCRAPERS ====================
-def extract_article_links(html, base_url):
-    soup = BeautifulSoup(html, 'html.parser')
-    links = set()
-    for a in soup.find_all('a', href=True):
-        href = a['href']
-        if href.startswith('#') or href.startswith('mailto:') or href.startswith('javascript:'):
-            continue
-        full = urljoin(base_url, href)
-        if base_url.split('/')[2] in full:
-            links.add(full)
-    return list(links)
-
-def scrape_article(url):
+def get_article_text(url):
     try:
-        html = fetch(url)
+        html = fetch_url(url)
         soup = BeautifulSoup(html, 'html.parser')
-        for tag in soup(['script', 'style', 'nav', 'footer', 'header']):
-            tag.decompose()
-        article = (soup.find('article') or soup.find('main') or
-                   soup.find('div', class_='node') or soup.find('div', class_='content'))
-        text = (article.get_text(" ", strip=True) if article else soup.get_text(" ", strip=True))
-        return text[:3000]
+        for t in soup(['script','style','nav','footer','header','aside']):
+            t.decompose()
+        el = (soup.find('article') or soup.find('main') or
+              soup.find('div', class_='content') or soup.find('div', class_='node'))
+        return (el or soup).get_text(" ", strip=True)[:3000]
     except Exception as e:
-        log.warning(f"article fetch failed {url}: {e}")
+        log.warning(f"article_text fail {url}: {e}")
         return ""
 
-def scrape_source(name, base_url, max_articles=15):
+# ==================== SCRAPERS ====================
+def scrape_source(name, base_url, max_check=15):
     log.info(f"Crawling {name} ...")
     inserted = 0
     try:
-        html = fetch(base_url)
-        links = extract_article_links(html, base_url)
-        log.info(f"{name}: {len(links)} candidate links")
-
-        candidates = [l for l in links if len(l.replace(base_url, '').strip('/').split('/')) >= 1][:max_articles * 3]
-
-        checked = 0
-        for url in candidates:
-            if checked >= max_articles:
-                break
-            text = scrape_article(url)
-            if len(text) < 200:
+        html = fetch_url(base_url)
+        soup = BeautifulSoup(html, 'html.parser')
+        links = []
+        for a in soup.find_all('a', href=True):
+            href = a['href']
+            if any(x in href for x in ['#','mailto:','javascript:']):
                 continue
-            if not text_matches_keywords(text):
+            full = urljoin(base_url, href)
+            if base_url.split('/')[2] in full and full != base_url:
+                links.append(full)
+        links = list(dict.fromkeys(links))[:max_check * 3]
+        checked = 0
+        for url in links:
+            if checked >= max_check:
+                break
+            text = get_article_text(url)
+            if len(text) < 150 or not kwmatch(text):
                 continue
             checked += 1
             log.info(f"{name} match: {url}")
-            ai = classify_with_ai(text)
+            ai = classify(text)
             if ai.get("relevant") and ai["kategorie"] not in ("Unklassifiziert", "Sonstiges"):
                 if save_incident(ai, text, name, url):
                     inserted += 1
             time.sleep(0.5)
-        log.info(f"{name}: inserted {inserted} new incidents")
     except Exception as e:
-        log.error(f"{name} scrape failed: {e}")
+        log.error(f"{name} fail: {e}")
+    log.info(f"{name}: +{inserted} incidents")
     return inserted
 
+# ==================== TAGESANZEIGER 2026 ====================
+TA_SEARCH_TERMS = [
+    "linksextremismus schweiz",
+    "militante linke schweiz",
+    "brandanschlag schweiz",
+    "sabotage linksradikal",
+    "autonome anschlag",
+    "linksextrem angriff",
+]
+
+def scrape_tagesanzeiger_2026():
+    """Pull Tagesanzeiger articles about left-wing violence from 2026."""
+    log.info("Tagesanzeiger 2026 historical scrape ...")
+    inserted = 0
+    candidate_urls = set()
+
+    for term in TA_SEARCH_TERMS:
+        for search_url in [
+            f"https://www.tagesanzeiger.ch/suche?q={term.replace(' ','+')}&sort=Datum",
+            f"https://www.tagesanzeiger.ch/suche?q={term.replace(' ','+')}+2026&sort=Datum",
+        ]:
+            try:
+                html = fetch_url(search_url)
+                soup = BeautifulSoup(html, 'html.parser')
+                for a in soup.find_all('a', href=True):
+                    href = a['href']
+                    full = urljoin("https://www.tagesanzeiger.ch", href)
+                    # Accept article paths
+                    if any(s in full for s in ['/artikel/','/news/','/schweiz/','/politik/','/panorama/']):
+                        if 'tagesanzeiger.ch' in full:
+                            candidate_urls.add(full)
+                log.info(f"TA search '{term}': {len(candidate_urls)} total candidates so far")
+                time.sleep(1.5)
+            except Exception as e:
+                log.warning(f"TA search fail '{term}': {e}")
+
+    log.info(f"Tagesanzeiger: processing {len(candidate_urls)} URLs")
+    for url in list(candidate_urls)[:40]:
+        try:
+            text = get_article_text(url)
+            if len(text) < 200 or not kwmatch(text):
+                continue
+
+            # Try to extract date from URL (TA URLs often contain /YYYY-MM-DD/)
+            date_str = None
+            for part in url.split('/'):
+                if len(part) == 10 and part.count('-') == 2:
+                    try:
+                        d = datetime.strptime(part, "%Y-%m-%d")
+                        if d.year == 2026:
+                            date_str = part
+                            break
+                    except Exception:
+                        pass
+
+            # Only keep 2026 articles (if date in URL is present and not 2026, skip)
+            if date_str is None:
+                # No date in URL — still include, let Grok decide
+                pass
+
+            ai = classify(text)
+            if ai.get("relevant") and ai["kategorie"] not in ("Unklassifiziert", "Sonstiges"):
+                if save_incident(ai, text, "tagesanzeiger.ch", url, date_str):
+                    inserted += 1
+                    log.info(f"TA saved: {url}")
+            time.sleep(1.0)
+        except Exception as e:
+            log.warning(f"TA article fail {url}: {e}")
+
+    log.info(f"Tagesanzeiger 2026: +{inserted} incidents")
+    return inserted
+
+# ==================== MASTER CRAWLER ====================
 def run_crawler(force=False):
-    if not force and not should_run_crawler():
-        log.info("Crawler skipped — last run < 23h ago")
+    if not force and not should_crawl():
+        log.info("Crawler: skipped (< 23h)")
         return
-    log.info("===== CRAWLER RUN START =====")
+    log.info("===== CRAWLER START =====")
     scrape_source("de.indymedia.org", "https://de.indymedia.org/")
     scrape_source("barrikade.info", "https://barrikade.info/")
-    update_last_crawl()
-    log.info("===== CRAWLER RUN COMPLETE =====")
+    scrape_tagesanzeiger_2026()
+    mark_crawled()
+    log.info("===== CRAWLER DONE =====")
 
-# ==================== SCHEDULER ====================
-@st.cache_resource
-def start_scheduler():
+# ==================== FASTAPI ====================
+app = FastAPI(title="LEX EUROPE")
+templates = Jinja2Templates(directory="templates")
+
+@app.get("/", response_class=HTMLResponse)
+async def index(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
+
+@app.get("/api/incidents")
+async def get_incidents():
+    rows = db.execute(
+        "SELECT id,date,location,country,category,description,source,url,lat,lon,timestamp "
+        "FROM incidents ORDER BY timestamp DESC"
+    ).fetchall()
+    return JSONResponse([dict(r) for r in rows])
+
+@app.get("/api/stats")
+async def get_stats():
+    total = db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
+    by_country = [dict(r) for r in db.execute(
+        "SELECT country, COUNT(*) as n FROM incidents GROUP BY country ORDER BY n DESC").fetchall()]
+    by_cat = [dict(r) for r in db.execute(
+        "SELECT category, COUNT(*) as n FROM incidents GROUP BY category ORDER BY n DESC").fetchall()]
+    by_source = [dict(r) for r in db.execute(
+        "SELECT source, COUNT(*) as n FROM incidents GROUP BY source ORDER BY n DESC").fetchall()]
+    last = db.execute("SELECT value FROM metadata WHERE key='last_crawl'").fetchone()
+    geocoded = db.execute("SELECT COUNT(*) FROM incidents WHERE lat IS NOT NULL").fetchone()[0]
+    return JSONResponse({
+        "total": total,
+        "geocoded": geocoded,
+        "last_crawl": last[0] if last else None,
+        "by_country": by_country,
+        "by_cat": by_cat,
+        "by_source": by_source,
+    })
+
+@app.post("/api/crawl")
+async def trigger_crawl(bg: BackgroundTasks):
+    bg.add_task(run_crawler, True)
+    return JSONResponse({"status": "crawl gestartet"})
+
+@app.post("/api/clear")
+async def clear_db():
+    db.execute("DELETE FROM incidents")
+    db.execute("DELETE FROM metadata")
+    db.commit()
+    return JSONResponse({"status": "cleared"})
+
+@app.post("/api/grok-test")
+async def grok_test():
+    res = classify("Unbekannte Täter haben in der Nacht einen Brandanschlag auf ein Polizeifahrzeug in Berlin-Kreuzberg verübt. Ein Bekennerschreiben einer militanten autonomen Gruppe wurde gefunden.")
+    return JSONResponse(res)
+
+@app.on_event("startup")
+async def startup():
     scheduler = BackgroundScheduler(daemon=True, timezone="Europe/Zurich")
-    scheduler.add_job(run_crawler, 'interval', hours=1, id='crawler_job',
-                      next_run_time=datetime.now() + timedelta(seconds=30))
+    scheduler.add_job(run_crawler, 'interval', hours=1, id='crawler',
+                      next_run_time=datetime.now() + timedelta(seconds=20))
     scheduler.start()
-    log.info("APScheduler started")
-    return scheduler
-
-start_scheduler()
-
-# ==================== HELPER: safe read with fallback ====================
-def safe_read_incidents(columns="*", order="ORDER BY timestamp DESC"):
-    """Read incidents, returning empty cols if missing."""
-    existing = {row[1] for row in conn.execute("PRAGMA table_info(incidents)").fetchall()}
-    if columns == "*":
-        return pd.read_sql(f"SELECT * FROM incidents {order}", conn)
-    requested = [c.strip() for c in columns.split(",")]
-    select_parts = []
-    for c in requested:
-        if c in existing:
-            select_parts.append(c)
-        else:
-            select_parts.append(f"NULL AS {c}")
-    return pd.read_sql(f"SELECT {', '.join(select_parts)} FROM incidents {order}", conn)
-
-# ==================== TABS ====================
-tab1, tab2, tab3 = st.tabs(["🗺️ Live Threat Map", "📋 Ereignis-Protokoll", "⚙️ Status & Debug"])
-
-with tab1:
-    st.subheader("Live Threat Map – Europa (DACH Fokus)")
-    m = folium.Map(location=[49.0, 9.5], zoom_start=5.5, tiles="cartodb dark_matter")
-    df = safe_read_incidents("*")
-    placed = 0
-    for _, row in df.iterrows():
-        lat, lon = row.get("lat"), row.get("lon")
-        if not lat or not lon or pd.isna(lat) or pd.isna(lon):
-            continue
-        color = "red" if row.get("category") in ["Brandanschlag", "Sabotage", "Gewalt",
-                                                  "Militante Aktion", "Aufruf zu Gewalt"] else "orange"
-        popup = (f"<b>{row.get('date','')}</b><br><b>{row.get('location','')}, {row.get('country','')}</b><br>"
-                 f"<b>{row.get('category','')}</b><br>{str(row.get('description',''))[:200]}"
-                 f"<br><a href='{row.get('url','') or ''}' target='_blank'>Quelle</a>")
-        folium.Marker(
-            location=[lat, lon],
-            popup=popup,
-            icon=folium.Icon(color=color, icon="exclamation-triangle", prefix="fa")
-        ).add_to(m)
-        placed += 1
-    st_folium(m, width=1450, height=740)
-    if placed == 0 and not df.empty:
-        st.info(f"{len(df)} Ereignisse ohne Koordinaten.")
-    elif df.empty:
-        st.info("Noch keine Ereignisse. Crawler läuft im Hintergrund.")
-
-with tab2:
-    st.subheader("Vollständiges Ereignis-Protokoll")
-    df2 = safe_read_incidents("date, location, country, category, description, source, url")
-    if df2.empty:
-        st.info("Noch keine Ereignisse erfasst")
-    else:
-        st.dataframe(df2, use_container_width=True, hide_index=True)
-
-with tab3:
-    st.subheader("⚙️ Crawler Status & Debug")
-    row = conn.execute("SELECT value FROM metadata WHERE key = 'last_crawl'").fetchone()
-    if row:
-        st.success(f"✅ Letzter Crawl: {row[0]}")
-    else:
-        st.warning("Noch kein Crawl durchgeführt")
-
-    total = conn.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
-    try:
-        geocoded = conn.execute("SELECT COUNT(*) FROM incidents WHERE lat IS NOT NULL").fetchone()[0]
-    except Exception:
-        geocoded = 0
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Ereignisse", total)
-    c2.metric("Geocodiert", geocoded)
-    c3.metric("Datenbank", os.path.basename(DB_PATH))
-
-    # Show current schema
-    with st.expander("📐 Datenbank-Schema (incidents)"):
-        schema = conn.execute("PRAGMA table_info(incidents)").fetchall()
-        st.table(pd.DataFrame(schema, columns=["cid", "name", "type", "notnull", "default", "pk"]))
-
-    api_key = os.getenv("GROK_API_KEY")
-    if api_key:
-        st.success(f"✅ GROK_API_KEY gesetzt ({len(api_key)} Zeichen)")
-    else:
-        st.error("❌ GROK_API_KEY NICHT gesetzt!")
-
-    st.divider()
-    st.subheader("🔍 Debug")
-    if st.button("🤖 Grok API testen"):
-        with st.spinner("Teste Grok ..."):
-            result = classify_with_ai("Unbekannte verübten in der Nacht einen Brandanschlag auf ein Polizeifahrzeug in Berlin-Kreuzberg. Bekennerschreiben einer militanten Gruppe.")
-        st.json(result)
-
-    st.divider()
-    st.subheader("Manueller Crawl")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        if st.button("🔄 Jetzt crawlen (force)"):
-            with st.spinner("Crawle..."):
-                run_crawler(force=True)
-            st.success("Crawl abgeschlossen!")
-            st.rerun()
-    with c2:
-        if st.button("🗑️ Datenbank leeren"):
-            conn.execute("DELETE FROM incidents")
-            conn.execute("DELETE FROM metadata")
-            conn.commit()
-            st.warning("Datenbank geleert.")
-            st.rerun()
-    with c3:
-        if st.button("💥 Tabelle komplett löschen (Reset)"):
-            conn.execute("DROP TABLE IF EXISTS incidents")
-            conn.commit()
-            get_conn.clear()  # clear cache
-            st.warning("Tabelle gelöscht — bitte App neu laden.")
-            st.rerun()
-
-st.caption("LEX EUROPE • OSINT • SEC")
+    log.info("LEX EUROPE API ready — crawler starts in 20s")
