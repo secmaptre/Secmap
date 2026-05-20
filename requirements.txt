@@ -1,8 +1,9 @@
-streamlit
+fastapi
+uvicorn[standard]
+jinja2
 pandas
 folium
-streamlit-folium
 requests
 beautifulsoup4
 apscheduler
-fastapi
+python-multipart
