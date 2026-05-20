@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import sqlite3
+import requests
+from bs4 import BeautifulSoup
 import folium
 from streamlit_folium import st_folium
 
@@ -28,45 +30,52 @@ def init_db():
 
 init_db()
 
-# ==================== TABS (sauber & professionell) ====================
-tab1, tab2, tab3, tab4 = st.tabs([
-    "🗺️ Live Threat Map",
-    "📋 Protokoll",
-    "🔮 Forecasts & Trends",
-    "✉️ Kontakt"
-])
+# ==================== TABS ====================
+tab1, tab2, tab3 = st.tabs(["🗺️ Live Map", "📋 Protokoll", "🔄 Crawler"])
 
-# ==================== LIVE MAP (groß) ====================
+# ==================== LIVE MAP + EVENT FEED ====================
 with tab1:
-    st.subheader("Aktuelle Bedrohungslage – Europa / DACH / Schweiz")
-    m = folium.Map(location=[47.5, 8.5], zoom_start=6, tiles="cartodb dark_matter")
-    
-    df = pd.read_sql("SELECT * FROM incidents ORDER BY date DESC", conn)
-    for _, row in df.iterrows():
-        color = "red" if any(x in str(row['category']).lower() for x in ["brand", "gewalt", "sabotage", "angriff"]) else "orange"
-        folium.Marker(
-            location=[row.get('lat', 47.5), row.get('lon', 8.5)],
-            popup=f"<b>{row['date']}</b><br>{row['location']}<br><b>{row['category']}</b><br>{row['description']}",
-            icon=folium.Icon(color=color)
-        ).add_to(m)
-    
-    st_folium(m, width=1450, height=780)
+    col1, col2 = st.columns([3, 1])
+
+    with col1:
+        st.subheader("Europa Threat Map")
+        m = folium.Map(location=[47.5, 8.5], zoom_start=6, tiles="cartodb dark_matter")
+        
+        df = pd.read_sql("SELECT * FROM incidents ORDER BY date DESC", conn)
+        for _, row in df.iterrows():
+            color = "red" if any(x in str(row['category']).lower() for x in ["brand", "gewalt", "sabotage", "angriff"]) else "orange"
+            folium.Marker(
+                location=[row.get('lat', 47.5), row.get('lon', 8.5)],
+                popup=f"<b>{row['date']}</b><br>{row['location']}<br><b>{row['category']}</b><br>{row['description']}",
+                icon=folium.Icon(color=color)
+            ).add_to(m)
+        
+        st_folium(m, width=1100, height=720)
+
+    with col2:
+        st.subheader("🔔 Event Feed (neueste Vorfälle)")
+        if not df.empty:
+            latest = df.head(12)
+            for _, row in latest.iterrows():
+                st.caption(f"**{row['date']}** — **{row['location']}**")
+                st.write(f"**{row['category']}** — {row['description'][:90]}...")
+                st.divider()
+        else:
+            st.info("Noch keine Vorfälle vorhanden. Starte den Crawler.")
 
 # ==================== PROTOKOLL ====================
 with tab2:
-    st.subheader("Vollständiges Protokoll aller dokumentierten Vorfälle")
-    df = pd.read_sql("SELECT date, location, category, description, source FROM incidents ORDER BY date DESC", conn)
-    st.dataframe(df, use_container_width=True)
+    st.subheader("Vollständiges Protokoll")
+    df_full = pd.read_sql("SELECT date, location, category, description, source FROM incidents ORDER BY date DESC", conn)
+    st.dataframe(df_full, use_container_width=True)
 
-# ==================== FORECASTS ====================
+# ==================== CRAWLER (nur für dich) ====================
 with tab3:
-    st.subheader("🔮 Forecasts & Risiko-Trends")
-    st.info("Dieser Bereich wird später mit Hotspot-Analysen und Vorhersagen gefüllt.")
+    st.subheader("🔄 Crawler")
+    if st.button("🚀 Jetzt Indymedia + Barrikade crawlen"):
+        with st.spinner("Suche nach gewalttätigen Aktionen..."):
+            # Hier kommt der Crawler-Code (wie vorher)
+            st.info("Crawler wird ausgeführt... (in der nächsten Version vollautomatisch)")
+            # (wir können später einen echten automatischen Crawler einbauen)
 
-# ==================== KONTAKT ====================
-with tab4:
-    st.subheader("Gewalttätigen Linksextremismus melden")
-    st.write("**E-Mail:** contact-lexmap@proton.me")
-    st.caption("Nur öffentliche Vorfälle werden verarbeitet. Vertraulich.")
-
-st.caption("LEX EUROPE Threat Map • Automatische Erfassung im Hintergrund")
+st.caption("LEX EUROPE Threat Map • Automatischer Crawler wird vorbereitet")
