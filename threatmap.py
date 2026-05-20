@@ -5,9 +5,10 @@ import sqlite3
 import folium
 from streamlit_folium import st_folium
 
-st.set_page_config(page_title="LEX EUROPE Threat Map", layout="wide")
-st.title("🔴 LEX EUROPE - Linksextremismus Threat Map")
-st.caption("Fokus: Europa • DACH • Schweiz • Nur öffentliche Quellen")
+st.set_page_config(page_title="LEX EUROPE", layout="wide")
+
+st.title("🔴 LEX EUROPE")
+st.markdown("**Linksextremismus Threat Map • Europa • DACH • Schweiz**")
 
 conn = sqlite3.connect('lex_threat.db', check_same_thread=False)
 
@@ -27,57 +28,45 @@ def init_db():
 
 init_db()
 
-# ==================== TABS ====================
-tab1, tab2, tab3, tab4 = st.tabs(["🗺️ Live Map", "📋 Protokoll", "🔮 Forecasts", "✉️ Kontakt"])
+# ==================== TABS (sauber & professionell) ====================
+tab1, tab2, tab3, tab4 = st.tabs([
+    "🗺️ Live Threat Map",
+    "📋 Protokoll",
+    "🔮 Forecasts & Trends",
+    "✉️ Kontakt"
+])
 
-# ==================== LIVE MAP + EVENT FEED ====================
+# ==================== LIVE MAP (groß) ====================
 with tab1:
-    col1, col2 = st.columns([3, 1])
+    st.subheader("Aktuelle Bedrohungslage – Europa / DACH / Schweiz")
+    m = folium.Map(location=[47.5, 8.5], zoom_start=6, tiles="cartodb dark_matter")
     
-    with col1:
-        st.subheader("Europa Threat Map")
-        m = folium.Map(location=[47.5, 8.5], zoom_start=6, tiles="cartodb dark_matter")
-        
-        df = pd.read_sql("SELECT * FROM incidents ORDER BY date DESC", conn)
-        for _, row in df.iterrows():
-            color = "red" if "Brand" in row['category'] or "Gewalt" in row['category'] else "orange"
-            folium.Marker(
-                location=[row.get('lat', 47.5), row.get('lon', 8.5)],
-                popup=f"<b>{row['date']}</b><br>{row['location']}<br><b>{row['category']}</b><br>{row['description']}",
-                icon=folium.Icon(color=color, icon="exclamation-triangle")
-            ).add_to(m)
-        
-        st_folium(m, width=1100, height=650)
+    df = pd.read_sql("SELECT * FROM incidents ORDER BY date DESC", conn)
+    for _, row in df.iterrows():
+        color = "red" if any(x in str(row['category']).lower() for x in ["brand", "gewalt", "sabotage", "angriff"]) else "orange"
+        folium.Marker(
+            location=[row.get('lat', 47.5), row.get('lon', 8.5)],
+            popup=f"<b>{row['date']}</b><br>{row['location']}<br><b>{row['category']}</b><br>{row['description']}",
+            icon=folium.Icon(color=color)
+        ).add_to(m)
     
-    with col2:
-        st.subheader("Event Feed (neueste Vorfälle)")
-        if not df.empty:
-            latest = df.head(10)
-            for _, row in latest.iterrows():
-                st.caption(f"**{row['date']}** — {row['location']}")
-                st.write(f"**{row['category']}** | {row['description'][:80]}...")
-                st.divider()
-        else:
-            st.info("Noch keine Vorfälle vorhanden.")
+    st_folium(m, width=1450, height=780)
 
 # ==================== PROTOKOLL ====================
 with tab2:
-    st.subheader("Vollständiges Protokoll")
-    df_full = pd.read_sql("SELECT date, location, category, description, source FROM incidents ORDER BY date DESC", conn)
-    st.dataframe(df_full, use_container_width=True)
+    st.subheader("Vollständiges Protokoll aller dokumentierten Vorfälle")
+    df = pd.read_sql("SELECT date, location, category, description, source FROM incidents ORDER BY date DESC", conn)
+    st.dataframe(df, use_container_width=True)
 
 # ==================== FORECASTS ====================
 with tab3:
-    st.subheader("🔮 Forecasts & Trends")
-    st.info("Hier kommen später Vorhersagen, Hotspot-Analysen und Risikobewertungen.")
-    st.write("Aktuell noch in Entwicklung.")
+    st.subheader("🔮 Forecasts & Risiko-Trends")
+    st.info("Dieser Bereich wird später mit Hotspot-Analysen und Vorhersagen gefüllt.")
 
 # ==================== KONTAKT ====================
 with tab4:
-    st.subheader("✉️ Gewalttätiger Extremismus melden")
-    st.markdown("### Kontakt")
-    st.write("**Email:** contact-lexmap@proton.me")   # Du kannst das später ändern
-    st.write("Meldungen werden vertraulich behandelt und nur öffentliche Vorfälle verarbeitet.")
-    st.caption("Keine persönlichen Daten. Nur öffentliche Aktivitäten.")
+    st.subheader("Gewalttätigen Linksextremismus melden")
+    st.write("**E-Mail:** contact-lexmap@proton.me")
+    st.caption("Nur öffentliche Vorfälle werden verarbeitet. Vertraulich.")
 
-st.caption("LEX EUROPE Threat Map • Läuft auf Streamlit Cloud")
+st.caption("LEX EUROPE Threat Map • Automatische Erfassung im Hintergrund")
