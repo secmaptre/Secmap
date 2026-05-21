@@ -133,6 +133,23 @@ select option{background:var(--surface);}
       <button class="btn" onclick="refreshStatus()">Status aktualisieren</button>
       <button class="btn danger" onclick="clearDB()">Datenbank zurücksetzen</button>
     </div>
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
+      <div class="card-title" style="margin-bottom:10px;">Historische Daten (2010 – heute)</div>
+      <div class="stat-grid" style="margin-bottom:12px;">
+        <div class="stat-box"><span class="stat-val" id="h-b-pct">—</span><span class="stat-lbl">Barrikade.info</span></div>
+        <div class="stat-box"><span class="stat-val" id="h-im">—</span><span class="stat-lbl">Indymedia</span></div>
+        <div class="stat-box"><span class="stat-val" id="h-wb">—</span><span class="stat-lbl">Wayback Machine</span></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="startHistorical(false)" id="btn-hist">Historischen Crawl fortsetzen</button>
+        <button class="btn" onclick="startHistorical(true)">Von vorne beginnen (Reset)</button>
+        <button class="btn" onclick="refreshHistStatus()">Status aktualisieren</button>
+      </div>
+      <p style="font-size:9px;color:var(--t3);margin-top:8px;font-family:var(--mono);">
+        Barrikade iteriert alle Artikel-IDs zurück bis #1 · Indymedia paginiert offset-basiert ·
+        Wayback Machine CDX für archivierte Inhalte ab 2015 · Fortschritt wird gespeichert
+      </p>
+    </div>
     <div class="console" id="console">Bereit.</div>
   </div>
 
@@ -358,9 +375,38 @@ async function submitIncident() {
   } catch(e) { log('Fehler: ' + e.message); }
 }
 
+async function startHistorical(reset) {
+  const btn = document.getElementById('btn-hist');
+  btn.disabled = true;
+  btn.textContent = reset ? 'Reset + Start...' : 'Wird gestartet...';
+  log(reset ? 'Historischen Crawl zurücksetzen und starten...' : 'Historischen Crawl fortsetzen...');
+  try {
+    const r = await fetch(`/admin/api/crawl-historical?reset=${reset}`, {method:'POST'});
+    const d = await r.json();
+    log(d.status);
+    setTimeout(refreshHistStatus, 2000);
+  } catch(e) { log('Fehler: ' + e.message); }
+  finally { btn.disabled=false; btn.textContent='Historischen Crawl fortsetzen'; }
+}
+
+async function refreshHistStatus() {
+  try {
+    const s = await fetch('/admin/api/hist-status').then(r=>r.json());
+    const b = s.barrikade;
+    const im = s.indymedia;
+    document.getElementById('h-b-pct').textContent = b.done ? '✓ Fertig' : (b.pct > 0 ? b.pct+'%' : 'Bereit');
+    document.getElementById('h-im').textContent    = im.done ? '✓ Fertig' : (im.offset > 0 ? 'Off '+im.offset : 'Bereit');
+    document.getElementById('h-wb').textContent    = s.wayback.done ? '✓ Fertig' : 'Bereit';
+    if (s.running) {
+      log('Historischer Crawl aktiv: Barrikade ID ' + b.current + ' (' + b.pct + '%)');
+    }
+  } catch(e) { console.error(e); }
+}
+
 // Pre-fill date with today
 document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
 refreshStatus();
+refreshHistStatus();
 </script>
 </body>
 </html>
