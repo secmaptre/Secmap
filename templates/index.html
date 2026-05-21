@@ -3,209 +3,273 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEX EUROPE — Lageübersicht</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>LEX EUROPE</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0a0c0f; --surf:#111318; --surf2:#161a20;
-  --b1:#1e2229; --b2:#252b34;
-  --red:#b91c1c; --red2:#dc2626;
-  --amb:#d97706; --grn:#16a34a;
-  --t1:#f1f3f5;  --t2:#9ba3ae; --t3:#4b5563;
-  --mono:'JetBrains Mono',monospace;
-  --sans:'Inter',sans-serif;
+  --bg:     #060709;
+  --s0:     #0b0d11;
+  --s1:     #0f1117;
+  --s2:     #141720;
+  --s3:     #1a1e28;
+  --line:   #1e2230;
+  --line2:  #262c3d;
+  --line3:  #2e3548;
+  --accent: #3b82f6;
+  --a2:     #60a5fa;
+  --a-dim:  rgba(59,130,246,0.12);
+  --red:    #ef4444;
+  --r-dim:  rgba(239,68,68,0.12);
+  --amber:  #f59e0b;
+  --green:  #10b981;
+  --t0:     #ffffff;
+  --t1:     #e2e8f0;
+  --t2:     #94a3b8;
+  --t3:     #4b5563;
+  --t4:     #2d3444;
+  --mono:   'JetBrains Mono',monospace;
+  --sans:   'Inter',sans-serif;
 }
-html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--t1);font-family:var(--sans);font-size:12px;line-height:1.5;-webkit-font-smoothing:antialiased}
+html,body{
+  height:100%;overflow:hidden;
+  background:var(--bg);color:var(--t1);
+  font-family:var(--mono);font-size:11px;line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── NOISE OVERLAY ── */
+body::after{
+  content:'';position:fixed;inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+  pointer-events:none;z-index:9000;opacity:.4;
+}
 
 /* ── MAP ── */
-#map{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0}
+#map{position:fixed;inset:0;z-index:0;filter:brightness(.85) saturate(.6);}
 
 /* ── TOPBAR ── */
-#topbar{
-  position:fixed;top:0;left:0;right:0;height:44px;z-index:400;
-  background:var(--surf);border-bottom:1px solid var(--b1);
-  display:flex;align-items:center;padding:0 20px;gap:0;
+#bar{
+  position:fixed;top:0;left:0;right:0;height:38px;z-index:500;
+  background:rgba(6,7,9,.94);border-bottom:1px solid var(--line2);
+  backdrop-filter:blur(12px);
+  display:flex;align-items:center;padding:0 0 0 16px;gap:0;
 }
-.tb-brand{padding-right:20px;margin-right:20px;border-right:1px solid var(--b2)}
-.tb-wm{font-size:13px;font-weight:600;letter-spacing:.06em;color:var(--t1)}
-.tb-sub{font-size:9px;color:var(--t3);letter-spacing:.03em;margin-top:1px}
-.tb-live{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:9px;color:var(--t3);letter-spacing:.05em}
-.ldot{width:5px;height:5px;border-radius:50%;background:var(--grn)}
-.tb-met{margin-left:auto;display:flex;align-items:center;gap:22px}
-.met{text-align:right}
-.met-v{font-family:var(--mono);font-size:16px;font-weight:500;color:var(--t1);display:block;line-height:1}
-.met-l{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em}
-.tb-dv{width:1px;height:20px;background:var(--b2)}
-#tb-time{font-family:var(--mono);font-size:11px;color:var(--t3);letter-spacing:.03em;min-width:64px;text-align:right}
+.bar-id{
+  font-size:11px;font-weight:600;letter-spacing:.14em;color:var(--t0);
+  padding-right:16px;margin-right:0;
+}
+.bar-div{width:1px;height:16px;background:var(--line3);margin:0 14px;}
+.bar-sys{font-size:9px;color:var(--t3);letter-spacing:.1em;}
+.bar-tags{display:flex;align-items:center;gap:6px;margin-left:14px;}
+.tag{
+  font-size:8px;letter-spacing:.1em;padding:2px 7px;
+  border:1px solid var(--line3);color:var(--t3);
+}
+.tag.live{color:var(--green);border-color:rgba(16,185,129,.3);background:rgba(16,185,129,.06);}
+.bar-right{margin-left:auto;display:flex;align-items:center;height:100%;}
+.bar-metric{
+  display:flex;flex-direction:column;align-items:flex-end;
+  padding:0 18px;height:100%;justify-content:center;
+  border-left:1px solid var(--line);
+}
+.bm-val{font-size:14px;font-weight:600;color:var(--t1);line-height:1;}
+.bm-lbl{font-size:8px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;margin-top:1px;}
+#bar-clock{
+  padding:0 18px;height:100%;display:flex;align-items:center;
+  border-left:1px solid var(--line);
+  font-size:11px;color:var(--t3);letter-spacing:.06em;min-width:80px;
+}
 
 /* ── LEFT ── */
 #left{
-  position:fixed;top:44px;left:0;bottom:0;width:240px;z-index:300;
-  background:var(--surf);border-right:1px solid var(--b1);
+  position:fixed;top:38px;left:0;bottom:0;width:232px;z-index:400;
+  background:rgba(6,7,9,.92);border-right:1px solid var(--line);
+  backdrop-filter:blur(10px);
   display:flex;flex-direction:column;overflow:hidden;
 }
-.ps{padding:14px 16px;border-bottom:1px solid var(--b1);flex-shrink:0}
-.ps.grow{flex:1;overflow-y:auto}
-.ps.grow::-webkit-scrollbar{width:2px}
-.ps.grow::-webkit-scrollbar-thumb{background:var(--b2)}
-.sh{font-size:9px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);margin-bottom:10px}
-.fr{margin-bottom:9px}
-.fr:last-child{margin-bottom:0}
-.fl{font-size:9px;font-weight:500;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px;display:block}
-select{
-  width:100%;background:var(--bg);border:1px solid var(--b2);color:var(--t2);
-  padding:5px 24px 5px 8px;font-family:var(--sans);font-size:11px;
-  outline:none;cursor:pointer;appearance:none;border-radius:3px;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%234b5563'/%3E%3C/svg%3E");
-  background-repeat:no-repeat;background-position:right 8px center;
+.lsec{padding:12px 14px;border-bottom:1px solid var(--line);flex-shrink:0;}
+.lsec.grow{flex:1;overflow-y:auto;}
+.lsec.grow::-webkit-scrollbar{width:2px;}
+.lsec.grow::-webkit-scrollbar-thumb{background:var(--line3);}
+.sec-lbl{
+  font-size:8px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--t3);margin-bottom:10px;display:flex;align-items:center;gap:6px;
 }
-.bi{margin-bottom:8px}
-.bi:last-child{margin-bottom:0}
-.bh{display:flex;justify-content:space-between;margin-bottom:3px}
-.bn{font-size:11px;color:var(--t2)}
-.bc{font-family:var(--mono);font-size:10px;color:var(--t3)}
-.bt{height:2px;background:var(--b2);border-radius:1px}
-.bf{height:100%;background:var(--t3);opacity:.7;border-radius:1px;transition:width .4s}
-.cr{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--b1)}
-.cr:last-child{border-bottom:none}
-.csw{width:3px;height:12px;border-radius:1px;flex-shrink:0}
-.csw.h{background:var(--red)}
-.csw.m{background:var(--amb)}
-.csw.l{background:var(--t3)}
-.cn{font-size:10px;color:var(--t2);flex:1}
-.cc{font-family:var(--mono);font-size:10px;color:var(--t3)}
+.sec-lbl::before{content:'';width:12px;height:1px;background:var(--line3);}
+
+/* Filters */
+.frow{margin-bottom:9px;}
+.frow:last-child{margin-bottom:0;}
+.flbl{font-size:8px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px;display:block;}
+select{
+  width:100%;background:var(--s1);border:1px solid var(--line2);
+  color:var(--t2);padding:5px 22px 5px 8px;
+  font-family:var(--mono);font-size:10px;
+  outline:none;cursor:pointer;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%232d3444'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 8px center;
+  transition:border-color .15s;
+}
+select:focus{border-color:var(--line3);}
+
+/* Bars */
+.bitem{margin-bottom:9px;}
+.bitem:last-child{margin-bottom:0;}
+.bhd{display:flex;justify-content:space-between;margin-bottom:3px;}
+.bnm{font-size:9px;color:var(--t2);}
+.bn{font-size:9px;color:var(--accent);}
+.btrack{height:1px;background:var(--line);}
+.bfill{height:100%;background:var(--accent);opacity:.5;transition:width .4s;}
+
+/* Cat rows */
+.crow{display:flex;align-items:center;gap:7px;padding:4px 0;border-bottom:1px solid var(--line);}
+.crow:last-child{border-bottom:none;}
+.csw{width:2px;height:11px;flex-shrink:0;}
+.csw.h{background:var(--red);}
+.csw.m{background:var(--amber);}
+.csw.l{background:var(--line3);}
+.cnm{font-size:9px;color:var(--t2);flex:1;}
+.cn{font-size:9px;color:var(--t3);}
 
 /* ── RIGHT ── */
 #right{
-  position:fixed;top:44px;right:0;bottom:0;width:300px;z-index:300;
-  background:var(--surf);border-left:1px solid var(--b1);
+  position:fixed;top:38px;right:0;bottom:0;width:288px;z-index:400;
+  background:rgba(6,7,9,.92);border-left:1px solid var(--line);
+  backdrop-filter:blur(10px);
   display:flex;flex-direction:column;
 }
-#rh{padding:11px 16px;border-bottom:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
-.rt{font-size:9px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--t3)}
-#feed-cnt{font-family:var(--mono);font-size:9px;color:var(--t3)}
-#feed{flex:1;overflow-y:auto}
-#feed::-webkit-scrollbar{width:3px}
-#feed::-webkit-scrollbar-thumb{background:var(--b2)}
-.inc{padding:11px 16px;border-bottom:1px solid var(--b1);cursor:pointer;transition:background .1s;border-left:2px solid transparent}
-.inc:hover{background:var(--surf2)}
-.inc.h{border-left-color:var(--red)}
-.inc.m{border-left-color:var(--amb)}
-.inc.l{border-left-color:var(--b2)}
-.inc .man{font-family:var(--mono);font-size:8px;color:var(--t3);float:right;margin-top:1px}
-.ih{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:3px}
-.it{font-size:9px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
-.it.h{color:var(--red2)}
-.it.m{color:var(--amb)}
-.it.l{color:var(--t3)}
-.id{font-family:var(--mono);font-size:9px;color:var(--t3);flex-shrink:0}
-.il{font-size:12px;font-weight:500;color:var(--t1);margin-bottom:3px}
-.ix{font-size:10px;color:var(--t3);line-height:1.5;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-#feed-empty{display:none;flex-direction:column;align-items:center;justify-content:center;height:100%}
-#feed-empty p{font-size:10px;color:var(--t3);text-align:center}
+#rhd{
+  padding:10px 14px;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+}
+.rtitle{font-size:8px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--t3);}
+#fcnt{font-size:9px;color:var(--t3);}
+#feed{flex:1;overflow-y:auto;}
+#feed::-webkit-scrollbar{width:2px;}
+#feed::-webkit-scrollbar-thumb{background:var(--line3);}
+
+/* Incident cards */
+.icard{
+  padding:10px 14px;border-bottom:1px solid var(--line);
+  cursor:pointer;transition:background .1s;
+  border-left:2px solid transparent;
+}
+.icard:hover{background:rgba(255,255,255,.025);}
+.icard.h{border-left-color:var(--red);}
+.icard.m{border-left-color:var(--amber);}
+.icard.l{border-left-color:var(--line3);}
+.ihd{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:6px;}
+.itype{font-size:8px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;}
+.itype.h{color:var(--red);}
+.itype.m{color:var(--amber);}
+.itype.l{color:var(--t3);}
+.idate{font-size:8px;color:var(--t4);flex-shrink:0;}
+.iloc{font-size:11px;font-weight:500;color:var(--t1);font-family:var(--sans);margin-bottom:3px;}
+.itxt{font-size:9px;color:var(--t3);line-height:1.5;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+
+#fempty{display:none;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:8px;}
+#fempty p{font-size:9px;color:var(--t4);text-align:center;letter-spacing:.06em;}
+
+/* ── MAP CORNER LABELS ── */
+.map-corner{
+  position:fixed;z-index:300;
+  font-size:8px;color:rgba(255,255,255,.15);letter-spacing:.08em;
+  pointer-events:none;
+}
+#mc-tl{top:50px;left:244px;}
+#mc-br{bottom:10px;right:300px;text-align:right;}
+#mc-coord{bottom:10px;left:244px;color:rgba(59,130,246,.25);}
 
 /* ── POPUP ── */
 .leaflet-popup-content-wrapper{
-  background:var(--surf);border:1px solid var(--b2);border-radius:3px;
-  color:var(--t1);font-family:var(--sans);box-shadow:0 4px 24px rgba(0,0,0,.7);padding:0;
+  background:rgba(11,13,17,.97);border:1px solid var(--line2);
+  border-radius:0;color:var(--t1);font-family:var(--mono);
+  box-shadow:0 4px 32px rgba(0,0,0,.8);padding:0;
 }
-.leaflet-popup-content{margin:0;width:280px !important}
-.leaflet-popup-tip{background:var(--b2)}
-.leaflet-container a.leaflet-popup-close-button{color:var(--t3);top:8px;right:8px}
-.pop{padding:14px 16px}
-.pop-tp{font-size:9px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px}
-.pop-tp.h{color:var(--red2)}.pop-tp.m{color:var(--amb)}
-.pop-loc{font-size:14px;font-weight:600;color:var(--t1);margin-bottom:2px}
-.pop-meta{font-family:var(--mono);font-size:9px;color:var(--t3);margin-bottom:10px}
-.pop-desc{font-size:10px;color:var(--t2);line-height:1.6;border-top:1px solid var(--b1);padding-top:10px;margin-bottom:10px}
-.pop-src{font-family:var(--mono);font-size:9px;color:var(--red);text-decoration:none;border-bottom:1px solid rgba(185,28,28,.3)}
+.leaflet-popup-content{margin:0;width:290px!important;}
+.leaflet-popup-tip{background:var(--line2);}
+.leaflet-container a.leaflet-popup-close-button{color:var(--t3);top:8px;right:8px;font-size:14px;}
+.pop{padding:14px;}
+.pop-type{font-size:8px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;margin-bottom:4px;}
+.pop-type.h{color:var(--red);}
+.pop-type.m{color:var(--amber);}
+.pop-loc{font-family:var(--sans);font-size:14px;font-weight:500;color:var(--t0);margin-bottom:2px;}
+.pop-meta{font-size:8px;color:var(--t3);margin-bottom:10px;letter-spacing:.04em;}
+.pop-desc{font-size:9px;color:var(--t2);line-height:1.6;border-top:1px solid var(--line);padding-top:10px;margin-bottom:10px;}
+.pop-src{font-size:8px;color:var(--accent);text-decoration:none;letter-spacing:.04em;}
+.pop-src:hover{color:var(--a2);}
 
-/* ── MODALS (shared) ── */
-.modal{
-  display:none;position:fixed;inset:0;z-index:600;
-  background:rgba(0,0,0,.7);
-  align-items:center;justify-content:center;
+/* ── ADMIN OVERLAY (Ctrl+Shift+A) ── */
+#adm{
+  display:none;position:fixed;inset:38px 288px 0 232px;z-index:600;
+  background:rgba(6,7,9,.98);border:1px solid var(--line2);
+  padding:22px;overflow-y:auto;backdrop-filter:blur(16px);
 }
-.modal.open{display:flex}
-.mbox{
-  background:var(--surf);border:1px solid var(--b2);border-radius:4px;
-  padding:28px;min-width:340px;max-width:520px;width:100%;
+#adm.open{display:block;}
+.adm-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--line);}
+.adm-title{font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--t2);}
+.adm-close{font-size:9px;color:var(--t3);cursor:pointer;letter-spacing:.06em;}
+.adm-close:hover{color:var(--t1);}
+.adm-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;}
+.adm-box h3{font-size:8px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);margin-bottom:7px;}
+.adm-out{
+  background:var(--s0);border:1px solid var(--line);
+  padding:9px;font-family:var(--mono);font-size:9px;color:var(--t2);
+  white-space:pre-wrap;min-height:44px;max-height:150px;
+  overflow-y:auto;line-height:1.7;
 }
-.mbox h2{font-size:13px;font-weight:600;letter-spacing:.06em;margin-bottom:20px;color:var(--t1)}
-.mbox input,.mbox textarea,.mbox select{
-  width:100%;background:var(--bg);border:1px solid var(--b2);color:var(--t1);
-  padding:7px 10px;font-family:var(--sans);font-size:12px;
-  outline:none;border-radius:3px;margin-bottom:10px;
+.adm-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.abtn{
+  padding:6px 14px;background:transparent;border:1px solid var(--line2);
+  color:var(--t2);font-family:var(--mono);font-size:9px;
+  cursor:pointer;letter-spacing:.06em;transition:all .15s;
 }
-.mbox textarea{min-height:80px;resize:vertical;font-size:11px;line-height:1.5}
-.mbox label{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:3px}
-.mbox .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.mbox .row2 > div{display:flex;flex-direction:column}
-.mbtn-row{display:flex;gap:8px;margin-top:4px;justify-content:flex-end}
-.mbtn{
-  padding:7px 16px;background:transparent;border:1px solid var(--b2);
-  color:var(--t2);font-family:var(--sans);font-size:11px;font-weight:500;
-  cursor:pointer;border-radius:3px;transition:all .15s;
-}
-.mbtn:hover{background:var(--surf2);border-color:var(--t3);color:var(--t1)}
-.mbtn.primary{background:var(--surf2);border-color:var(--t2);color:var(--t1)}
-.mbtn.primary:hover{border-color:var(--t1)}
-.mbtn.danger:hover{border-color:var(--red);color:var(--red2)}
-.merr{font-family:var(--mono);font-size:9px;color:var(--red2);margin-top:-6px;margin-bottom:8px}
-
-/* ── ADMIN PANEL ── */
-#admin{
-  display:none;position:fixed;inset:44px 300px 0 240px;z-index:500;
-  background:rgba(10,12,15,.97);border:1px solid var(--b2);
-  padding:24px;overflow-y:auto;
-}
-#admin.open{display:block}
-.adm-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--b1)}
-.adm-title{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--t2)}
-.adm-close{font-size:10px;color:var(--t3);cursor:pointer;font-family:var(--mono)}
-.adm-close:hover{color:var(--t1)}
-.adm-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}
-.adm-box h3{font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--t3);margin-bottom:7px}
-.adm-out{background:var(--bg);border:1px solid var(--b1);border-radius:3px;padding:9px;font-family:var(--mono);font-size:9px;color:var(--t2);white-space:pre-wrap;min-height:44px;max-height:160px;overflow-y:auto;line-height:1.7}
-.adm-actions{display:flex;gap:8px;flex-wrap:wrap}
-.adm-btn{padding:6px 14px;background:transparent;border:1px solid var(--b2);color:var(--t2);font-family:var(--sans);font-size:11px;font-weight:500;cursor:pointer;border-radius:3px;transition:all .15s}
-.adm-btn:hover{background:var(--surf2);border-color:var(--t3);color:var(--t1)}
-.adm-btn.d:hover{border-color:var(--red);color:var(--red2)}
-.adm-note{font-size:9px;color:var(--t3);margin-top:12px;font-family:var(--mono)}
-
-/* ── URL CLASSIFY RESULT ── */
-#classify-result{background:var(--bg);border:1px solid var(--b2);border-radius:3px;padding:10px;font-family:var(--mono);font-size:9px;color:var(--t2);white-space:pre-wrap;max-height:120px;overflow-y:auto;margin-bottom:10px;display:none}
+.abtn:hover{background:var(--s2);border-color:var(--line3);color:var(--t1);}
+.abtn.d:hover{border-color:var(--red);color:var(--red);}
+.adm-note{font-size:8px;color:var(--t4);margin-top:12px;letter-spacing:.06em;}
 </style>
 </head>
 <body>
 
 <div id="map"></div>
 
+<!-- corner labels -->
+<div class="map-corner" id="mc-tl">PROJ: EPSG:3857 · WGS84</div>
+<div class="map-corner" id="mc-br">TILES: CARTO · DARK MATTER</div>
+<div class="map-corner" id="mc-coord" id="mc-coord">LAT — · LON —</div>
+
 <!-- TOPBAR -->
-<div id="topbar">
-  <div class="tb-brand">
-    <div class="tb-wm">LEX EUROPE</div>
-    <div class="tb-sub">Gewalttätiger Linksextremismus · DACH-Region</div>
+<div id="bar">
+  <div class="bar-id">LEX EUROPE</div>
+  <div class="bar-div"></div>
+  <div class="bar-sys">THREAT INTELLIGENCE · DACH-REGION</div>
+  <div class="bar-tags">
+    <span class="tag live">● LIVE</span>
+    <span class="tag">OSINT</span>
+    <span class="tag">LINKSEXTREMISMUS</span>
   </div>
-  <div class="tb-live"><div class="ldot"></div>AKTIV</div>
-  <div class="tb-met">
-    <div class="met"><span class="met-v" id="tb-total">—</span><span class="met-l">Einträge</span></div>
-    <div class="tb-dv"></div>
-    <div class="met"><span class="met-v" id="tb-geo" style="color:var(--t3)">—</span><span class="met-l">Geocodiert</span></div>
-    <div class="tb-dv"></div>
-    <div id="tb-time">—</div>
+  <div class="bar-right">
+    <div class="bar-metric">
+      <span class="bm-val" id="bm-total">—</span>
+      <span class="bm-lbl">Einträge</span>
+    </div>
+    <div class="bar-metric">
+      <span class="bm-val" id="bm-geo" style="color:var(--t3)">—</span>
+      <span class="bm-lbl">Geocodiert</span>
+    </div>
+    <div id="bar-clock">—</div>
   </div>
 </div>
 
-<!-- LEFT PANEL -->
+<!-- LEFT -->
 <div id="left">
-  <div class="ps">
-    <div class="sh">Filter</div>
-    <div class="fr">
-      <label class="fl">Land</label>
-      <select id="f-co" onchange="applyFilters()">
+  <div class="lsec">
+    <div class="sec-lbl">Filterparameter</div>
+    <div class="frow">
+      <label class="flbl">Land</label>
+      <select id="fc" onchange="applyFilters()">
         <option value="">Alle Länder</option>
         <option value="DE">Deutschland</option>
         <option value="AT">Österreich</option>
@@ -216,13 +280,12 @@ select{
         <option value="Andere">Andere</option>
       </select>
     </div>
-    <div class="fr">
-      <label class="fl">Kategorie</label>
-      <select id="f-ca" onchange="applyFilters()">
-        <option value="">Alle Kategorien</option>
+    <div class="frow">
+      <label class="flbl">Vorfallstyp</label>
+      <select id="fk" onchange="applyFilters()">
+        <option value="">Alle Typen</option>
         <option value="Brandanschlag">Brandanschlag</option>
         <option value="Sabotage">Sabotage</option>
-        <option value="Infrastrukturangriff">Infrastrukturangriff</option>
         <option value="Gewalt">Gewalt</option>
         <option value="Militante Aktion">Militante Aktion</option>
         <option value="Aufruf zu Gewalt">Aufruf zu Gewalt</option>
@@ -230,390 +293,178 @@ select{
         <option value="Demo/Kundgebung">Demo / Kundgebung</option>
         <option value="Besetzung">Besetzung</option>
         <option value="Repression">Repression</option>
-        <option value="Verhaftung">Verhaftung</option>
         <option value="Schmiererei">Schmiererei</option>
       </select>
     </div>
   </div>
-  <div class="ps">
-    <div class="sh">Länderverteilung</div>
-    <div id="dist-co"></div>
+  <div class="lsec">
+    <div class="sec-lbl">Länderverteilung</div>
+    <div id="dist-c"></div>
   </div>
-  <div class="ps grow">
-    <div class="sh">Kategorien</div>
-    <div id="dist-ca"></div>
+  <div class="lsec grow">
+    <div class="sec-lbl">Vorfallsklassifikation</div>
+    <div id="dist-k"></div>
   </div>
 </div>
 
-<!-- RIGHT PANEL -->
+<!-- RIGHT -->
 <div id="right">
-  <div id="rh">
-    <span class="rt">Ereignisprotokoll</span>
-    <span id="feed-cnt">—</span>
+  <div id="rhd">
+    <span class="rtitle">Ereignisprotokoll</span>
+    <span id="fcnt">—</span>
   </div>
   <div id="feed">
-    <div id="feed-empty" style="display:flex">
-      <p>Keine Ereignisse vorhanden.<br>Crawler läuft automatisch.</p>
+    <div id="fempty" style="display:flex">
+      <p>KEINE DATEN VORHANDEN<br>CRAWLER AKTIV</p>
     </div>
   </div>
 </div>
 
-<!-- LOGIN MODAL -->
-<div class="modal" id="modal-login">
-  <div class="mbox" style="max-width:320px">
-    <h2>Systemzugang</h2>
-    <label>Passwort</label>
-    <input type="password" id="login-pw" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
-    <div class="merr" id="login-err" style="display:none">Falsches Passwort</div>
-    <div class="mbtn-row">
-      <button class="mbtn" onclick="modalClose('modal-login')">Abbrechen</button>
-      <button class="mbtn primary" onclick="doLogin()">Anmelden</button>
-    </div>
-  </div>
-</div>
-
-<!-- MANUAL INCIDENT MODAL -->
-<div class="modal" id="modal-incident">
-  <div class="mbox">
-    <h2>Ereignis manuell erfassen</h2>
-
-    <!-- URL auto-classify -->
-    <label>URL (optional — automatisch klassifizieren)</label>
-    <div style="display:flex;gap:8px;margin-bottom:10px">
-      <input type="url" id="mi-url" placeholder="https://..." style="margin-bottom:0;flex:1">
-      <button class="mbtn" onclick="doClassifyUrl()" style="flex-shrink:0;white-space:nowrap">Analysieren</button>
-    </div>
-    <div id="classify-result"></div>
-
-    <div class="row2">
-      <div>
-        <label>Datum</label>
-        <input type="date" id="mi-date">
-      </div>
-      <div>
-        <label>Land</label>
-        <select id="mi-country">
-          <option value="DE">Deutschland</option>
-          <option value="AT">Österreich</option>
-          <option value="CH">Schweiz</option>
-          <option value="FR">Frankreich</option>
-          <option value="IT">Italien</option>
-          <option value="GR">Griechenland</option>
-          <option value="Andere">Andere</option>
-        </select>
-      </div>
-    </div>
-    <label>Ort / Stadt</label>
-    <input type="text" id="mi-location" placeholder="z.B. Berlin-Kreuzberg">
-    <label>Kategorie</label>
-    <select id="mi-cat">
-      <option value="Brandanschlag">Brandanschlag</option>
-      <option value="Sabotage">Sabotage</option>
-      <option value="Infrastrukturangriff">Infrastrukturangriff</option>
-      <option value="Gewalt">Gewalt</option>
-      <option value="Militante Aktion">Militante Aktion</option>
-      <option value="Aufruf zu Gewalt">Aufruf zu Gewalt</option>
-      <option value="Sachbeschädigung">Sachbeschädigung</option>
-      <option value="Demo/Kundgebung">Demo / Kundgebung</option>
-      <option value="Besetzung">Besetzung</option>
-      <option value="Repression">Repression</option>
-      <option value="Verhaftung">Verhaftung</option>
-      <option value="Schmiererei">Schmiererei</option>
-      <option value="Sonstiges">Sonstiges</option>
-    </select>
-    <label>Beschreibung</label>
-    <textarea id="mi-desc" placeholder="Kurzbeschreibung des Ereignisses..."></textarea>
-    <div class="merr" id="mi-err" style="display:none">Fehler beim Speichern</div>
-    <div class="mbtn-row">
-      <button class="mbtn" onclick="modalClose('modal-incident')">Abbrechen</button>
-      <button class="mbtn primary" onclick="doSaveIncident()">Speichern</button>
-    </div>
-  </div>
-</div>
-
-<!-- ADMIN PANEL -->
-<div id="admin">
+<!-- ADMIN (Ctrl+Shift+A) -->
+<div id="adm">
   <div class="adm-hd">
     <span class="adm-title">Systemverwaltung</span>
-    <span class="adm-close" onclick="adminClose()">Schliessen ×</span>
+    <span class="adm-close" onclick="admClose()">SCHLIESSEN ×</span>
   </div>
   <div class="adm-grid">
-    <div class="adm-box"><h3>Crawler-Status</h3><div class="adm-out" id="adm-status">—</div></div>
-    <div class="adm-box"><h3>Grok API</h3><div class="adm-out" id="adm-grok">—</div></div>
-    <div class="adm-box"><h3>Top-Quellen</h3><div class="adm-out" id="adm-src">—</div></div>
-    <div class="adm-box"><h3>Letzte Einträge</h3><div class="adm-out" id="adm-rec">—</div></div>
+    <div class="adm-box"><h3>Crawler-Status</h3><div class="adm-out" id="ao-status">—</div></div>
+    <div class="adm-box"><h3>Grok API</h3><div class="adm-out" id="ao-grok">—</div></div>
+    <div class="adm-box"><h3>Quellen (Top)</h3><div class="adm-out" id="ao-src">—</div></div>
+    <div class="adm-box"><h3>Letzte Einträge</h3><div class="adm-out" id="ao-rec">—</div></div>
   </div>
   <div class="adm-actions">
-    <button class="adm-btn" onclick="adminCrawl()">Crawl ausführen</button>
-    <button class="adm-btn" onclick="modalOpen('modal-incident')">Ereignis manuell erfassen</button>
-    <button class="adm-btn" onclick="adminGrokTest()">Grok testen</button>
-    <button class="adm-btn d" onclick="adminClear()">Datenbank zurücksetzen</button>
-    <button class="adm-btn d" onclick="adminLogout()">Abmelden</button>
+    <button class="abtn" onclick="admCrawl()">Crawl starten</button>
+    <button class="abtn" onclick="admStop()">Crawl stoppen</button>
+    <button class="abtn" onclick="admGrok()">Grok testen</button>
+    <button class="abtn" onclick="window.open('/admin','_blank')">Admin-Panel öffnen</button>
+    <button class="abtn d" onclick="admClear()">DB zurücksetzen</button>
   </div>
-  <div class="adm-note">Ctrl + Shift + A · Admin-Session läuft 8h</div>
+  <div class="adm-note">CTRL + SHIFT + A · Sitzung lokal · Keine Speicherung</div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-// ── STATE ──
-const HIGH = new Set(["Brandanschlag","Sabotage","Gewalt","Militante Aktion","Aufruf zu Gewalt","Infrastrukturangriff"]);
+const HIGH = new Set(["Brandanschlag","Sabotage","Gewalt","Militante Aktion","Aufruf zu Gewalt"]);
 const MED  = new Set(["Sachbeschädigung","Repression","Verhaftung","Besetzung","Schmiererei"]);
-const sev  = c => HIGH.has(c) ? "h" : MED.has(c) ? "m" : "l";
+const sev  = c => HIGH.has(c)?"h":MED.has(c)?"m":"l";
 
-let allData = [], map, mg;
-let adminToken = sessionStorage.getItem("lex_token") || null;
+let data=[], map, mg;
 
-// ── MAP ──
-map = L.map("map", { center:[49.5,11], zoom:5, zoomControl:false, attributionControl:false });
-L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png", { maxZoom:19 }).addTo(map);
-L.control.zoom({ position:"bottomright" }).addTo(map);
+// MAP
+map = L.map("map",{center:[49.8,11],zoom:5,zoomControl:false,attributionControl:false});
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",{maxZoom:19}).addTo(map);
+L.control.zoom({position:"bottomright"}).addTo(map);
 mg = L.layerGroup().addTo(map);
 
+// live coordinates in corner
+map.on("mousemove", e => {
+  document.getElementById("mc-coord").textContent =
+    `LAT ${e.latlng.lat.toFixed(4)} · LON ${e.latlng.lng.toFixed(4)}`;
+});
+
 function mkIcon(s) {
-  const c = s==="h" ? "#b91c1c" : s==="m" ? "#d97706" : "#4b5563";
+  const cols={h:"#ef4444",m:"#f59e0b",l:"#2e3548"};
+  const glow={h:"rgba(239,68,68,.5)",m:"rgba(245,158,11,.4)",l:"none"};
+  const c=cols[s], g=glow[s];
   return L.divIcon({
     className:"",
-    html:`<div style="width:8px;height:8px;border-radius:50%;background:${c};border:1px solid rgba(255,255,255,.15)"></div>`,
-    iconSize:[8,8], iconAnchor:[4,4]
+    html:`<div style="width:8px;height:8px;border-radius:50%;background:${c};box-shadow:0 0 6px ${g};border:1px solid rgba(255,255,255,.1)"></div>`,
+    iconSize:[8,8],iconAnchor:[4,4]
   });
 }
 
-// ── RENDER ──
 function render(list) {
   mg.clearLayers();
-  document.querySelectorAll(".inc").forEach(n=>n.remove());
-  document.getElementById("feed-cnt").textContent = list.length + " Einträge";
-  const empty = document.getElementById("feed-empty");
-  if (!list.length) { empty.style.display="flex"; return; }
-  empty.style.display = "none";
-  const feed = document.getElementById("feed");
-
-  list.forEach(inc => {
-    const s = sev(inc.category);
-    if (inc.lat && inc.lon && !isNaN(+inc.lat) && !isNaN(+inc.lon)) {
-      const pop = `<div class="pop">
-        <div class="pop-tp ${s}">${inc.category}</div>
-        <div class="pop-loc">${inc.location||"Unbekannt"}, ${inc.country||"—"}</div>
-        <div class="pop-meta">${inc.date||"—"}${inc.manual?" · MANUELL":""}</div>
+  document.querySelectorAll(".icard").forEach(n=>n.remove());
+  const empty=document.getElementById("fempty");
+  document.getElementById("fcnt").textContent=list.length+" Einträge";
+  if(!list.length){empty.style.display="flex";return;}
+  empty.style.display="none";
+  const feed=document.getElementById("feed");
+  list.forEach(inc=>{
+    const s=sev(inc.category);
+    if(inc.lat&&inc.lon&&!isNaN(+inc.lat)&&!isNaN(+inc.lon)){
+      const pop=`<div class="pop">
+        <div class="pop-type ${s}">${inc.category}</div>
+        <div class="pop-loc">${inc.location||"—"}, ${inc.country||"—"}</div>
+        <div class="pop-meta">${inc.date||"—"} · ${inc.source||""}</div>
         <div class="pop-desc">${(inc.description||"").substring(0,300)}</div>
-        ${inc.url && !inc.url.startsWith("manual://") ? `<a class="pop-src" href="${inc.url}" target="_blank">Quelle →</a>` : ""}
+        ${inc.url?`<a class="pop-src" href="${inc.url}" target="_blank">QUELLE AUFRUFEN →</a>`:""}
       </div>`;
-      L.marker([+inc.lat,+inc.lon],{icon:mkIcon(s)}).bindPopup(pop,{maxWidth:300}).addTo(mg);
+      L.marker([+inc.lat,+inc.lon],{icon:mkIcon(s)}).bindPopup(pop,{maxWidth:310}).addTo(mg);
     }
-    const row = document.createElement("div");
-    row.className = `inc ${s}`;
-    row.innerHTML = `
-      <div class="ih">
-        <span class="it ${s}">${inc.category}</span>
-        <span class="id">${inc.date||"—"}</span>
+    const card=document.createElement("div");
+    card.className=`icard ${s}`;
+    card.innerHTML=`
+      <div class="ihd">
+        <span class="itype ${s}">${inc.category}</span>
+        <span class="idate">${inc.date||"—"}</span>
       </div>
-      <div class="il">${inc.location||"Unbekannt"}, ${inc.country||"—"}${inc.manual?'<span class="man">MANUELL</span>':''}</div>
-      <div class="ix">${inc.description||"—"}</div>`;
-    row.onclick = () => { if(inc.lat&&inc.lon) map.setView([+inc.lat,+inc.lon],11,{animate:true}); };
-    feed.appendChild(row);
+      <div class="iloc">${inc.location||"—"}, ${inc.country||"—"}</div>
+      <div class="itxt">${inc.description||"—"}</div>`;
+    card.onclick=()=>{if(inc.lat&&inc.lon)map.setView([+inc.lat,+inc.lon],11,{animate:true});};
+    feed.appendChild(card);
   });
 }
 
-function applyFilters() {
-  const co = document.getElementById("f-co").value;
-  const ca = document.getElementById("f-ca").value;
-  render(allData.filter(i => (!co||i.country===co) && (!ca||i.category===ca)));
+function applyFilters(){
+  const co=document.getElementById("fc").value;
+  const ca=document.getElementById("fk").value;
+  render(data.filter(i=>(!co||i.country===co)&&(!ca||i.category===ca)));
 }
 
-// ── DATA LOADING ──
-async function loadStats() {
-  try {
-    const s = await fetch("/api/stats").then(r=>r.json());
-    document.getElementById("tb-total").textContent = s.total;
-    document.getElementById("tb-geo").textContent   = s.geocoded;
-    const mx = s.by_country[0]?.n || 1;
-    document.getElementById("dist-co").innerHTML = s.by_country.slice(0,7).map(c=>`
-      <div class="bi">
-        <div class="bh"><span class="bn">${c.country||"?"}</span><span class="bc">${c.n}</span></div>
-        <div class="bt"><div class="bf" style="width:${Math.round(c.n/mx*100)}%"></div></div>
+async function loadStats(){
+  try{
+    const s=await fetch("/api/stats").then(r=>r.json());
+    document.getElementById("bm-total").textContent=s.total;
+    document.getElementById("bm-geo").textContent=s.geocoded;
+    const mx=s.by_country[0]?.n||1;
+    document.getElementById("dist-c").innerHTML=s.by_country.slice(0,7).map(c=>`
+      <div class="bitem">
+        <div class="bhd"><span class="bnm">${c.country||"?"}</span><span class="bn">${c.n}</span></div>
+        <div class="btrack"><div class="bfill" style="width:${Math.round(c.n/mx*100)}%"></div></div>
       </div>`).join("");
-    document.getElementById("dist-ca").innerHTML = s.by_cat.slice(0,14).map(c=>`
-      <div class="cr">
+    document.getElementById("dist-k").innerHTML=s.by_cat.slice(0,12).map(c=>`
+      <div class="crow">
         <div class="csw ${sev(c.category)}"></div>
-        <span class="cn">${c.category}</span>
-        <span class="cc">${c.n}</span>
+        <span class="cnm">${c.category}</span>
+        <span class="cn">${c.n}</span>
       </div>`).join("");
-    // admin
-    const lc = s.last_crawl
-      ? new Date(s.last_crawl).toLocaleString("de-CH",{timeZone:"Europe/Zurich",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"})
-      : "—";
-    document.getElementById("adm-status").textContent =
-      `Letzter Crawl:  ${lc}\nLäuft:          ${s.crawl_running?"Ja":"Nein"}\nTotal:          ${s.total}\nManuell:        ${s.manual||0}`;
-    document.getElementById("adm-src").textContent =
-      (s.by_source||[]).slice(0,15).map(c=>`${(c.source||"").substring(0,24).padEnd(24)} ${c.n}`).join("\n");
-    document.getElementById("adm-rec").textContent =
-      allData.slice(0,5).map(i=>`${i.date}|${i.category}\n${i.location},${i.country}\n${(i.description||"").substring(0,60)}`).join("\n——\n");
-  } catch(e) { console.error(e); }
+    const lc=s.last_crawl?new Date(s.last_crawl).toLocaleString("de-CH",{timeZone:"Europe/Zurich",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}):"—";
+    document.getElementById("ao-status").textContent=
+      `Letzter Crawl:  ${lc}\nLäuft:          ${s.crawl_running?"JA":"NEIN"}`;
+    document.getElementById("ao-src").textContent=
+      (s.by_source||[]).map(c=>`${(c.source||"").substring(0,22).padEnd(22)} ${c.n}`).join("\n");
+    document.getElementById("ao-rec").textContent=
+      data.slice(0,5).map(i=>`${i.date}  ${i.category}\n${i.location}, ${i.country}\n`).join("—\n");
+  }catch(e){console.error(e);}
 }
 
-async function loadIncidents() {
-  try {
-    allData = await fetch("/api/incidents").then(r=>r.json());
+async function loadData(){
+  try{
+    data=await fetch("/api/incidents").then(r=>r.json());
     applyFilters();
-  } catch(e) { console.error(e); }
+  }catch(e){console.error(e);}
 }
 
-// ── AUTH ──
-function authHeaders() {
-  return { "Authorization": `Bearer ${adminToken}`, "Content-Type": "application/json" };
-}
-
-async function doLogin() {
-  const pw = document.getElementById("login-pw").value;
-  const err = document.getElementById("login-err");
-  err.style.display = "none";
-  try {
-    const r = await fetch("/api/admin/login", {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({password: pw}),
-    });
-    if (!r.ok) { err.style.display="block"; return; }
-    const d = await r.json();
-    adminToken = d.token;
-    sessionStorage.setItem("lex_token", adminToken);
-    document.getElementById("login-pw").value = "";
-    modalClose("modal-login");
-    adminOpen();
-  } catch(e) { err.style.display="block"; }
-}
-
-async function adminLogout() {
-  if (adminToken) {
-    await fetch("/api/admin/logout", {method:"POST", headers: authHeaders()}).catch(()=>{});
-    adminToken = null;
-    sessionStorage.removeItem("lex_token");
-  }
-  adminClose();
-}
-
-// ── ADMIN ACTIONS ──
-function adminOpen() {
-  if (!adminToken) { modalOpen("modal-login"); return; }
-  document.getElementById("admin").classList.add("open");
-  loadStats();
-}
-function adminClose() { document.getElementById("admin").classList.remove("open"); }
-
-document.addEventListener("keydown", e => {
-  if (e.ctrlKey && e.shiftKey && e.key === "A") {
-    e.preventDefault();
-    document.getElementById("admin").classList.contains("open") ? adminClose() : adminOpen();
-  }
+// ADMIN
+function admOpen(){document.getElementById("adm").classList.add("open");loadStats();}
+function admClose(){document.getElementById("adm").classList.remove("open");}
+document.addEventListener("keydown",e=>{
+  if(e.ctrlKey&&e.shiftKey&&e.key==="A"){e.preventDefault();document.getElementById("adm").classList.contains("open")?admClose():admOpen();}
 });
+async function admCrawl(){await fetch("/admin/api/crawl",{method:"POST"});document.getElementById("ao-status").textContent="Crawler gestartet...";setTimeout(loadStats,3000);}
+async function admStop(){const r=await fetch("/admin/api/stop-crawl",{method:"POST"});const d=await r.json();document.getElementById("ao-status").textContent=d.status;}
+async function admGrok(){document.getElementById("ao-grok").textContent="Teste...";try{const d=await fetch("/admin/api/grok-test",{method:"POST"}).then(r=>r.json());document.getElementById("ao-grok").textContent=JSON.stringify(d,null,2);}catch(e){document.getElementById("ao-grok").textContent="Fehler: "+e.message;}}
+async function admClear(){if(!confirm("Alle Daten löschen?"))return;await fetch("/admin/api/clear",{method:"POST"});data=[];render([]);loadStats();}
 
-async function adminCrawl() {
-  if (!adminToken) return;
-  const r = await fetch("/api/admin/crawl", {method:"POST", headers: authHeaders()});
-  if (r.status===401) { adminLogout(); return; }
-  document.getElementById("adm-status").textContent = "Crawl gestartet...";
-  setTimeout(loadStats, 3000);
-}
-
-async function adminGrokTest() {
-  if (!adminToken) return;
-  document.getElementById("adm-grok").textContent = "Läuft...";
-  try {
-    const r = await fetch("/api/admin/grok-test", {method:"POST", headers: authHeaders()});
-    const d = await r.json();
-    document.getElementById("adm-grok").textContent = JSON.stringify(d, null, 2);
-  } catch(e) { document.getElementById("adm-grok").textContent = "Fehler: "+e.message; }
-}
-
-async function adminClear() {
-  if (!adminToken) return;
-  if (!confirm("Alle Daten unwiderruflich löschen?")) return;
-  await fetch("/api/admin/clear", {method:"POST", headers: authHeaders()});
-  allData = []; render([]); loadStats();
-}
-
-// ── MODALS ──
-function modalOpen(id) { document.getElementById(id).classList.add("open"); }
-function modalClose(id) { document.getElementById(id).classList.remove("open"); }
-
-// Close modal on backdrop click
-document.querySelectorAll(".modal").forEach(m => {
-  m.addEventListener("click", e => { if (e.target === m) modalClose(m.id); });
-});
-
-// ── MANUAL INCIDENT ──
-async function doClassifyUrl() {
-  const url = document.getElementById("mi-url").value.trim();
-  if (!url) return;
-  const res = document.getElementById("classify-result");
-  res.style.display = "block";
-  res.textContent = "Analysiere...";
-  try {
-    const r = await fetch("/api/admin/classify-url", {
-      method: "POST",
-      headers: authHeaders(),
-      body: JSON.stringify({url}),
-    });
-    if (r.status === 401) { adminLogout(); return; }
-    const d = await r.json();
-    res.textContent = JSON.stringify(d.ai, null, 2) + "\n\nVorschau:\n" + d.preview.substring(0,200);
-    // Pre-fill form
-    if (d.ai) {
-      document.getElementById("mi-location").value = d.ai.ort || "";
-      document.getElementById("mi-country").value  = d.ai.land || "DE";
-      document.getElementById("mi-cat").value       = d.ai.kategorie || "Sonstiges";
-      document.getElementById("mi-desc").value      = d.preview.substring(0,400);
-    }
-  } catch(e) { res.textContent = "Fehler: " + e.message; }
-}
-
-async function doSaveIncident() {
-  if (!adminToken) return;
-  const err = document.getElementById("mi-err");
-  err.style.display = "none";
-  const body = {
-    date:        document.getElementById("mi-date").value,
-    location:    document.getElementById("mi-location").value.trim(),
-    country:     document.getElementById("mi-country").value,
-    category:    document.getElementById("mi-cat").value,
-    description: document.getElementById("mi-desc").value.trim(),
-    url:         document.getElementById("mi-url").value.trim(),
-  };
-  if (!body.date || !body.location || !body.description) {
-    err.textContent = "Datum, Ort und Beschreibung sind Pflichtfelder";
-    err.style.display = "block";
-    return;
-  }
-  const r = await fetch("/api/admin/incident", {
-    method: "POST", headers: authHeaders(), body: JSON.stringify(body),
-  });
-  if (r.status === 401) { adminLogout(); return; }
-  if (r.ok) {
-    modalClose("modal-incident");
-    loadIncidents(); loadStats();
-    // Reset form
-    ["mi-url","mi-location","mi-desc"].forEach(id => document.getElementById(id).value = "");
-    document.getElementById("classify-result").style.display = "none";
-  } else {
-    err.textContent = "Fehler (möglicherweise bereits vorhanden)";
-    err.style.display = "block";
-  }
-}
-
-// Set today's date as default
-document.getElementById("mi-date").value = new Date().toISOString().slice(0,10);
-
-// ── CLOCK ──
-function tick() {
-  document.getElementById("tb-time").textContent =
+function tick(){
+  document.getElementById("bar-clock").textContent=
     new Date().toLocaleTimeString("de-CH",{timeZone:"Europe/Zurich",hour:"2-digit",minute:"2-digit",second:"2-digit"});
 }
-
-loadStats();
-loadIncidents();
-tick();
-setInterval(tick, 1000);
-setInterval(() => { loadStats(); loadIncidents(); }, 5 * 60 * 1000);
+loadStats();loadData();tick();
+setInterval(tick,1000);
+setInterval(()=>{loadStats();loadData();},5*60*1000);
 </script>
 </body>
 </html>
