@@ -8,937 +8,104 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
 :root {
-  --bg:       #0a0c0f;
-  --surface:  #111318;
-  --surface2: #161a20;
-  --border:   #1e2229;
-  --border2:  #252b34;
-  --accent:   #b91c1c;
-  --accent2:  #dc2626;
-  --warn:     #d97706;
-  --ok:       #16a34a;
-  --t1:       #f1f3f5;
-  --t2:       #9ba3ae;
-  --t3:       #4b5563;
-  --mono:     'JetBrains Mono', monospace;
-  --sans:     'Inter', sans-serif;
+  --bg: #0a0c0f; --surface: #111318; --surface2: #161a20; --border: #1e2229;
+  --accent: #b91c1c; --accent2: #dc2626; --warn: #d97706; --ok: #16a34a;
+  --t1: #f1f3f5; --t2: #9ba3ae; --t3: #4b5563;
 }
-
-html, body {
-  height: 100%;
-  overflow: hidden;
-  background: var(--bg);
-  color: var(--t1);
-  font-family: var(--sans);
-  font-size: 12px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-}
-
-/* ── MAP ── */
-#map {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-}
-
-/* ── TOPBAR ── */
-#topbar {
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  height: 44px;
-  z-index: 200;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  padding: 0 20px;
-}
-
-.tb-brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding-right: 20px;
-  border-right: 1px solid var(--border2);
-  margin-right: 20px;
-}
-
-.tb-wordmark {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  color: var(--t1);
-}
-
-.tb-sub {
-  font-family: var(--mono);
-  font-size: 9px;
-  color: var(--t3);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.tb-status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--mono);
-  font-size: 9px;
-  color: var(--t3);
-  letter-spacing: 0.05em;
-}
-
-.status-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--ok);
-}
-
-.tb-metrics {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 28px;
-}
-
-.metric {
-  text-align: right;
-}
-
-.metric-val {
-  font-family: var(--mono);
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--t1);
-  display: block;
-  line-height: 1;
-}
-
-.metric-lbl {
-  font-size: 9px;
-  color: var(--t3);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.tb-divider {
-  width: 1px;
-  height: 20px;
-  background: var(--border2);
-}
-
-#tb-time {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--t3);
-  letter-spacing: 0.04em;
-  min-width: 64px;
-  text-align: right;
-}
-
-/* ── LEFT PANEL ── */
-#left {
-  position: fixed;
-  top: 44px; left: 0; bottom: 0;
-  width: 240px;
-  z-index: 100;
-  background: var(--surface);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.panel-section {
-  padding: 16px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.section-title {
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--t3);
-  margin-bottom: 12px;
-}
-
-/* Filters */
-.filter-row {
-  margin-bottom: 10px;
-}
-
-.filter-row:last-child {
-  margin-bottom: 0;
-}
-
-.filter-label {
-  font-size: 9px;
-  font-weight: 500;
-  color: var(--t3);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin-bottom: 4px;
-  display: block;
-}
-
-select {
-  width: 100%;
-  background: var(--bg);
-  border: 1px solid var(--border2);
-  color: var(--t2);
-  padding: 5px 8px;
-  font-family: var(--sans);
-  font-size: 11px;
-  outline: none;
-  cursor: pointer;
-  appearance: none;
-  border-radius: 3px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%234b5563'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-  transition: border-color 0.15s;
-}
-
-select:hover { border-color: var(--border2); }
-select:focus { border-color: var(--t3); }
-
-/* Distribution bars */
-.dist-item {
-  margin-bottom: 10px;
-}
-
-.dist-item:last-child {
-  margin-bottom: 0;
-}
-
-.dist-header {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 4px;
-}
-
-.dist-name {
-  font-size: 11px;
-  color: var(--t2);
-}
-
-.dist-count {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--t3);
-}
-
-.dist-bar {
-  height: 2px;
-  background: var(--border2);
-  border-radius: 1px;
-  overflow: hidden;
-}
-
-.dist-fill {
-  height: 100%;
-  background: var(--t3);
-  border-radius: 1px;
-  transition: width 0.4s ease;
-}
-
-/* Category table */
-.cat-table {
-  width: 100%;
-}
-
-.cat-row {
-  display: flex;
-  align-items: center;
-  padding: 4px 0;
-  border-bottom: 1px solid var(--border);
-  gap: 8px;
-}
-
-.cat-row:last-child {
-  border-bottom: none;
-}
-
-.cat-swatch {
-  width: 3px;
-  height: 12px;
-  border-radius: 1px;
-  flex-shrink: 0;
-}
-
-.cat-swatch.high { background: var(--accent); }
-.cat-swatch.med  { background: var(--warn); }
-.cat-swatch.low  { background: var(--t3); }
-
-.cat-name {
-  font-size: 10px;
-  color: var(--t2);
-  flex: 1;
-}
-
-.cat-count {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--t3);
-}
-
-/* ── RIGHT PANEL ── */
-#right {
-  position: fixed;
-  top: 44px; right: 0; bottom: 0;
-  width: 300px;
-  z-index: 100;
-  background: var(--surface);
-  border-left: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-}
-
-#right-header {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-shrink: 0;
-}
-
-.right-title {
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--t3);
-}
-
-#feed-count {
-  font-family: var(--mono);
-  font-size: 9px;
-  color: var(--t3);
-}
-
-#feed {
-  flex: 1;
-  overflow-y: auto;
-}
-
-#feed::-webkit-scrollbar { width: 3px; }
-#feed::-webkit-scrollbar-thumb { background: var(--border2); }
-
-/* Incident rows */
-.incident {
-  padding: 11px 16px;
-  border-bottom: 1px solid var(--border);
-  cursor: pointer;
-  transition: background 0.1s;
-  border-left: 2px solid transparent;
-}
-
-.incident:hover { background: var(--surface2); }
-.incident.sev-high { border-left-color: var(--accent); }
-.incident.sev-med  { border-left-color: var(--warn); }
-.incident.sev-low  { border-left-color: var(--border2); }
-
-.inc-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.inc-type {
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.inc-type.high { color: var(--accent2); }
-.inc-type.med  { color: var(--warn); }
-.inc-type.low  { color: var(--t3); }
-
-.inc-date {
-  font-family: var(--mono);
-  font-size: 9px;
-  color: var(--t3);
-  flex-shrink: 0;
-}
-
-.inc-location {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--t1);
-  margin-bottom: 3px;
-}
-
-.inc-text {
-  font-size: 10px;
-  color: var(--t3);
-  line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-#feed-empty {
-  display: none;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  gap: 6px;
-}
-
-#feed-empty p {
-  font-size: 10px;
-  color: var(--t3);
-  text-align: center;
-}
-
-/* ── LEAFLET OVERRIDES ── */
-.leaflet-popup-content-wrapper {
-  background: var(--surface);
-  border: 1px solid var(--border2);
-  border-radius: 3px;
-  color: var(--t1);
-  font-family: var(--sans);
-  box-shadow: 0 4px 24px rgba(0,0,0,0.7);
-  padding: 0;
-}
-
-.leaflet-popup-content {
-  margin: 0;
-  width: 280px !important;
-}
-
-.leaflet-popup-tip { background: var(--border2); }
-.leaflet-container a.leaflet-popup-close-button {
-  color: var(--t3);
-  top: 8px;
-  right: 8px;
-  font-size: 16px;
-}
-
-.popup-inner {
-  padding: 14px 16px;
-}
-
-.popup-type {
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  margin-bottom: 4px;
-}
-
-.popup-type.high { color: var(--accent2); }
-.popup-type.med  { color: var(--warn); }
-
-.popup-location {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--t1);
-  margin-bottom: 2px;
-}
-
-.popup-meta {
-  font-family: var(--mono);
-  font-size: 9px;
-  color: var(--t3);
-  margin-bottom: 10px;
-}
-
-.popup-desc {
-  font-size: 10px;
-  color: var(--t2);
-  line-height: 1.6;
-  border-top: 1px solid var(--border);
-  padding-top: 10px;
-  margin-bottom: 10px;
-}
-
-.popup-source {
-  font-family: var(--mono);
-  font-size: 9px;
-  color: var(--accent);
-  text-decoration: none;
-  display: inline-block;
-  border-bottom: 1px solid rgba(185,28,28,0.3);
-  padding-bottom: 1px;
-}
-
-/* ── ADMIN (Ctrl+Shift+A) ── */
-#admin {
-  display: none;
-  position: fixed;
-  inset: 44px 300px 0 240px;
-  z-index: 300;
-  background: rgba(10,12,15,0.97);
-  border: 1px solid var(--border2);
-  padding: 24px;
-  overflow-y: auto;
-}
-
+html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--t1); font-family: 'Inter', sans-serif; }
+#map { position: fixed; inset: 0; z-index: 0; }
+#topbar { position: fixed; top: 0; left: 0; right: 0; height: 44px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; z-index: 200; }
+.tb-wordmark { font-size: 15px; font-weight: 600; color: var(--t1); }
+#admin { display: none; position: fixed; inset: 44px 20px 20px 20px; background: rgba(10,12,15,0.98); border: 1px solid #333; padding: 20px; z-index: 300; overflow-y: auto; }
 #admin.open { display: block; }
-
-.admin-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.admin-title {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--t2);
-}
-
-.admin-close {
-  font-size: 10px;
-  color: var(--t3);
-  cursor: pointer;
-  font-family: var(--mono);
-  letter-spacing: 0.04em;
-}
-
-.admin-close:hover { color: var(--t1); }
-
-.admin-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.admin-box h3 {
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--t3);
-  margin-bottom: 8px;
-}
-
-.admin-out {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 10px;
-  font-family: var(--mono);
-  font-size: 9px;
-  color: var(--t2);
-  white-space: pre-wrap;
-  min-height: 48px;
-  max-height: 160px;
-  overflow-y: auto;
-  line-height: 1.7;
-}
-
-.admin-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.admin-btn {
-  padding: 6px 14px;
-  background: transparent;
-  border: 1px solid var(--border2);
-  color: var(--t2);
-  font-family: var(--sans);
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-  border-radius: 3px;
-  transition: all 0.15s;
-}
-
-.admin-btn:hover {
-  background: var(--surface2);
-  border-color: var(--t3);
-  color: var(--t1);
-}
-
-.admin-btn.destructive:hover {
-  border-color: var(--accent);
-  color: var(--accent2);
-}
-
-.admin-note {
-  font-size: 9px;
-  color: var(--t3);
-  margin-top: 12px;
-  font-family: var(--mono);
-}
+.admin-btn { padding: 10px 16px; margin: 5px; background: #222; border: 1px solid #444; color: #ddd; cursor: pointer; }
+.admin-btn:hover { background: #333; }
+.log { background: #111; padding: 10px; margin: 10px 0; font-family: monospace; white-space: pre-wrap; max-height: 300px; overflow: auto; }
 </style>
 </head>
 <body>
 
 <div id="map"></div>
 
-<!-- TOPBAR -->
 <div id="topbar">
-  <div class="tb-brand">
-    <div>
-      <div class="tb-wordmark">LEX EUROPE</div>
-    </div>
-  </div>
-  <div class="tb-sub">Gewalttätiger Linksextremismus · DACH-Region</div>
-  <div class="tb-status" style="margin-left: 20px;">
-    <div class="status-dot"></div>
-    <span>Aktiv</span>
-  </div>
-  <div class="tb-metrics">
-    <div class="metric">
-      <span class="metric-val" id="tb-total">—</span>
-      <span class="metric-lbl">Einträge</span>
-    </div>
-    <div class="tb-divider"></div>
-    <div class="metric">
-      <span class="metric-val" id="tb-geo" style="color:var(--t3)">—</span>
-      <span class="metric-lbl">Geocodiert</span>
-    </div>
-    <div class="tb-divider"></div>
-    <div id="tb-time">—</div>
-  </div>
+  <div class="tb-wordmark">LEX EUROPE</div>
+  <div style="margin-left:auto; font-size:13px; color:#666;">DACH Threat Map</div>
 </div>
 
-<!-- LEFT PANEL -->
-<div id="left">
-  <div class="panel-section">
-    <div class="section-title">Filter</div>
-    <div class="filter-row">
-      <label class="filter-label">Land</label>
-      <select id="f-country" onchange="applyFilters()">
-        <option value="">Alle Länder</option>
-        <option value="DE">Deutschland</option>
-        <option value="AT">Österreich</option>
-        <option value="CH">Schweiz</option>
-        <option value="FR">Frankreich</option>
-        <option value="IT">Italien</option>
-        <option value="GR">Griechenland</option>
-        <option value="Andere">Andere</option>
-      </select>
-    </div>
-    <div class="filter-row">
-      <label class="filter-label">Kategorie</label>
-      <select id="f-cat" onchange="applyFilters()">
-        <option value="">Alle Kategorien</option>
-        <option value="Brandanschlag">Brandanschlag</option>
-        <option value="Sabotage">Sabotage</option>
-        <option value="Gewalt">Gewalt</option>
-        <option value="Militante Aktion">Militante Aktion</option>
-        <option value="Aufruf zu Gewalt">Aufruf zu Gewalt</option>
-        <option value="Sachbeschädigung">Sachbeschädigung</option>
-        <option value="Demo/Kundgebung">Demo / Kundgebung</option>
-        <option value="Besetzung">Besetzung</option>
-        <option value="Repression">Repression</option>
-        <option value="Schmiererei">Schmiererei</option>
-      </select>
-    </div>
-  </div>
-
-  <div class="panel-section">
-    <div class="section-title">Länderverteilung</div>
-    <div id="dist-countries"></div>
-  </div>
-
-  <div class="panel-section" style="flex:1; overflow-y:auto;">
-    <div class="section-title">Kategorien</div>
-    <div class="cat-table" id="dist-cats"></div>
-  </div>
-</div>
-
-<!-- RIGHT PANEL -->
-<div id="right">
-  <div id="right-header">
-    <span class="right-title">Ereignisprotokoll</span>
-    <span id="feed-count">—</span>
-  </div>
-  <div id="feed">
-    <div id="feed-empty" style="display:flex">
-      <p>Keine Ereignisse vorhanden.<br>Crawler läuft automatisch.</p>
-    </div>
-  </div>
-</div>
-
-<!-- ADMIN (Ctrl+Shift+A) -->
+<!-- ADMIN PANEL -->
 <div id="admin">
-  <div class="admin-header">
-    <span class="admin-title">Systemverwaltung</span>
-    <span class="admin-close" onclick="adminClose()">Schliessen ×</span>
-  </div>
-  <div class="admin-grid">
-    <div class="admin-box">
-      <h3>Crawler-Status</h3>
-      <div class="admin-out" id="adm-status">—</div>
-    </div>
-    <div class="admin-box">
-      <h3>Grok API</h3>
-      <div class="admin-out" id="adm-grok">—</div>
-    </div>
-    <div class="admin-box">
-      <h3>Quellen</h3>
-      <div class="admin-out" id="adm-sources">—</div>
-    </div>
-    <div class="admin-box">
-      <h3>Letzte Einträge</h3>
-      <div class="admin-out" id="adm-recent">—</div>
-    </div>
-  </div>
-  <div class="admin-actions">
-    <button class="admin-btn" onclick="adminCrawl()">Crawl ausführen</button>
-    <button class="admin-btn" onclick="adminHistorical()">Historisch neu laden (ab 2023)</button>
-    <button class="admin-btn" onclick="adminGrokTest()">Grok testen</button>
-    <button class="admin-btn destructive" onclick="adminClear()">Datenbank zurücksetzen</button>
-  </div>
-  <div class="admin-note">Tastenkürzel: Ctrl + Shift + A</div>
+  <h2>Systemverwaltung</h2>
+  <button class="admin-btn" onclick="adminCrawl()">🚀 Crawl ausführen</button>
+  <button class="admin-btn" onclick="adminHistorical()">🔄 Historisch neu laden</button>
+  <button class="admin-btn" onclick="adminGrokTest()">Grok testen</button>
+  <button class="admin-btn" onclick="adminClear()" style="color:#f66;">🗑️ Datenbank zurücksetzen</button>
+  <button class="admin-btn" onclick="adminClose()" style="float:right;">Schließen</button>
+
+  <div class="log" id="admin-log">Bereit...</div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-window.addEventListener('load', function() {
-const HIGH_CATS = new Set([
-  "Brandanschlag","Sabotage","Gewalt","Militante Aktion","Aufruf zu Gewalt"
-]);
-const MED_CATS = new Set([
-  "Sachbeschädigung","Repression","Verhaftung","Besetzung","Schmiererei"
-]);
+let map, allData = [];
 
-function severity(cat) {
-  if (HIGH_CATS.has(cat)) return "high";
-  if (MED_CATS.has(cat))  return "med";
-  return "low";
-}
-
-let allData = [];
-let map, markerGroup;
-
-// ── MAP ──
-map = L.map("map", {
-  center: [49.5, 11],
-  zoom: 5,
-  zoomControl: false,
-  attributionControl: false
-});
-
-L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-  maxZoom: 19
-}).addTo(map);
-
-L.control.zoom({ position: "bottomright" }).addTo(map);
-markerGroup = L.layerGroup().addTo(map);
-
-function makeIcon(sev) {
-  const colors = { high: "#b91c1c", med: "#d97706", low: "#4b5563" };
-  const c = colors[sev] || colors.low;
-  return L.divIcon({
-    className: "",
-    html: `<div style="width:8px;height:8px;border-radius:50%;
-           background:${c};border:1px solid rgba(255,255,255,0.15)"></div>`,
-    iconSize: [8, 8],
-    iconAnchor: [4, 4]
-  });
-}
-
-function render(list) {
-  markerGroup.clearLayers();
-  document.querySelectorAll(".incident").forEach(n => n.remove());
-
-  const empty = document.getElementById("feed-empty");
-  document.getElementById("feed-count").textContent = list.length + " Einträge";
-
-  if (!list.length) {
-    empty.style.display = "flex";
-    return;
-  }
-  empty.style.display = "none";
-
-  const feed = document.getElementById("feed");
-
-  list.forEach(inc => {
-    const sev = severity(inc.category);
-
-    // Marker
-    if (inc.lat && inc.lon && !isNaN(+inc.lat) && !isNaN(+inc.lon)) {
-      const cl = sev;
-      const popup = `
-        <div class="popup-inner">
-          <div class="popup-type ${cl}">${inc.category}</div>
-          <div class="popup-location">${inc.location || "Unbekannt"}, ${inc.country || "—"}</div>
-          <div class="popup-meta">${inc.date || "—"}</div>
-          <div class="popup-desc">${(inc.description || "").substring(0, 320)}</div>
-          ${inc.url ? `<a class="popup-source" href="${inc.url}" target="_blank">Quelle aufrufen →</a>` : ""}
-        </div>`;
-      L.marker([+inc.lat, +inc.lon], { icon: makeIcon(sev) })
-        .bindPopup(popup, { maxWidth: 320 })
-        .addTo(markerGroup);
-    }
-
-    // Feed row
-    const row = document.createElement("div");
-    row.className = `incident sev-${sev}`;
-    row.innerHTML = `
-      <div class="inc-header">
-        <span class="inc-type ${sev}">${inc.category}</span>
-        <span class="inc-date">${inc.date || "—"}</span>
-      </div>
-      <div class="inc-location">${inc.location || "Unbekannt"}, ${inc.country || "—"}</div>
-      <div class="inc-text">${inc.description || "—"}</div>`;
-    row.addEventListener("click", () => {
-      if (inc.lat && inc.lon) {
-        map.setView([+inc.lat, +inc.lon], 11, { animate: true });
-      }
-    });
-    feed.appendChild(row);
-  });
-}
-
-function applyFilters() {
-  const co = document.getElementById("f-country").value;
-  const ca = document.getElementById("f-cat").value;
-  render(allData.filter(i => {
-    if (co && i.country  !== co) return false;
-    if (ca && i.category !== ca) return false;
-    return true;
-  }));
-}
-
-async function loadStats() {
-  try {
-    const s = await fetch("/api/stats").then(r => r.json());
-    document.getElementById("tb-total").textContent = s.total;
-    document.getElementById("tb-geo").textContent   = s.geocoded;
-
-    const mx = s.by_country[0]?.n || 1;
-    document.getElementById("dist-countries").innerHTML =
-      s.by_country.slice(0, 7).map(c => `
-        <div class="dist-item">
-          <div class="dist-header">
-            <span class="dist-name">${c.country || "Unbekannt"}</span>
-            <span class="dist-count">${c.n}</span>
-          </div>
-          <div class="dist-bar">
-            <div class="dist-fill" style="width:${Math.round(c.n/mx*100)}%"></div>
-          </div>
-        </div>`).join("");
-
-    document.getElementById("dist-cats").innerHTML =
-      s.by_cat.slice(0, 12).map(c => {
-        const sev = severity(c.category);
-        return `
-          <div class="cat-row">
-            <div class="cat-swatch ${sev}"></div>
-            <span class="cat-name">${c.category}</span>
-            <span class="cat-count">${c.n}</span>
-          </div>`;
-      }).join("");
-
-    // Admin
-    const lc = s.last_crawl
-      ? new Date(s.last_crawl).toLocaleString("de-CH",
-          { timeZone: "Europe/Zurich", day:"2-digit", month:"2-digit",
-            year:"numeric", hour:"2-digit", minute:"2-digit" })
-      : "—";
-    const bPct = s.barrikade.max_id
-      ? Math.round((s.barrikade.max_id - s.barrikade.current_id)
-          / (s.barrikade.max_id - s.barrikade.floor_id) * 100) + "%"
-      : "—";
-
-    document.getElementById("adm-status").textContent =
-      `Letzter Crawl:    ${lc}\n` +
-      `Läuft:            ${s.crawl_running ? "Ja" : "Nein"}\n\n` +
-      `Barrikade:        ${s.barrikade.done ? "Abgeschlossen" : `${bPct} (ID ${s.barrikade.current_id})`}\n` +
-      `Indymedia:        ${s.indymedia.done ? "Abgeschlossen" : `Offset ${s.indymedia.current_offset}`}`;
-
-    document.getElementById("adm-sources").textContent =
-      s.by_source.map(c => `${(c.source || "").padEnd(26)} ${c.n}`).join("\n");
-
-    document.getElementById("adm-recent").textContent =
-      (allData || []).slice(0, 6).map(i =>
-        `${i.date} | ${i.category}\n${i.location}, ${i.country}\n${(i.description||"").substring(0,70)}\n`
-      ).join("——\n");
-
-  } catch(e) { console.error(e); }
-}
-
-async function loadIncidents() {
-  try {
-    allData = await fetch("/api/incidents").then(r => r.json());
-    applyFilters();
-  } catch(e) { console.error(e); }
-}
-
-// Admin
-function adminOpen()  { document.getElementById("admin").classList.add("open"); loadStats(); }
+// Admin Panel
+function adminOpen() { document.getElementById("admin").classList.add("open"); loadStats(); }
 function adminClose() { document.getElementById("admin").classList.remove("open"); }
 
 document.addEventListener("keydown", e => {
-  if (e.ctrlKey && e.shiftKey && e.key === "A") {
+  if (e.ctrlKey && e.shiftKey && e.key.toUpperCase() === "A") {
     e.preventDefault();
-    document.getElementById("admin").classList.contains("open")
-      ? adminClose() : adminOpen();
+    document.getElementById("admin").classList.contains("open") ? adminClose() : adminOpen();
   }
 });
 
-async function adminCrawl() {
-  await fetch("/api/crawl", { method: "POST" });
-  document.getElementById("adm-status").textContent = "Crawl gestartet...";
-  setTimeout(loadStats, 3000);
-}
-
-async function adminHistorical() {
-  if (!confirm("Historischen Crawl ab 2023 neu starten?")) return;
-  await fetch("/api/reset-historical", { method: "POST" });
-  document.getElementById("adm-status").textContent = "Reset — Crawl läuft...";
-}
-
-async function adminGrokTest() {
-  document.getElementById("adm-grok").textContent = "Läuft...";
+async function apiCall(url, method = "GET") {
+  const logEl = document.getElementById("admin-log");
   try {
-    const d = await fetch("/api/grok-test", { method: "POST" }).then(r => r.json());
-    document.getElementById("adm-grok").textContent = JSON.stringify(d, null, 2);
+    const res = await fetch(url, { method });
+    const data = await res.json();
+    logEl.textContent += `\n→ ${method} ${url}\n${JSON.stringify(data, null, 2)}\n`;
+    return data;
   } catch(e) {
-    document.getElementById("adm-grok").textContent = "Fehler: " + e.message;
+    logEl.textContent += `\n❌ Fehler bei ${url}: ${e.message}\n`;
   }
 }
 
+async function adminCrawl() {
+  await apiCall("/api/crawl", "POST");
+  setTimeout(loadStats, 2000);
+}
+
+async function adminHistorical() {
+  if (confirm("Historischen Crawl neu starten?")) {
+    await apiCall("/api/reset-historical", "POST");
+  }
+}
+
+async function adminGrokTest() {
+  await apiCall("/api/grok-test", "POST");
+}
+
 async function adminClear() {
-  if (!confirm("Alle Daten unwiderruflich löschen?")) return;
-  await fetch("/api/clear", { method: "POST" });
-  allData = [];
-  render([]);
-  loadStats();
+  if (confirm("Wirklich ALLE Daten löschen?")) {
+    await apiCall("/api/clear", "POST");
+  }
 }
 
-function tick() {
-  document.getElementById("tb-time").textContent =
-    new Date().toLocaleTimeString("de-CH", {
-      timeZone: "Europe/Zurich",
-      hour: "2-digit", minute: "2-digit", second: "2-digit"
-    });
+async function loadStats() {
+  const data = await apiCall("/api/stats");
+  if (data) {
+    document.getElementById("admin-log").textContent += `\nTotal Einträge: ${data.total}\n`;
+  }
 }
 
+// Leaflet Map
+map = L.map('map').setView([49.5, 11], 5);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+
+// Initial Load
 loadStats();
-loadIncidents();
-tick();
-setInterval(tick, 1000);
-setInterval(() => { loadStats(); loadIncidents(); }, 5 * 60 * 1000);
-}); // end window.load
 </script>
 </body>
 </html>
-
