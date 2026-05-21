@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LEX EUROPE — Administration</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0c0f;--surface:#111318;--surf2:#161a20;
+  --border:#1e2229;--border2:#252b34;
+  --red:#b91c1c;--red2:#dc2626;--amber:#d97706;--green:#16a34a;
+  --t1:#f1f3f5;--t2:#9ba3ae;--t3:#4b5563;
+  --sans:'Inter',sans-serif;--mono:'JetBrains Mono',monospace;
+}
+html,body{min-height:100%;background:var(--bg);font-family:var(--sans);color:var(--t1);font-size:12px;line-height:1.5;-webkit-font-smoothing:antialiased;}
+
+/* TOPBAR */
+#topbar{height:44px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;position:sticky;top:0;z-index:100;}
+.tb-name{font-size:13px;font-weight:600;letter-spacing:.06em;}
+.tb-badge{font-family:var(--mono);font-size:9px;color:var(--red);border:1px solid rgba(185,28,28,.4);padding:2px 7px;margin-left:12px;background:rgba(185,28,28,.07);}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:16px;}
+.tb-link{font-size:11px;color:var(--t3);text-decoration:none;cursor:pointer;}
+.tb-link:hover{color:var(--t1);}
+
+/* LAYOUT */
+.wrap{max-width:1200px;margin:0 auto;padding:28px 24px;display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+.full{grid-column:1/-1;}
+
+/* CARDS */
+.card{background:var(--surface);border:1px solid var(--border);padding:20px;}
+.card-title{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);}
+
+/* STATUS GRID */
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;}
+.stat-box{background:var(--bg);border:1px solid var(--border);padding:12px;}
+.stat-val{font-family:var(--mono);font-size:20px;font-weight:500;color:var(--t1);display:block;line-height:1;margin-bottom:3px;}
+.stat-lbl{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;}
+.status-row{font-family:var(--mono);font-size:10px;color:var(--t2);margin-bottom:6px;display:flex;gap:8px;}
+.status-key{color:var(--t3);min-width:130px;}
+.badge{font-family:var(--mono);font-size:9px;padding:2px 7px;border:1px solid;border-radius:2px;}
+.badge.ok{color:var(--green);border-color:rgba(22,163,74,.3);background:rgba(22,163,74,.07);}
+.badge.warn{color:var(--amber);border-color:rgba(217,119,6,.3);background:rgba(217,119,6,.07);}
+.badge.err{color:var(--red2);border-color:rgba(185,28,28,.3);background:rgba(185,28,28,.07);}
+
+/* BUTTONS */
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+.btn{padding:7px 16px;background:transparent;border:1px solid var(--border2);color:var(--t2);font-family:var(--sans);font-size:11px;font-weight:500;cursor:pointer;border-radius:3px;transition:all .15s;}
+.btn:hover{background:var(--surf2);border-color:var(--t3);color:var(--t1);}
+.btn.primary{border-color:rgba(22,163,74,.4);color:var(--green);}
+.btn.primary:hover{background:rgba(22,163,74,.08);}
+.btn.danger{border-color:rgba(185,28,28,.3);}
+.btn.danger:hover{border-color:var(--red);color:var(--red2);background:rgba(185,28,28,.07);}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+
+/* FORM */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.field{display:flex;flex-direction:column;gap:4px;}
+.field.full{grid-column:1/-1;}
+label{font-size:9px;font-weight:500;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;}
+input,select,textarea{background:var(--bg);border:1px solid var(--border2);color:var(--t1);padding:7px 10px;font-family:var(--sans);font-size:11px;outline:none;border-radius:3px;transition:border-color .15s;width:100%;}
+input:focus,select:focus,textarea:focus{border-color:var(--t3);}
+textarea{min-height:80px;resize:vertical;font-family:var(--sans);}
+select option{background:var(--surface);}
+
+/* FEED LIST */
+.feed-list{max-height:180px;overflow-y:auto;font-family:var(--mono);font-size:9px;color:var(--t2);line-height:2;}
+.feed-list::-webkit-scrollbar{width:2px;}
+.feed-list::-webkit-scrollbar-thumb{background:var(--border2);}
+
+/* INCIDENTS TABLE */
+.tbl{width:100%;border-collapse:collapse;}
+.tbl th{font-size:9px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);}
+.tbl td{padding:8px 10px;border-bottom:1px solid var(--border);font-size:11px;color:var(--t2);vertical-align:top;}
+.tbl tr:hover td{background:var(--surf2);}
+.cat-badge{font-family:var(--mono);font-size:8px;padding:1px 5px;border:1px solid;white-space:nowrap;}
+.cat-badge.h{color:var(--red2);border-color:rgba(220,38,38,.3);background:rgba(185,28,28,.07);}
+.cat-badge.m{color:var(--amber);border-color:rgba(217,119,6,.3);background:rgba(217,119,6,.07);}
+.cat-badge.l{color:var(--t3);border-color:var(--border2);}
+.del-btn{font-size:10px;color:var(--t3);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:2px;}
+.del-btn:hover{color:var(--red2);background:rgba(185,28,28,.1);}
+.manual-dot{width:6px;height:6px;border-radius:50%;background:var(--amber);display:inline-block;margin-right:4px;}
+
+/* CONSOLE */
+.console{background:var(--bg);border:1px solid var(--border);padding:10px;font-family:var(--mono);font-size:9px;color:var(--t2);min-height:60px;max-height:140px;overflow-y:auto;white-space:pre-wrap;line-height:1.7;margin-top:10px;}
+.console::-webkit-scrollbar{width:2px;}
+.console::-webkit-scrollbar-thumb{background:var(--border2);}
+
+/* TOAST */
+#toast{position:fixed;bottom:20px;right:24px;background:var(--surf2);border:1px solid var(--border2);padding:8px 16px;font-size:11px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:200;border-radius:3px;}
+#toast.show{opacity:1;}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <span class="tb-name">LEX EUROPE</span>
+  <span class="tb-badge">ADMINISTRATION</span>
+  <div class="tb-right">
+    <a class="tb-link" href="/" target="_blank">→ Karte öffnen</a>
+    <a class="tb-link" href="/admin/logout">Abmelden</a>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- STATUS -->
+  <div class="card full">
+    <div class="card-title">Systemstatus</div>
+    <div class="stat-grid">
+      <div class="stat-box">
+        <span class="stat-val" id="s-total">{{ total }}</span>
+        <span class="stat-lbl">Gesamt Einträge</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-val" id="s-feeds">{{ loop.length if loop else '—' }}</span>
+        <span class="stat-lbl">RSS Feeds</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-val" id="s-run" style="color:{% if running %}var(--amber){% else %}var(--t3){% endif %}">
+          {% if running %}Läuft{% else %}Bereit{% endif %}
+        </span>
+        <span class="stat-lbl">Crawler</span>
+      </div>
+    </div>
+    <div class="status-row"><span class="status-key">Letzter Crawl:</span><span id="s-last">{{ last_crawl }}</span></div>
+    <div class="status-row"><span class="status-key">Crawler-Status:</span><span class="badge {% if running %}warn{% else %}ok{% endif %}" id="s-badge">{% if running %}Aktiv{% else %}Bereit{% endif %}</span></div>
+    <div class="btn-row">
+      <button class="btn primary" onclick="startCrawl()" id="btn-crawl">{% if running %}Crawler läuft...{% else %}Crawler starten{% endif %}</button>
+      <button class="btn" onclick="stopCrawl()">Crawler stoppen</button>
+      <button class="btn" onclick="testGrok()">Grok testen</button>
+      <button class="btn" onclick="refreshStatus()">Status aktualisieren</button>
+      <button class="btn danger" onclick="clearDB()">Datenbank zurücksetzen</button>
+    </div>
+    <div class="console" id="console">Bereit.</div>
+  </div>
+
+  <!-- ADD INCIDENT -->
+  <div class="card">
+    <div class="card-title">Ereignis manuell hinzufügen</div>
+    <div class="form-grid">
+      <div class="field">
+        <label>Datum</label>
+        <input type="date" id="f-date" required>
+      </div>
+      <div class="field">
+        <label>Land</label>
+        <select id="f-country">
+          <option value="DE">Deutschland</option>
+          <option value="CH">Schweiz</option>
+          <option value="AT">Österreich</option>
+          <option value="FR">Frankreich</option>
+          <option value="IT">Italien</option>
+          <option value="GR">Griechenland</option>
+          <option value="Andere">Andere</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Ort / Stadt</label>
+        <input type="text" id="f-location" placeholder="z.B. Berlin-Kreuzberg">
+      </div>
+      <div class="field">
+        <label>Kategorie</label>
+        <select id="f-category">
+          {% for cat in categories %}
+          <option value="{{ cat }}">{{ cat }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Quelle / Medium</label>
+        <input type="text" id="f-source" placeholder="z.B. Tagesanzeiger">
+      </div>
+      <div class="field">
+        <label>URL (optional)</label>
+        <input type="url" id="f-url" placeholder="https://...">
+      </div>
+      <div class="field full">
+        <label>Beschreibung / Artikel-Text</label>
+        <textarea id="f-desc" placeholder="Volltext des Artikels oder Zusammenfassung..."></textarea>
+      </div>
+    </div>
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn primary" onclick="submitIncident()">Eintrag speichern</button>
+      <button class="btn" onclick="classifyAndFill()">Automatisch klassifizieren (Grok)</button>
+    </div>
+  </div>
+
+  <!-- FEEDS -->
+  <div class="card">
+    <div class="card-title">Aktive RSS-Feeds <span id="feed-count" style="color:var(--t3);font-weight:400;"></span></div>
+    <div class="feed-list" id="feed-list">Lade...</div>
+  </div>
+
+  <!-- RECENT INCIDENTS -->
+  <div class="card full">
+    <div class="card-title">Letzte Einträge</div>
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>Datum</th>
+          <th>Ort</th>
+          <th>Land</th>
+          <th>Kategorie</th>
+          <th>Quelle</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="recent-tbody">
+        {% for r in recent %}
+        <tr id="row-{{ r.id }}">
+          <td>{{ r.date or '—' }}</td>
+          <td>{{ r.location or '—' }}</td>
+          <td style="font-family:var(--mono);font-size:10px;">{{ r.country or '—' }}</td>
+          <td>
+            {% if r.category in ['Brandanschlag','Sabotage','Gewalt','Militante Aktion','Aufruf zu Gewalt'] %}
+            <span class="cat-badge h">{{ r.category }}</span>
+            {% elif r.category in ['Sachbeschädigung','Repression','Verhaftung','Besetzung'] %}
+            <span class="cat-badge m">{{ r.category }}</span>
+            {% else %}
+            <span class="cat-badge l">{{ r.category }}</span>
+            {% endif %}
+          </td>
+          <td style="font-size:10px;color:var(--t3);">{{ r.source or '—' }}</td>
+          <td><button class="del-btn" onclick="deleteRow({{ r.id }})">✕</button></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+const log = s => {
+  const c = document.getElementById('console');
+  c.textContent += '\n' + new Date().toLocaleTimeString('de-CH') + '  ' + s;
+  c.scrollTop = c.scrollHeight;
+};
+
+const toast = msg => {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+};
+
+async function startCrawl() {
+  document.getElementById('btn-crawl').disabled = true;
+  document.getElementById('btn-crawl').textContent = 'Crawler läuft...';
+  log('Crawler wird gestartet...');
+  try {
+    const r = await fetch('/admin/api/crawl', {method:'POST'});
+    const d = await r.json();
+    log(d.status);
+    toast('Crawler gestartet');
+    setTimeout(refreshStatus, 3000);
+  } catch(e) { log('Fehler: ' + e.message); }
+}
+
+async function stopCrawl() {
+  const r = await fetch('/admin/api/stop-crawl', {method:'POST'});
+  const d = await r.json();
+  log(d.status);
+  toast(d.status);
+  refreshStatus();
+}
+
+async function refreshStatus() {
+  try {
+    const s = await fetch('/admin/api/status').then(r=>r.json());
+    document.getElementById('s-total').textContent = s.total;
+    document.getElementById('s-last').textContent  = s.last_crawl || '—';
+    document.getElementById('s-feeds').textContent = s.feed_count;
+    const badge = document.getElementById('s-badge');
+    const btn   = document.getElementById('btn-crawl');
+    if (s.crawl_running) {
+      badge.className='badge warn'; badge.textContent='Aktiv';
+      btn.disabled=true; btn.textContent='Crawler läuft...';
+    } else {
+      badge.className='badge ok'; badge.textContent='Bereit';
+      btn.disabled=false; btn.textContent='Crawler starten';
+    }
+    // Feed list
+    const fl = document.getElementById('feed-list');
+    fl.textContent = s.sources.map(x => `${(x.source||'').padEnd(28)} ${x.n}`).join('\n');
+    document.getElementById('feed-count').textContent = `(${s.feed_count} Feeds)`;
+  } catch(e) { log('Status-Fehler: ' + e.message); }
+}
+
+async function testGrok() {
+  log('Teste Grok API...');
+  try {
+    const r = await fetch('/admin/api/grok-test', {method:'POST'});
+    const d = await r.json();
+    log('Grok-Antwort: ' + JSON.stringify(d));
+    toast('Grok OK');
+  } catch(e) { log('Grok-Fehler: ' + e.message); }
+}
+
+async function clearDB() {
+  if (!confirm('Alle Daten unwiderruflich löschen?')) return;
+  const r = await fetch('/admin/api/clear', {method:'POST'});
+  const d = await r.json();
+  log(d.status);
+  toast(d.status);
+  refreshStatus();
+}
+
+async function deleteRow(id) {
+  await fetch(`/admin/api/incident/${id}`, {method:'DELETE'});
+  const row = document.getElementById(`row-${id}`);
+  if (row) row.remove();
+  toast('Eintrag gelöscht');
+}
+
+async function classifyAndFill() {
+  const text = document.getElementById('f-desc').value;
+  if (!text.trim()) { toast('Bitte zuerst Beschreibung eingeben'); return; }
+  log('Klassifiziere mit Grok...');
+  try {
+    const r = await fetch('/admin/api/grok-test', {method:'POST'});
+    toast('Grok klassifiziert nur Testtext — Eingabe manuell ausfüllen');
+  } catch(e) { log('Fehler: ' + e.message); }
+}
+
+async function submitIncident() {
+  const data = {
+    date:        document.getElementById('f-date').value,
+    location:    document.getElementById('f-location').value,
+    country:     document.getElementById('f-country').value,
+    category:    document.getElementById('f-category').value,
+    description: document.getElementById('f-desc').value,
+    source:      document.getElementById('f-source').value,
+    url:         document.getElementById('f-url').value,
+  };
+  if (!data.date || !data.location || !data.description) {
+    toast('Datum, Ort und Beschreibung sind Pflichtfelder');
+    return;
+  }
+  try {
+    const r = await fetch('/admin/api/add-incident', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(data)
+    });
+    const d = await r.json();
+    log(d.message);
+    toast(d.message);
+    if (d.ok) {
+      ['f-date','f-location','f-source','f-url','f-desc'].forEach(id => {
+        document.getElementById(id).value='';
+      });
+      refreshStatus();
+    }
+  } catch(e) { log('Fehler: ' + e.message); }
+}
+
+// Pre-fill date with today
+document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
+refreshStatus();
+</script>
+</body>
+</html>
