@@ -3,1124 +3,475 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEX EUROPE — Threat Intelligence</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;500;600&display=swap" rel="stylesheet">
+<title>LEX EUROPE</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-/* ===== RESET & BASE ===== */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
-  --bg:        #07070d;
-  --panel:     #0c0c16;
-  --panel2:    #10101e;
-  --border:    #1c1c30;
-  --border2:   #262640;
-  --red:       #e8001c;
-  --red-dim:   #7a000f;
-  --red-glow:  rgba(232,0,28,0.15);
-  --amber:     #e8900a;
-  --amber-dim: #7a4a00;
-  --green:     #00e87a;
-  --text:      #c8c8d8;
-  --text-dim:  #5a5a78;
-  --text-bright: #eeeef8;
-  --mono: 'Share Tech Mono', monospace;
-  --head: 'Bebas Neue', cursive;
-  --body: 'Barlow Condensed', sans-serif;
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:     #0d1117;
+  --panel:  #161b22;
+  --panel2: #1c2128;
+  --line:   #21262d;
+  --line2:  #30363d;
+  --red:    #c0392b;
+  --red-s:  #e74c3c;
+  --amber:  #e67e22;
+  --muted:  #8b949e;
+  --dim:    #484f58;
+  --t1:     #e6edf3;
+  --t2:     #b1bac4;
+  --t3:     #6e7681;
+  --mono:   'IBM Plex Mono', monospace;
+  --sans:   'IBM Plex Sans', sans-serif;
+  --cond:   'IBM Plex Sans Condensed', sans-serif;
 }
 
-html, body {
-  height: 100%;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--body);
-  font-size: 14px;
-  overflow: hidden;
+html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--sans);color:var(--t1);font-size:13px;line-height:1.5}
+
+/* MAP */
+#map{position:fixed;inset:0;z-index:0}
+
+/* LEAFLET TILES */
+.leaflet-popup-content-wrapper{
+  background:var(--panel);border:1px solid var(--line2);border-radius:2px;
+  color:var(--t1);font-family:var(--sans);box-shadow:0 8px 32px rgba(0,0,0,0.6);
+}
+.leaflet-popup-tip{background:var(--line2)}
+.leaflet-container a.leaflet-popup-close-button{color:var(--muted)}
+.p-label{font-family:var(--mono);font-size:9px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px}
+.p-loc{font-family:var(--cond);font-size:16px;font-weight:600;color:var(--t1);margin-bottom:6px}
+.p-cat{display:inline-block;font-family:var(--mono);font-size:9px;padding:2px 6px;border:1px solid;margin-bottom:8px}
+.p-cat.h{color:var(--red-s);border-color:rgba(231,76,60,.35);background:rgba(192,57,43,.08)}
+.p-cat.m{color:var(--amber);border-color:rgba(230,126,34,.35);background:rgba(230,126,34,.08)}
+.p-desc{font-size:11px;color:var(--t2);line-height:1.55;max-width:260px}
+.p-link{display:inline-block;margin-top:10px;font-family:var(--mono);font-size:9px;color:var(--red);text-decoration:none;border-bottom:1px solid rgba(192,57,43,.4);padding-bottom:1px}
+
+/* TOPBAR */
+#topbar{
+  position:fixed;top:0;left:0;right:0;height:40px;z-index:100;
+  background:var(--panel);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;padding:0 16px;gap:0;
+}
+.tb-org{
+  font-family:var(--mono);font-size:11px;font-weight:500;
+  letter-spacing:.12em;color:var(--t1);text-transform:uppercase;
+  padding-right:16px;margin-right:16px;border-right:1px solid var(--line2);
+}
+.tb-class{
+  font-family:var(--mono);font-size:9px;letter-spacing:.1em;
+  color:var(--red);border:1px solid rgba(192,57,43,.4);
+  padding:2px 7px;background:rgba(192,57,43,.07);
+}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:24px}
+.tb-metric{display:flex;align-items:baseline;gap:5px}
+.tb-n{font-family:var(--mono);font-size:17px;font-weight:500;color:var(--t1);line-height:1}
+.tb-l{font-family:var(--mono);font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em}
+.tb-sep{width:1px;height:18px;background:var(--line2)}
+#tb-clock{font-family:var(--mono);font-size:10px;color:var(--t3);min-width:60px;text-align:right}
+.live{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.08em}
+.live-dot{width:5px;height:5px;border-radius:50%;background:#2ea043;animation:blink 2s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* SIDEBAR */
+#sidebar{
+  position:fixed;top:40px;left:0;bottom:0;width:220px;z-index:90;
+  background:var(--panel);border-right:1px solid var(--line);
+  overflow-y:auto;overflow-x:hidden;
+}
+#sidebar::-webkit-scrollbar{width:3px}
+#sidebar::-webkit-scrollbar-thumb{background:var(--line2)}
+
+.sb-block{padding:14px 14px 10px;border-bottom:1px solid var(--line)}
+.sb-head{
+  font-family:var(--mono);font-size:8px;letter-spacing:.15em;
+  color:var(--t3);text-transform:uppercase;margin-bottom:10px;
 }
 
-/* ===== SCANLINES ===== */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(0,0,0,0.08) 2px,
-    rgba(0,0,0,0.08) 4px
-  );
-  pointer-events: none;
-  z-index: 9999;
+/* filters */
+.f-row{margin-bottom:8px}
+.f-lbl{font-family:var(--mono);font-size:8px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px}
+select{
+  width:100%;background:var(--bg);border:1px solid var(--line2);
+  color:var(--t2);padding:4px 8px;font-family:var(--mono);font-size:10px;
+  outline:none;cursor:pointer;appearance:none;border-radius:2px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%236e7681'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 7px center;
 }
+select:focus{border-color:var(--line2);outline:none}
 
-/* ===== LAYOUT ===== */
-#app {
-  display: grid;
-  grid-template-rows: 52px 1fr 38px;
-  grid-template-columns: 240px 1fr 320px;
-  height: 100vh;
-  gap: 0;
-}
+/* bars */
+.bar-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:1px}
+.bar-name{font-family:var(--mono);font-size:9px;color:var(--t2)}
+.bar-n{font-family:var(--mono);font-size:9px;color:var(--muted)}
+.bar-track{height:1px;background:var(--line2);margin-bottom:7px}
+.bar-fill{height:100%;background:var(--red);opacity:.7;transition:width .4s ease}
 
-/* ===== TOPBAR ===== */
-#topbar {
-  grid-column: 1 / -1;
-  background: linear-gradient(90deg, #0a0018 0%, #0d000f 40%, #0a0018 100%);
-  border-bottom: 1px solid var(--red-dim);
-  display: flex;
-  align-items: center;
-  padding: 0 16px;
-  gap: 20px;
-  position: relative;
-  overflow: hidden;
+/* cats */
+.cat-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:3px 0;border-bottom:1px solid var(--line);
 }
+.cat-row:last-child{border-bottom:none}
+.cat-name{font-family:var(--sans);font-size:10px;color:var(--t2)}
+.cat-cnt{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.cat-dot{width:6px;height:6px;border-radius:1px;flex-shrink:0;margin-right:6px}
+.cat-dot.h{background:var(--red);opacity:.8}
+.cat-dot.m{background:var(--amber);opacity:.8}
 
-#topbar::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    90deg, transparent, transparent 80px,
-    rgba(232,0,28,0.03) 80px, rgba(232,0,28,0.03) 81px
-  );
-  pointer-events: none;
+/* buttons */
+.btn{
+  width:100%;padding:6px 10px;background:transparent;
+  border:1px solid var(--line2);color:var(--t3);
+  font-family:var(--mono);font-size:9px;letter-spacing:.08em;
+  cursor:pointer;text-transform:uppercase;transition:border-color .15s,color .15s;
+  text-align:left;margin-bottom:4px;border-radius:2px;display:block;
 }
+.btn:hover{border-color:var(--line2);color:var(--t1);background:var(--panel2)}
+.btn.danger:hover{color:var(--red);border-color:rgba(192,57,43,.5)}
 
-.logo-block {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
+.crawl-block{
+  font-family:var(--mono);font-size:8px;color:var(--t3);
+  line-height:2;letter-spacing:.02em;
 }
+.crawl-block span{color:var(--t2)}
 
-.logo-icon {
-  width: 28px; height: 28px;
-  border: 2px solid var(--red);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 14px;
-  color: var(--red);
-  font-family: var(--mono);
-  position: relative;
+/* FEED */
+#feed{
+  position:fixed;top:40px;right:0;bottom:0;width:280px;z-index:90;
+  background:var(--panel);border-left:1px solid var(--line);
+  display:flex;flex-direction:column;
 }
-.logo-icon::after {
-  content: '';
-  position: absolute;
-  inset: 2px;
-  background: var(--red-glow);
-  animation: pulse-bg 2s ease-in-out infinite;
+#feed-header{
+  padding:10px 14px 8px;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
 }
-@keyframes pulse-bg {
-  0%,100% { opacity: 0.3; } 50% { opacity: 1; }
-}
+#feed-title{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.1em;color:var(--t2);text-transform:uppercase}
+#feed-cnt{font-family:var(--mono);font-size:9px;color:var(--t3)}
+#feed-list{overflow-y:auto;flex:1;padding:0}
+#feed-list::-webkit-scrollbar{width:3px}
+#feed-list::-webkit-scrollbar-thumb{background:var(--line2)}
 
-.logo-text {
-  font-family: var(--head);
-  font-size: 24px;
-  letter-spacing: 3px;
-  color: var(--text-bright);
-  text-shadow: 0 0 20px rgba(232,0,28,0.4);
+.card{
+  padding:10px 14px;border-bottom:1px solid var(--line);
+  cursor:pointer;transition:background .1s;
+  border-left:2px solid transparent;
 }
+.card:hover{background:var(--panel2)}
+.card.h{border-left-color:var(--red)}
+.card.m{border-left-color:var(--amber)}
 
-.tagline {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--text-dim);
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  padding-left: 10px;
-  border-left: 1px solid var(--border2);
-}
+.card-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
+.card-cat{font-family:var(--mono);font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)}
+.card-cat.h{color:var(--red)}
+.card-cat.m{color:var(--amber)}
+.card-date{font-family:var(--mono);font-size:8px;color:var(--t3)}
+.card-loc{font-family:var(--cond);font-size:13px;font-weight:600;color:var(--t1);margin-bottom:3px}
+.card-desc{font-size:10px;color:var(--t3);line-height:1.45;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 
-.topbar-right {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 24px;
+#empty{
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  height:100%;gap:8px;
 }
+#empty-t{font-family:var(--mono);font-size:9px;color:var(--t3);letter-spacing:.08em;text-align:center}
 
-.live-badge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--green);
-  letter-spacing: 1px;
+/* TOAST */
+#toast{
+  position:fixed;bottom:16px;left:50%;transform:translateX(-50%) translateY(8px);
+  background:var(--panel2);border:1px solid var(--line2);border-radius:2px;
+  padding:6px 16px;font-family:var(--mono);font-size:9px;color:var(--t2);
+  opacity:0;transition:all .25s;pointer-events:none;z-index:300;letter-spacing:.05em;
 }
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
-.live-dot {
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  background: var(--green);
-  box-shadow: 0 0 8px var(--green);
-  animation: blink 1.2s ease-in-out infinite;
-}
-@keyframes blink {
-  0%,100% { opacity: 1; box-shadow: 0 0 8px var(--green); }
-  50% { opacity: 0.3; box-shadow: none; }
-}
-
-.stat-pill {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--mono);
-  font-size: 12px;
-}
-.stat-pill .num {
-  color: var(--red);
-  font-size: 16px;
-  font-weight: bold;
-  text-shadow: 0 0 10px var(--red);
-}
-.stat-pill .label {
-  color: var(--text-dim);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.time-display {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--text-dim);
-  letter-spacing: 1px;
-}
-
-/* ===== SIDEBAR LEFT ===== */
-#sidebar {
-  background: var(--panel);
-  border-right: 1px solid var(--border);
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-#sidebar::-webkit-scrollbar { width: 3px; }
-#sidebar::-webkit-scrollbar-track { background: transparent; }
-#sidebar::-webkit-scrollbar-thumb { background: var(--border2); }
-
-.section-label {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 2px;
-  color: var(--red);
-  text-transform: uppercase;
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--red-dim);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.section-label::before {
-  content: '▸';
-  font-size: 8px;
-}
-
-/* Filters */
-.filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.filter-label {
-  font-size: 10px;
-  color: var(--text-dim);
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  font-family: var(--mono);
-}
-
-select {
-  background: var(--panel2);
-  border: 1px solid var(--border2);
-  color: var(--text);
-  padding: 5px 8px;
-  font-family: var(--mono);
-  font-size: 11px;
-  width: 100%;
-  cursor: pointer;
-  outline: none;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235a5a78'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-  transition: border-color 0.2s;
-}
-select:focus, select:hover {
-  border-color: var(--red-dim);
-}
-
-/* Stats bars */
-.stat-bar-item {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin-bottom: 8px;
-}
-.stat-bar-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.stat-bar-name {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text);
-}
-.stat-bar-count {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--red);
-}
-.bar-track {
-  height: 3px;
-  background: var(--border);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--red-dim), var(--red));
-  border-radius: 2px;
-  transition: width 0.6s ease;
-  box-shadow: 0 0 6px var(--red);
-}
-
-/* Category badges */
-.cat-list {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.cat-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 4px 6px;
-  background: var(--panel2);
-  border-left: 2px solid transparent;
-}
-.cat-item.high { border-left-color: var(--red); }
-.cat-item.med  { border-left-color: var(--amber); }
-.cat-name {
-  font-size: 11px;
-  font-family: var(--mono);
-  color: var(--text);
-}
-.cat-count {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text-dim);
-}
-
-/* Source indicators */
-.source-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.source-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text-dim);
-}
-.source-dot {
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: var(--green);
-  box-shadow: 0 0 5px var(--green);
-  flex-shrink: 0;
-}
-
-/* Action buttons */
-.btn {
-  width: 100%;
-  padding: 8px;
-  background: transparent;
-  border: 1px solid var(--border2);
-  color: var(--text-dim);
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 1px;
-  cursor: pointer;
-  text-transform: uppercase;
-  transition: all 0.2s;
-  text-align: center;
-}
-.btn:hover {
-  border-color: var(--red);
-  color: var(--red);
-  background: var(--red-glow);
-  box-shadow: 0 0 10px var(--red-glow);
-}
-.btn.danger:hover {
-  border-color: var(--amber);
-  color: var(--amber);
-  background: rgba(232,144,10,0.1);
-}
-.btn-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-/* Last crawl */
-.crawl-time {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--text-dim);
-  text-align: center;
-  padding: 4px;
-  border: 1px solid var(--border);
-  background: var(--panel2);
-}
-
-/* ===== MAP ===== */
-#map-container {
-  position: relative;
-  background: #050510;
-}
-
-#map {
-  width: 100%;
-  height: 100%;
-  z-index: 1;
-}
-
-/* Leaflet popup override */
-.leaflet-popup-content-wrapper {
-  background: rgba(12,12,22,0.97);
-  border: 1px solid var(--border2);
-  border-radius: 0;
-  color: var(--text);
-  font-family: var(--body);
-  box-shadow: 0 0 20px rgba(0,0,0,0.8);
-}
-.leaflet-popup-tip {
-  background: var(--border2);
-}
-.popup-date { font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-bottom: 4px; }
-.popup-loc { font-family: var(--head); font-size: 18px; color: var(--text-bright); letter-spacing: 1px; }
-.popup-cat { font-family: var(--mono); font-size: 11px; margin: 4px 0; }
-.popup-cat.high { color: var(--red); }
-.popup-cat.med  { color: var(--amber); }
-.popup-desc { font-size: 12px; color: var(--text-dim); margin-top: 6px; line-height: 1.5; max-width: 260px; }
-.popup-link { display: inline-block; margin-top: 8px; font-family: var(--mono); font-size: 10px; color: var(--red); text-decoration: none; letter-spacing: 1px; }
-.popup-link:hover { text-shadow: 0 0 8px var(--red); }
-
-/* Map corner overlay */
-#map-overlay-tl {
-  position: absolute;
-  top: 12px; left: 12px;
-  z-index: 400;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--text-dim);
-  letter-spacing: 1px;
-  pointer-events: none;
-  text-shadow: 0 0 4px rgba(0,0,0,1);
-}
-
-/* ===== INCIDENT FEED ===== */
-#feed {
-  background: var(--panel);
-  border-left: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-#feed-header {
-  padding: 10px 12px 8px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-shrink: 0;
-}
-
-#feed-title {
-  font-family: var(--head);
-  font-size: 18px;
-  letter-spacing: 2px;
-  color: var(--text-bright);
-}
-
-#feed-count {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text-dim);
-}
-
-#feed-list {
-  overflow-y: auto;
-  flex: 1;
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-#feed-list::-webkit-scrollbar { width: 3px; }
-#feed-list::-webkit-scrollbar-track { background: transparent; }
-#feed-list::-webkit-scrollbar-thumb { background: var(--border2); }
-
-.incident-card {
-  padding: 8px 10px;
-  background: var(--panel2);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--border2);
-  cursor: pointer;
-  transition: all 0.15s;
-  animation: slide-in 0.3s ease;
-}
-@keyframes slide-in {
-  from { opacity: 0; transform: translateX(8px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
-.incident-card:hover {
-  border-color: var(--border2);
-  background: #14142a;
-}
-.incident-card.high { border-left-color: var(--red); }
-.incident-card.med  { border-left-color: var(--amber); }
-
-.card-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 6px;
-  margin-bottom: 4px;
-}
-
-.card-cat {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  padding: 2px 5px;
-  border: 1px solid;
-  line-height: 1;
-}
-.card-cat.high { color: var(--red); border-color: var(--red-dim); background: rgba(232,0,28,0.08); }
-.card-cat.med  { color: var(--amber); border-color: var(--amber-dim); background: rgba(232,144,10,0.08); }
-
-.card-date {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--text-dim);
-  flex-shrink: 0;
-}
-
-.card-loc {
-  font-family: var(--head);
-  font-size: 15px;
-  letter-spacing: 1px;
-  color: var(--text-bright);
-  margin-bottom: 3px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.card-desc {
-  font-size: 11px;
-  color: var(--text-dim);
-  line-height: 1.4;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-
-.card-source {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--text-dim);
-  margin-top: 4px;
-  opacity: 0.6;
-}
-
-/* No data state */
-#no-data {
-  display: none;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  gap: 12px;
-  color: var(--text-dim);
-}
-#no-data .icon { font-size: 32px; opacity: 0.3; }
-#no-data .msg { font-family: var(--mono); font-size: 11px; letter-spacing: 1px; text-align: center; }
-
-/* ===== STATUSBAR ===== */
-#statusbar {
-  grid-column: 1 / -1;
-  background: #060610;
-  border-top: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  padding: 0 16px;
-  gap: 24px;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--text-dim);
-  letter-spacing: 1px;
-}
-
-.status-item {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.status-item .key { color: var(--text-dim); }
-.status-item .val { color: var(--text); }
-
-#crawl-status-msg {
-  margin-left: auto;
-  color: var(--green);
-  transition: opacity 0.5s;
-}
-
-/* ===== TOAST ===== */
-#toast {
-  position: fixed;
-  bottom: 50px;
-  left: 50%;
-  transform: translateX(-50%) translateY(20px);
-  background: var(--panel2);
-  border: 1px solid var(--red);
-  padding: 8px 20px;
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--text);
-  opacity: 0;
-  transition: all 0.3s;
-  pointer-events: none;
-  z-index: 9998;
-  letter-spacing: 1px;
-  box-shadow: 0 0 20px var(--red-glow);
-}
-#toast.show {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-
-/* ===== DEBUG PANEL ===== */
-#debug-panel {
-  display: none;
-  position: fixed;
-  inset: 52px 0 38px 240px;
-  background: rgba(7,7,13,0.97);
-  z-index: 500;
-  padding: 24px;
-  overflow-y: auto;
-  border: 1px solid var(--border2);
-}
-#debug-panel.open { display: block; }
-#debug-close {
-  position: absolute;
-  top: 12px; right: 16px;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--red);
-  cursor: pointer;
-  letter-spacing: 1px;
-}
-.debug-title {
-  font-family: var(--head);
-  font-size: 20px;
-  letter-spacing: 2px;
-  margin-bottom: 20px;
-  color: var(--text-bright);
-}
-.debug-section {
-  margin-bottom: 20px;
-}
-.debug-section h3 {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--red);
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 4px;
-}
-.debug-output {
-  background: #030308;
-  border: 1px solid var(--border);
-  padding: 10px;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text);
-  white-space: pre-wrap;
-  min-height: 40px;
-  max-height: 200px;
-  overflow-y: auto;
-  line-height: 1.6;
-}
-.debug-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-}
-.debug-btn {
-  padding: 8px 14px;
-  background: transparent;
-  border: 1px solid var(--border2);
-  color: var(--text-dim);
-  font-family: var(--mono);
-  font-size: 11px;
-  cursor: pointer;
-  letter-spacing: 1px;
-  transition: all 0.2s;
-}
-.debug-btn:hover {
-  border-color: var(--red);
-  color: var(--red);
-  background: var(--red-glow);
-}
+/* DEBUG */
+#dbg{
+  display:none;position:fixed;inset:40px 280px 0 220px;
+  background:rgba(13,17,23,.98);z-index:200;padding:20px;
+  overflow-y:auto;border:1px solid var(--line);
+}
+#dbg.open{display:block}
+#dbg-close{
+  float:right;font-family:var(--mono);font-size:9px;
+  color:var(--t3);cursor:pointer;letter-spacing:.08em;
+}
+#dbg-close:hover{color:var(--t1)}
+.dbg-h{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.1em;color:var(--t2);text-transform:uppercase;margin:0 0 16px}
+.dbg-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.dbg-box h3{font-family:var(--mono);font-size:8px;letter-spacing:.12em;color:var(--t3);text-transform:uppercase;margin-bottom:6px}
+.dbg-out{background:var(--bg);border:1px solid var(--line);border-radius:2px;padding:8px;font-family:var(--mono);font-size:9px;color:var(--t2);white-space:pre-wrap;min-height:40px;max-height:200px;overflow-y:auto;line-height:1.6}
+.dbg-btn{padding:5px 10px;background:transparent;border:1px solid var(--line2);color:var(--t3);font-family:var(--mono);font-size:9px;cursor:pointer;letter-spacing:.08em;transition:all .15s;margin-bottom:6px;border-radius:2px}
+.dbg-btn:hover{border-color:var(--line2);color:var(--t1);background:var(--panel2)}
 </style>
 </head>
 <body>
-<div id="app">
 
-  <!-- ===== TOPBAR ===== -->
-  <div id="topbar">
-    <div class="logo-block">
-      <div class="logo-icon">▲</div>
-      <div class="logo-text">LEX EUROPE</div>
+<div id="map"></div>
+
+<!-- TOPBAR -->
+<div id="topbar">
+  <div class="tb-org">LEX EUROPE</div>
+  <div class="tb-class">OSINT · INTERN</div>
+  <div class="tb-right">
+    <div class="live"><div class="live-dot"></div>AKTIV</div>
+    <div class="tb-sep"></div>
+    <div class="tb-metric"><span class="tb-n" id="tb-total">—</span><span class="tb-l">Einträge</span></div>
+    <div class="tb-metric"><span class="tb-n" id="tb-geo" style="color:var(--t3)">—</span><span class="tb-l">Geocodiert</span></div>
+    <div class="tb-sep"></div>
+    <div id="tb-clock">—</div>
+  </div>
+</div>
+
+<!-- SIDEBAR -->
+<div id="sidebar">
+
+  <div class="sb-block">
+    <div class="sb-head">Filter</div>
+    <div class="f-row">
+      <div class="f-lbl">Land</div>
+      <select id="f-country" onchange="applyFilters()">
+        <option value="">Alle Länder</option>
+        <option value="DE">Deutschland</option>
+        <option value="AT">Österreich</option>
+        <option value="CH">Schweiz</option>
+        <option value="FR">Frankreich</option>
+        <option value="IT">Italien</option>
+        <option value="GR">Griechenland</option>
+        <option value="Andere">Andere</option>
+      </select>
     </div>
-    <div class="tagline">Threat Intelligence • Gewalttätiger Linksextremismus • DACH / Europa</div>
-    <div class="topbar-right">
-      <div class="live-badge">
-        <div class="live-dot"></div>
-        <span>LIVE</span>
-      </div>
-      <div class="stat-pill">
-        <span class="num" id="top-total">—</span>
-        <span class="label">Incidents</span>
-      </div>
-      <div class="stat-pill">
-        <span class="num" id="top-geocoded" style="color:var(--amber)">—</span>
-        <span class="label">Geocodiert</span>
-      </div>
-      <div class="time-display" id="clock">—</div>
+    <div class="f-row">
+      <div class="f-lbl">Kategorie</div>
+      <select id="f-cat" onchange="applyFilters()">
+        <option value="">Alle Kategorien</option>
+        <option value="Brandanschlag">Brandanschlag</option>
+        <option value="Sabotage">Sabotage</option>
+        <option value="Gewalt">Gewalt</option>
+        <option value="Militante Aktion">Militante Aktion</option>
+        <option value="Aufruf zu Gewalt">Aufruf zu Gewalt</option>
+        <option value="Sachbeschädigung">Sachbeschädigung</option>
+        <option value="Demo/Kundgebung">Demo / Kundgebung</option>
+        <option value="Besetzung">Besetzung</option>
+        <option value="Schmiererei">Schmiererei</option>
+      </select>
     </div>
   </div>
 
-  <!-- ===== SIDEBAR ===== -->
-  <div id="sidebar">
-
-    <!-- Filters -->
-    <div>
-      <div class="section-label">Filter</div>
-      <div class="filter-group">
-        <div class="filter-label">Land</div>
-        <select id="filter-country" onchange="applyFilters()">
-          <option value="">Alle Länder</option>
-          <option value="DE">🇩🇪 Deutschland</option>
-          <option value="AT">🇦🇹 Österreich</option>
-          <option value="CH">🇨🇭 Schweiz</option>
-          <option value="FR">🇫🇷 Frankreich</option>
-          <option value="Andere">Andere</option>
-        </select>
-      </div>
-      <div class="filter-group" style="margin-top:8px">
-        <div class="filter-label">Kategorie</div>
-        <select id="filter-cat" onchange="applyFilters()">
-          <option value="">Alle Kategorien</option>
-          <option value="Brandanschlag">Brandanschlag</option>
-          <option value="Sabotage">Sabotage</option>
-          <option value="Gewalt">Gewalt</option>
-          <option value="Militante Aktion">Militante Aktion</option>
-          <option value="Aufruf zu Gewalt">Aufruf zu Gewalt</option>
-          <option value="Schmiererei">Schmiererei</option>
-        </select>
-      </div>
-      <div class="filter-group" style="margin-top:8px">
-        <div class="filter-label">Quelle</div>
-        <select id="filter-source" onchange="applyFilters()">
-          <option value="">Alle Quellen</option>
-          <option value="de.indymedia.org">Indymedia</option>
-          <option value="barrikade.info">Barrikade</option>
-          <option value="tagesanzeiger.ch">Tagesanzeiger</option>
-        </select>
-      </div>
-    </div>
-
-    <!-- Country stats -->
-    <div>
-      <div class="section-label">Länder</div>
-      <div id="country-bars"></div>
-    </div>
-
-    <!-- Category stats -->
-    <div>
-      <div class="section-label">Kategorien</div>
-      <div class="cat-list" id="cat-list"></div>
-    </div>
-
-    <!-- Sources -->
-    <div>
-      <div class="section-label">Quellen</div>
-      <div class="source-list">
-        <div class="source-item"><div class="source-dot"></div>de.indymedia.org</div>
-        <div class="source-item"><div class="source-dot"></div>barrikade.info</div>
-        <div class="source-item"><div class="source-dot" style="background:var(--amber);box-shadow:0 0 5px var(--amber)"></div>tagesanzeiger.ch</div>
-      </div>
-    </div>
-
-    <!-- Last crawl -->
-    <div>
-      <div class="section-label">Crawler</div>
-      <div class="crawl-time" id="last-crawl-display">Lade...</div>
-    </div>
-
-    <!-- Actions -->
-    <div>
-      <div class="section-label">Aktionen</div>
-      <div class="btn-group">
-        <button class="btn" onclick="triggerCrawl()">⟳ Jetzt crawlen</button>
-        <button class="btn" onclick="toggleDebug()">⌥ Debug Panel</button>
-        <button class="btn danger" onclick="clearDB()">✕ Datenbank leeren</button>
-      </div>
-    </div>
-
+  <div class="sb-block">
+    <div class="sb-head">Länderverteilung</div>
+    <div id="sb-countries"></div>
   </div>
 
-  <!-- ===== MAP ===== -->
-  <div id="map-container">
-    <div id="map"></div>
-    <div id="map-overlay-tl">COORD SYS: WGS84 • PROJ: EPSG:3857 • TILES: CARTO DARK</div>
+  <div class="sb-block">
+    <div class="sb-head">Kategorien</div>
+    <div id="sb-cats"></div>
   </div>
 
-  <!-- ===== FEED ===== -->
-  <div id="feed">
-    <div id="feed-header">
-      <div id="feed-title">INCIDENT LOG</div>
-      <div id="feed-count">0 Einträge</div>
-    </div>
-    <div id="feed-list">
-      <div id="no-data" style="display:flex">
-        <div class="icon">◈</div>
-        <div class="msg">Lade Daten...<br>Crawler startet im Hintergrund</div>
-      </div>
-    </div>
+  <div class="sb-block">
+    <div class="sb-head">Crawl-Status</div>
+    <div class="crawl-block" id="crawl-block">—</div>
   </div>
 
-  <!-- ===== STATUSBAR ===== -->
-  <div id="statusbar">
-    <div class="status-item"><span class="key">SYS:</span><span class="val">ONLINE</span></div>
-    <div class="status-item"><span class="key">DB:</span><span class="val" id="sb-db">—</span></div>
-    <div class="status-item"><span class="key">API:</span><span class="val" id="sb-api" style="color:var(--green)">GROK-4</span></div>
-    <div class="status-item"><span class="key">REFRESH:</span><span class="val">5 MIN</span></div>
-    <div id="crawl-status-msg"></div>
+  <div class="sb-block">
+    <div class="sb-head">Aktionen</div>
+    <button class="btn" onclick="triggerCrawl()">Crawl ausführen</button>
+    <button class="btn" onclick="triggerHistorical()">Historische Daten laden</button>
+    <button class="btn" onclick="toggleDebug()">Debug-Ansicht</button>
+    <button class="btn danger" onclick="clearDB()">Datenbank zurücksetzen</button>
   </div>
 
-</div><!-- #app -->
+</div>
 
-<!-- ===== TOAST ===== -->
-<div id="toast"></div>
-
-<!-- ===== DEBUG PANEL ===== -->
-<div id="debug-panel">
-  <div id="debug-close" onclick="toggleDebug()">✕ SCHLIESSEN</div>
-  <div class="debug-title">DEBUG PANEL</div>
-  <div class="debug-grid">
-    <div class="debug-section">
-      <h3>Grok API Test</h3>
-      <button class="debug-btn" onclick="testGrok()">▸ Grok testen</button>
-      <div class="debug-output" id="grok-output">—</div>
-    </div>
-    <div class="debug-section">
-      <h3>Stats</h3>
-      <div class="debug-output" id="stats-output">—</div>
-    </div>
-    <div class="debug-section">
-      <h3>Letzte 5 Incidents</h3>
-      <div class="debug-output" id="recent-output">—</div>
+<!-- FEED -->
+<div id="feed">
+  <div id="feed-header">
+    <div id="feed-title">Ereignisprotokoll</div>
+    <div id="feed-cnt">—</div>
+  </div>
+  <div id="feed-list">
+    <div id="empty" style="display:flex">
+      <div id="empty-t">Keine Daten<br>Crawler startet automatisch</div>
     </div>
   </div>
 </div>
 
-<div id="clock-worker"></div>
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- DEBUG -->
+<div id="dbg">
+  <span id="dbg-close" onclick="toggleDebug()">Schliessen ×</span>
+  <div class="dbg-h">Debug-Ansicht</div>
+  <div class="dbg-grid">
+    <div class="dbg-box">
+      <h3>Grok API</h3>
+      <button class="dbg-btn" onclick="testGrok()">Test ausführen</button>
+      <div class="dbg-out" id="dbg-grok">—</div>
+    </div>
+    <div class="dbg-box">
+      <h3>Statistik</h3>
+      <div class="dbg-out" id="dbg-stats">—</div>
+    </div>
+    <div class="dbg-box">
+      <h3>Letzte Einträge</h3>
+      <div class="dbg-out" id="dbg-recent">—</div>
+    </div>
+  </div>
+</div>
 
 <script>
-// ===== STATE =====
-let allIncidents = [];
-let map, markersLayer;
-const HIGH_CATS = ["Brandanschlag","Sabotage","Gewalt","Militante Aktion","Aufruf zu Gewalt"];
+const HIGH = ["Brandanschlag","Sabotage","Gewalt","Militante Aktion","Aufruf zu Gewalt"];
+let all=[], map, markers;
 
-const FLAG = {DE:"🇩🇪",AT:"🇦🇹",CH:"🇨🇭",FR:"🇫🇷",IT:"🇮🇹",Andere:"🌍"};
+// MAP
+map = L.map('map',{center:[49.5,11],zoom:5,zoomControl:false,attributionControl:false});
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(map);
+L.control.zoom({position:'bottomright'}).addTo(map);
+markers = L.layerGroup().addTo(map);
 
-// ===== MAP INIT =====
-function initMap() {
-  map = L.map('map', {
-    center: [49.5, 11.0],
-    zoom: 5,
-    zoomControl: false,
-    attributionControl: false
+function mkIcon(isH){
+  const col = isH ? '#c0392b' : '#e67e22';
+  return L.divIcon({
+    className:'',
+    html:`<div style="width:8px;height:8px;border-radius:50%;background:${col};border:1px solid rgba(255,255,255,.2)"></div>`,
+    iconSize:[8,8],iconAnchor:[4,4]
   });
-
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    maxZoom: 19
-  }).addTo(map);
-
-  L.control.zoom({ position: 'bottomright' }).addTo(map);
-
-  markersLayer = L.layerGroup().addTo(map);
 }
 
-// ===== CUSTOM MARKERS =====
-function makeMarker(lat, lon, incident) {
-  const isHigh = HIGH_CATS.includes(incident.category);
-  const color = isHigh ? '#e8001c' : '#e8900a';
-  const glow  = isHigh ? 'rgba(232,0,28,0.4)' : 'rgba(232,144,10,0.4)';
-
-  const icon = L.divIcon({
-    className: '',
-    html: `<div style="
-      width:12px;height:12px;
-      border-radius:50%;
-      background:${color};
-      box-shadow:0 0 8px ${glow},0 0 16px ${glow};
-      border:1px solid rgba(255,255,255,0.3);
-      animation: pulse-marker 2s ease-in-out infinite;
-    "></div>
-    <style>@keyframes pulse-marker{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.3);opacity:0.7}}</style>`,
-    iconSize: [12, 12],
-    iconAnchor: [6, 6]
-  });
-
-  const catClass = isHigh ? 'high' : 'med';
-  const popup = `
-    <div class="popup-date">${incident.date || '—'} · ${incident.source || ''}</div>
-    <div class="popup-loc">${incident.location || 'Unbekannt'}, ${incident.country || '—'}</div>
-    <div class="popup-cat ${catClass}">${incident.category}</div>
-    <div class="popup-desc">${(incident.description || '').substring(0,240)}...</div>
-    ${incident.url ? `<a class="popup-link" href="${incident.url}" target="_blank">▸ QUELLE ÖFFNEN</a>` : ''}
-  `;
-
-  return L.marker([lat, lon], { icon })
-    .bindPopup(popup, { maxWidth: 300, className: 'lex-popup' });
-}
-
-// ===== RENDER INCIDENTS =====
-function renderIncidents(incidents) {
-  markersLayer.clearLayers();
-  const list = document.getElementById('feed-list');
-  const noData = document.getElementById('no-data');
-
-  // Remove old cards
-  Array.from(list.querySelectorAll('.incident-card')).forEach(c => c.remove());
-
-  if (incidents.length === 0) {
-    noData.style.display = 'flex';
-    document.getElementById('feed-count').textContent = '0 Einträge';
+function render(list){
+  markers.clearLayers();
+  document.querySelectorAll('.card').forEach(c=>c.remove());
+  const empty=document.getElementById('empty');
+  const cnt=document.getElementById('feed-cnt');
+  if(!list.length){
+    empty.style.display='flex';
+    cnt.textContent='0 Einträge';
     return;
   }
-  noData.style.display = 'none';
-  document.getElementById('feed-count').textContent = `${incidents.length} Einträge`;
-
-  incidents.forEach(inc => {
-    // Map marker
-    if (inc.lat && inc.lon && !isNaN(inc.lat) && !isNaN(inc.lon)) {
-      makeMarker(inc.lat, inc.lon, inc).addTo(markersLayer);
+  empty.style.display='none';
+  cnt.textContent=list.length+' Einträge';
+  const fl=document.getElementById('feed-list');
+  list.forEach(inc=>{
+    const isH=HIGH.includes(inc.category);
+    // marker
+    if(inc.lat&&inc.lon&&!isNaN(+inc.lat)&&!isNaN(+inc.lon)){
+      const cl=isH?'h':'m';
+      const pop=`<div class="p-label">${inc.date||'—'}</div>
+        <div class="p-loc">${inc.location||'Unbekannt'}, ${inc.country||'—'}</div>
+        <span class="p-cat ${cl}">${inc.category}</span>
+        <div class="p-desc">${(inc.description||'').substring(0,260)}</div>
+        ${inc.url?`<a class="p-link" href="${inc.url}" target="_blank">Quelle →</a>`:''}`;
+      L.marker([+inc.lat,+inc.lon],{icon:mkIcon(isH)})
+        .bindPopup(pop,{maxWidth:290}).addTo(markers);
     }
-
-    // Feed card
-    const isHigh = HIGH_CATS.includes(inc.category);
-    const card = document.createElement('div');
-    card.className = `incident-card ${isHigh ? 'high' : 'med'}`;
-    card.innerHTML = `
-      <div class="card-top">
-        <span class="card-cat ${isHigh ? 'high' : 'med'}">${inc.category}</span>
-        <span class="card-date">${inc.date || '—'}</span>
+    // card
+    const c=document.createElement('div');
+    c.className='card '+(isH?'h':'m');
+    c.innerHTML=`
+      <div class="card-meta">
+        <span class="card-cat ${isH?'h':'m'}">${inc.category}</span>
+        <span class="card-date">${inc.date||'—'}</span>
       </div>
-      <div class="card-loc">${FLAG[inc.country] || '🌍'} ${inc.location || 'Unbekannt'}, ${inc.country || '—'}</div>
-      <div class="card-desc">${inc.description || ''}</div>
-      <div class="card-source">${inc.source || ''}</div>
-    `;
-    card.onclick = () => {
-      if (inc.lat && inc.lon) {
-        map.setView([inc.lat, inc.lon], 10, { animate: true });
-      }
-    };
-    list.appendChild(card);
+      <div class="card-loc">${inc.location||'Unbekannt'}, ${inc.country||'—'}</div>
+      <div class="card-desc">${inc.description||'—'}</div>`;
+    c.onclick=()=>{if(inc.lat&&inc.lon)map.setView([+inc.lat,+inc.lon],11,{animate:true})};
+    fl.appendChild(c);
   });
 }
 
-// ===== APPLY FILTERS =====
-function applyFilters() {
-  const country = document.getElementById('filter-country').value;
-  const cat     = document.getElementById('filter-cat').value;
-  const source  = document.getElementById('filter-source').value;
-  const filtered = allIncidents.filter(inc => {
-    if (country && inc.country !== country) return false;
-    if (cat && inc.category !== cat) return false;
-    if (source && inc.source !== source) return false;
+function applyFilters(){
+  const co=document.getElementById('f-country').value;
+  const ca=document.getElementById('f-cat').value;
+  render(all.filter(i=>{
+    if(co&&i.country!==co)return false;
+    if(ca&&i.category!==ca)return false;
     return true;
-  });
-  renderIncidents(filtered);
+  }));
 }
 
-// ===== LOAD STATS =====
-async function loadStats() {
-  try {
-    const r = await fetch('/api/stats');
-    const s = await r.json();
+async function loadStats(){
+  try{
+    const s=await fetch('/api/stats').then(r=>r.json());
+    document.getElementById('tb-total').textContent=s.total;
+    document.getElementById('tb-geo').textContent=s.geocoded;
 
-    document.getElementById('top-total').textContent = s.total;
-    document.getElementById('top-geocoded').textContent = s.geocoded;
-    document.getElementById('sb-db').textContent = s.total + ' rows';
+    // crawl info
+    const lc=s.last_crawl
+      ? new Date(s.last_crawl).toLocaleString('de-CH',{timeZone:'Europe/Zurich',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
+      : '—';
+    document.getElementById('crawl-block').innerHTML=
+      `LETZTER CRAWL<br><span>${lc}</span><br><br>`+
+      `BARRIKADE HIST.<br><span>${s.hist_barrikade?'Abgeschlossen':'Ausstehend'}</span><br><br>`+
+      `INDYMEDIA HIST.<br><span>${s.hist_indymedia?'Abgeschlossen':'Ausstehend'}</span>`;
 
-    // Last crawl
-    const lc = document.getElementById('last-crawl-display');
-    if (s.last_crawl) {
-      const d = new Date(s.last_crawl);
-      lc.textContent = 'Letzter Crawl: ' + d.toLocaleString('de-DE', {timeZone:'Europe/Zurich'});
-    } else {
-      lc.textContent = 'Kein Crawl durchgeführt';
-    }
+    // country bars
+    const mx=s.by_country[0]?.n||1;
+    document.getElementById('sb-countries').innerHTML=s.by_country.slice(0,7).map(c=>`
+      <div>
+        <div class="bar-row"><span class="bar-name">${c.country||'Unbekannt'}</span><span class="bar-n">${c.n}</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${Math.round(c.n/mx*100)}%"></div></div>
+      </div>`).join('');
 
-    // Country bars
-    const maxN = s.by_country[0]?.n || 1;
-    const barEl = document.getElementById('country-bars');
-    barEl.innerHTML = s.by_country.slice(0,6).map(c => `
-      <div class="stat-bar-item">
-        <div class="stat-bar-row">
-          <span class="stat-bar-name">${FLAG[c.country]||'🌍'} ${c.country || 'Unbekannt'}</span>
-          <span class="stat-bar-count">${c.n}</span>
-        </div>
-        <div class="bar-track">
-          <div class="bar-fill" style="width:${Math.round(c.n/maxN*100)}%"></div>
-        </div>
-      </div>
-    `).join('');
-
-    // Category list
-    const catEl = document.getElementById('cat-list');
-    catEl.innerHTML = s.by_cat.slice(0,8).map(c => {
-      const isHigh = HIGH_CATS.includes(c.category);
-      return `<div class="cat-item ${isHigh?'high':'med'}">
-        <span class="cat-name">${c.category}</span>
-        <span class="cat-count">${c.n}</span>
-      </div>`;
+    // category list
+    document.getElementById('sb-cats').innerHTML=s.by_cat.slice(0,10).map(c=>{
+      const isH=HIGH.includes(c.category);
+      return`<div class="cat-row"><div class="cat-dot ${isH?'h':'m'}"></div><span class="cat-name">${c.category}</span><span class="cat-cnt">${c.n}</span></div>`;
     }).join('');
 
-    // Debug stats
-    document.getElementById('stats-output').textContent =
-      `Total: ${s.total}\nGeocoded: ${s.geocoded}\n\nBy Country:\n` +
-      s.by_country.map(c => `  ${c.country}: ${c.n}`).join('\n') +
-      `\n\nBy Source:\n` +
-      s.by_source.map(c => `  ${c.source}: ${c.n}`).join('\n');
-
-  } catch(e) {
-    console.error('Stats error:', e);
-  }
+    // debug
+    document.getElementById('dbg-stats').textContent=
+      `Gesamt: ${s.total}\nGeocoded: ${s.geocoded}\n\nLänder:\n`+
+      s.by_country.map(c=>`  ${c.country}: ${c.n}`).join('\n')+
+      `\n\nQuellen:\n`+s.by_source.map(c=>`  ${c.source}: ${c.n}`).join('\n');
+  }catch(e){console.error(e)}
 }
 
-// ===== LOAD INCIDENTS =====
-async function loadIncidents() {
-  try {
-    const r = await fetch('/api/incidents');
-    allIncidents = await r.json();
+async function loadIncidents(){
+  try{
+    all=await fetch('/api/incidents').then(r=>r.json());
     applyFilters();
-
-    // Debug: last 5
-    document.getElementById('recent-output').textContent =
-      allIncidents.slice(0,5).map(i =>
-        `${i.date} | ${i.category}\n${i.location}, ${i.country}\n${(i.description||'').substring(0,80)}...\n`
-      ).join('\n---\n');
-  } catch(e) {
-    console.error('Incidents error:', e);
-  }
+    document.getElementById('dbg-recent').textContent=all.slice(0,8).map(i=>
+      `${i.date} | ${i.category}\n${i.location}, ${i.country}\n${(i.description||'').substring(0,70)}\n`
+    ).join('---\n');
+  }catch(e){console.error(e)}
 }
 
-// ===== TRIGGER CRAWL =====
-async function triggerCrawl() {
-  const msg = document.getElementById('crawl-status-msg');
-  msg.textContent = '⟳ Crawl gestartet...';
-  showToast('Crawler gestartet — läuft im Hintergrund');
-  try {
-    await fetch('/api/crawl', { method: 'POST' });
-    msg.textContent = '✓ Crawl läuft';
-    setTimeout(() => { msg.textContent = ''; }, 10000);
-  } catch(e) {
-    msg.textContent = '✕ Fehler';
-    console.error(e);
-  }
+async function triggerCrawl(){
+  await fetch('/api/crawl',{method:'POST'});
+  showToast('Crawler gestartet');
+}
+async function triggerHistorical(){
+  await fetch('/api/crawl-historical',{method:'POST'});
+  showToast('Historischer Crawl gestartet — läuft im Hintergrund');
+}
+async function clearDB(){
+  if(!confirm('Alle Daten löschen?'))return;
+  await fetch('/api/clear',{method:'POST'});
+  all=[];render([]);loadStats();showToast('Datenbank zurückgesetzt');
+}
+async function testGrok(){
+  document.getElementById('dbg-grok').textContent='Wird ausgeführt...';
+  try{
+    const d=await fetch('/api/grok-test',{method:'POST'}).then(r=>r.json());
+    document.getElementById('dbg-grok').textContent=JSON.stringify(d,null,2);
+  }catch(e){document.getElementById('dbg-grok').textContent='Fehler: '+e.message}
+}
+function toggleDebug(){document.getElementById('dbg').classList.toggle('open')}
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+function updateClock(){
+  document.getElementById('tb-clock').textContent=
+    new Date().toLocaleTimeString('de-CH',{timeZone:'Europe/Zurich',hour:'2-digit',minute:'2-digit',second:'2-digit'});
 }
 
-// ===== CLEAR DB =====
-async function clearDB() {
-  if (!confirm('Datenbank wirklich leeren?')) return;
-  await fetch('/api/clear', { method: 'POST' });
-  allIncidents = [];
-  renderIncidents([]);
-  loadStats();
-  showToast('Datenbank geleert');
-}
-
-// ===== GROK TEST =====
-async function testGrok() {
-  document.getElementById('grok-output').textContent = 'Teste Grok API...';
-  try {
-    const r = await fetch('/api/grok-test', { method: 'POST' });
-    const d = await r.json();
-    document.getElementById('grok-output').textContent = JSON.stringify(d, null, 2);
-  } catch(e) {
-    document.getElementById('grok-output').textContent = 'Fehler: ' + e.message;
-  }
-}
-
-// ===== DEBUG PANEL =====
-function toggleDebug() {
-  document.getElementById('debug-panel').classList.toggle('open');
-  if (document.getElementById('debug-panel').classList.contains('open')) {
-    loadStats();
-  }
-}
-
-// ===== TOAST =====
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 3000);
-}
-
-// ===== CLOCK =====
-function updateClock() {
-  const now = new Date();
-  document.getElementById('clock').textContent =
-    now.toLocaleTimeString('de-CH', {timeZone:'Europe/Zurich', hour:'2-digit', minute:'2-digit', second:'2-digit'});
-}
-
-// ===== INIT =====
-initMap();
-loadStats();
-loadIncidents();
-updateClock();
-
-setInterval(updateClock, 1000);
-setInterval(() => { loadStats(); loadIncidents(); }, 5 * 60 * 1000); // refresh every 5 min
+loadStats();loadIncidents();updateClock();
+setInterval(updateClock,1000);
+setInterval(()=>{loadStats();loadIncidents()},5*60*1000);
 </script>
 </body>
 </html>
+
