@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LEX EUROPE — Anmelden</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0c0f;--surface:#111318;--border:#1e2229;--border2:#252b34;
+  --red:#b91c1c;--red2:#dc2626;--t1:#f1f3f5;--t2:#9ba3ae;--t3:#4b5563;
+  --sans:'Inter',sans-serif;--mono:'JetBrains Mono',monospace;
+}
+html,body{height:100%;background:var(--bg);font-family:var(--sans);color:var(--t1);display:flex;align-items:center;justify-content:center;}
+.box{width:360px;background:var(--surface);border:1px solid var(--border);padding:36px;}
+.brand{margin-bottom:28px;}
+.brand-name{font-size:16px;font-weight:600;letter-spacing:.06em;color:var(--t1);}
+.brand-sub{font-size:10px;color:var(--t3);letter-spacing:.04em;margin-top:3px;}
+.field{margin-bottom:16px;}
+label{display:block;font-size:10px;font-weight:500;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;}
+input{width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--t1);padding:8px 10px;font-family:var(--mono);font-size:12px;outline:none;border-radius:3px;transition:border-color .15s;}
+input:focus{border-color:var(--t3);}
+.error{background:rgba(185,28,28,.1);border:1px solid rgba(185,28,28,.3);color:var(--red2);font-size:11px;padding:8px 10px;margin-bottom:16px;border-radius:3px;}
+button{width:100%;padding:9px;background:var(--surface);border:1px solid var(--border2);color:var(--t2);font-family:var(--sans);font-size:12px;font-weight:500;cursor:pointer;border-radius:3px;transition:all .15s;margin-top:4px;}
+button:hover{background:var(--border);border-color:var(--t3);color:var(--t1);}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="brand">
+    <div class="brand-name">LEX EUROPE</div>
+    <div class="brand-sub">Systemzugang — nur autorisiertes Personal</div>
+  </div>
+  {% if error %}
+  <div class="error">{{ error }}</div>
+  {% endif %}
+  <form method="post" action="/admin/login">
+    <div class="field">
+      <label>Benutzername</label>
+      <input type="text" name="username" autocomplete="username" required autofocus>
+    </div>
+    <div class="field">
+      <label>Passwort</label>
+      <input type="password" name="password" autocomplete="current-password" required>
+    </div>
+    <button type="submit">Anmelden</button>
+  </form>
+</div>
+</body>
+</html>
