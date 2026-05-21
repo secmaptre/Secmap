@@ -9,19 +9,193 @@
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --bg: #0a0c0f; --surface: #111318; --surface2: #161a20; --border: #1e2229;
-  --accent: #b91c1c; --accent2: #dc2626; --warn: #d97706; --ok: #16a34a;
-  --t1: #f1f3f5; --t2: #9ba3ae; --t3: #4b5563;
+  --bg:      #0a0c0f;
+  --surface: #111318;
+  --surf2:   #161a20;
+  --border:  #1e2229;
+  --border2: #252b34;
+  --red:     #b91c1c;
+  --red2:    #dc2626;
+  --amber:   #d97706;
+  --green:   #16a34a;
+  --t1:      #f1f3f5;
+  --t2:      #9ba3ae;
+  --t3:      #4b5563;
+  --mono:    'JetBrains Mono', monospace;
+  --sans:    'Inter', sans-serif;
 }
-html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--t1); font-family: 'Inter', sans-serif; }
-#map { position: fixed; inset: 0; z-index: 0; }
-#topbar { position: fixed; top: 0; left: 0; right: 0; height: 44px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; z-index: 200; }
-.tb-wordmark { font-size: 15px; font-weight: 600; color: var(--t1); }
-#admin { display: none; position: fixed; inset: 44px 20px 20px 20px; background: rgba(10,12,15,0.98); border: 1px solid #333; padding: 20px; z-index: 300; overflow-y: auto; }
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--t1);
+  font-family: var(--sans);
+  font-size: 12px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* MAP — full screen base layer */
+#map {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+/* TOPBAR */
+#topbar {
+  position: fixed;
+  top: 0; left: 0; right: 0; height: 44px;
+  z-index: 400;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 20px; gap: 0;
+}
+.tb-brand {
+  padding-right: 20px; margin-right: 20px;
+  border-right: 1px solid var(--border2);
+}
+.tb-wordmark { font-size: 13px; font-weight: 600; letter-spacing: .06em; color: var(--t1); }
+.tb-sub { font-size: 9px; color: var(--t3); letter-spacing: .04em; margin-top: 1px; }
+.tb-live {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 9px; color: var(--t3); letter-spacing: .05em;
+}
+.live-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); }
+.tb-metrics {
+  margin-left: auto; display: flex; align-items: center; gap: 24px;
+}
+.metric { text-align: right; }
+.metric-val { font-family: var(--mono); font-size: 16px; font-weight: 500; color: var(--t1); display: block; line-height: 1; }
+.metric-lbl { font-size: 9px; color: var(--t3); text-transform: uppercase; letter-spacing: .06em; }
+.tb-div { width: 1px; height: 20px; background: var(--border2); }
+#tb-time { font-family: var(--mono); font-size: 11px; color: var(--t3); letter-spacing: .03em; min-width: 64px; text-align: right; }
+
+/* LEFT PANEL */
+#left {
+  position: fixed; top: 44px; left: 0; bottom: 0; width: 240px;
+  z-index: 300;
+  background: var(--surface); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.panel-sec { padding: 14px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.panel-sec.grow { flex: 1; overflow-y: auto; }
+.panel-sec.grow::-webkit-scrollbar { width: 2px; }
+.panel-sec.grow::-webkit-scrollbar-thumb { background: var(--border2); }
+.sec-hd { font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--t3); margin-bottom: 10px; }
+
+/* Filters */
+.f-row { margin-bottom: 9px; }
+.f-row:last-child { margin-bottom: 0; }
+.f-lbl { font-size: 9px; font-weight: 500; color: var(--t3); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 3px; display: block; }
+select {
+  width: 100%; background: var(--bg); border: 1px solid var(--border2);
+  color: var(--t2); padding: 5px 24px 5px 8px;
+  font-family: var(--sans); font-size: 11px;
+  outline: none; cursor: pointer; appearance: none; border-radius: 3px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%234b5563'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 8px center;
+  transition: border-color .15s;
+}
+select:focus { border-color: var(--t3); }
+
+/* Bars */
+.bar-item { margin-bottom: 9px; }
+.bar-item:last-child { margin-bottom: 0; }
+.bar-hd { display: flex; justify-content: space-between; margin-bottom: 4px; }
+.bar-nm { font-size: 11px; color: var(--t2); }
+.bar-n  { font-family: var(--mono); font-size: 10px; color: var(--t3); }
+.bar-track { height: 2px; background: var(--border2); border-radius: 1px; }
+.bar-fill  { height: 100%; background: var(--t3); opacity: .7; border-radius: 1px; transition: width .4s; }
+
+/* Category rows */
+.cat-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.cat-row:last-child { border-bottom: none; }
+.cat-sw { width: 3px; height: 12px; border-radius: 1px; flex-shrink: 0; }
+.cat-sw.h { background: var(--red); }
+.cat-sw.m { background: var(--amber); }
+.cat-sw.l { background: var(--t3); }
+.cat-nm { font-size: 10px; color: var(--t2); flex: 1; }
+.cat-n  { font-family: var(--mono); font-size: 10px; color: var(--t3); }
+
+/* RIGHT PANEL */
+#right {
+  position: fixed; top: 44px; right: 0; bottom: 0; width: 300px;
+  z-index: 300;
+  background: var(--surface); border-left: 1px solid var(--border);
+  display: flex; flex-direction: column;
+}
+#right-hd {
+  padding: 11px 16px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+}
+.right-title { font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--t3); }
+#feed-cnt { font-family: var(--mono); font-size: 9px; color: var(--t3); }
+#feed { flex: 1; overflow-y: auto; }
+#feed::-webkit-scrollbar { width: 3px; }
+#feed::-webkit-scrollbar-thumb { background: var(--border2); }
+
+.incident {
+  padding: 11px 16px; border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background .1s;
+  border-left: 2px solid transparent;
+}
+.incident:hover { background: var(--surf2); }
+.incident.h { border-left-color: var(--red); }
+.incident.m { border-left-color: var(--amber); }
+.incident.l { border-left-color: var(--border2); }
+.inc-hd { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 3px; }
+.inc-type { font-size: 9px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.inc-type.h { color: var(--red2); }
+.inc-type.m { color: var(--amber); }
+.inc-type.l { color: var(--t3); }
+.inc-date { font-family: var(--mono); font-size: 9px; color: var(--t3); flex-shrink: 0; }
+.inc-loc  { font-size: 12px; font-weight: 500; color: var(--t1); margin-bottom: 3px; }
+.inc-txt  { font-size: 10px; color: var(--t3); line-height: 1.5; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
+#feed-empty { display: none; flex-direction: column; align-items: center; justify-content: center; height: 100%; }
+#feed-empty p { font-size: 10px; color: var(--t3); text-align: center; }
+
+/* POPUP */
+.leaflet-popup-content-wrapper {
+  background: var(--surface); border: 1px solid var(--border2);
+  border-radius: 3px; color: var(--t1);
+  font-family: var(--sans); box-shadow: 0 4px 24px rgba(0,0,0,.7); padding: 0;
+}
+.leaflet-popup-content { margin: 0; width: 280px !important; }
+.leaflet-popup-tip { background: var(--border2); }
+.leaflet-container a.leaflet-popup-close-button { color: var(--t3); top: 8px; right: 8px; }
+.pop { padding: 14px 16px; }
+.pop-type { font-size: 9px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 3px; }
+.pop-type.h { color: var(--red2); }
+.pop-type.m { color: var(--amber); }
+.pop-loc  { font-size: 14px; font-weight: 600; color: var(--t1); margin-bottom: 2px; }
+.pop-meta { font-family: var(--mono); font-size: 9px; color: var(--t3); margin-bottom: 10px; }
+.pop-desc { font-size: 10px; color: var(--t2); line-height: 1.6; border-top: 1px solid var(--border); padding-top: 10px; margin-bottom: 10px; }
+.pop-src  { font-family: var(--mono); font-size: 9px; color: var(--red); text-decoration: none; border-bottom: 1px solid rgba(185,28,28,.3); }
+
+/* ADMIN */
+#admin {
+  display: none; position: fixed; inset: 44px 300px 0 240px;
+  z-index: 500; background: rgba(10,12,15,.97);
+  border: 1px solid var(--border2); padding: 24px; overflow-y: auto;
+}
 #admin.open { display: block; }
-.admin-btn { padding: 10px 16px; margin: 5px; background: #222; border: 1px solid #444; color: #ddd; cursor: pointer; }
-.admin-btn:hover { background: #333; }
-.log { background: #111; padding: 10px; margin: 10px 0; font-family: monospace; white-space: pre-wrap; max-height: 300px; overflow: auto; }
+.adm-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.adm-title { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--t2); }
+.adm-close { font-size: 10px; color: var(--t3); cursor: pointer; font-family: var(--mono); }
+.adm-close:hover { color: var(--t1); }
+.adm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+.adm-box h3 { font-size: 9px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--t3); margin-bottom: 7px; }
+.adm-out { background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 9px; font-family: var(--mono); font-size: 9px; color: var(--t2); white-space: pre-wrap; min-height: 44px; max-height: 160px; overflow-y: auto; line-height: 1.7; }
+.adm-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.adm-btn { padding: 6px 14px; background: transparent; border: 1px solid var(--border2); color: var(--t2); font-family: var(--sans); font-size: 11px; font-weight: 500; cursor: pointer; border-radius: 3px; transition: all .15s; }
+.adm-btn:hover { background: var(--surf2); border-color: var(--t3); color: var(--t1); }
+.adm-btn.d:hover { border-color: var(--red); color: var(--red2); }
+.adm-note { font-size: 9px; color: var(--t3); margin-top: 12px; font-family: var(--mono); }
 </style>
 </head>
 <body>
@@ -29,83 +203,237 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 <div id="map"></div>
 
 <div id="topbar">
-  <div class="tb-wordmark">LEX EUROPE</div>
-  <div style="margin-left:auto; font-size:13px; color:#666;">DACH Threat Map</div>
+  <div class="tb-brand">
+    <div class="tb-wordmark">LEX EUROPE</div>
+    <div class="tb-sub">Gewalttätiger Linksextremismus · DACH-Region</div>
+  </div>
+  <div class="tb-live">
+    <div class="live-dot"></div>AKTIV
+  </div>
+  <div class="tb-metrics">
+    <div class="metric">
+      <span class="metric-val" id="tb-total">—</span>
+      <span class="metric-lbl">Einträge</span>
+    </div>
+    <div class="tb-div"></div>
+    <div class="metric">
+      <span class="metric-val" id="tb-geo" style="color:var(--t3)">—</span>
+      <span class="metric-lbl">Geocodiert</span>
+    </div>
+    <div class="tb-div"></div>
+    <div id="tb-time">—</div>
+  </div>
 </div>
 
-<!-- ADMIN PANEL -->
+<div id="left">
+  <div class="panel-sec">
+    <div class="sec-hd">Filter</div>
+    <div class="f-row">
+      <label class="f-lbl">Land</label>
+      <select id="f-country" onchange="applyFilters()">
+        <option value="">Alle Länder</option>
+        <option value="DE">Deutschland</option>
+        <option value="AT">Österreich</option>
+        <option value="CH">Schweiz</option>
+        <option value="FR">Frankreich</option>
+        <option value="IT">Italien</option>
+        <option value="GR">Griechenland</option>
+        <option value="Andere">Andere</option>
+      </select>
+    </div>
+    <div class="f-row">
+      <label class="f-lbl">Kategorie</label>
+      <select id="f-cat" onchange="applyFilters()">
+        <option value="">Alle Kategorien</option>
+        <option value="Brandanschlag">Brandanschlag</option>
+        <option value="Sabotage">Sabotage</option>
+        <option value="Gewalt">Gewalt</option>
+        <option value="Militante Aktion">Militante Aktion</option>
+        <option value="Aufruf zu Gewalt">Aufruf zu Gewalt</option>
+        <option value="Sachbeschädigung">Sachbeschädigung</option>
+        <option value="Demo/Kundgebung">Demo / Kundgebung</option>
+        <option value="Besetzung">Besetzung</option>
+        <option value="Repression">Repression</option>
+        <option value="Schmiererei">Schmiererei</option>
+      </select>
+    </div>
+  </div>
+  <div class="panel-sec">
+    <div class="sec-hd">Länderverteilung</div>
+    <div id="dist-countries"></div>
+  </div>
+  <div class="panel-sec grow">
+    <div class="sec-hd">Kategorien</div>
+    <div id="dist-cats"></div>
+  </div>
+</div>
+
+<div id="right">
+  <div id="right-hd">
+    <span class="right-title">Ereignisprotokoll</span>
+    <span id="feed-cnt">—</span>
+  </div>
+  <div id="feed">
+    <div id="feed-empty" style="display:flex">
+      <p>Keine Ereignisse vorhanden.<br>Crawler läuft automatisch.</p>
+    </div>
+  </div>
+</div>
+
 <div id="admin">
-  <h2>Systemverwaltung</h2>
-  <button class="admin-btn" onclick="adminCrawl()">🚀 Crawl ausführen</button>
-  <button class="admin-btn" onclick="adminHistorical()">🔄 Historisch neu laden</button>
-  <button class="admin-btn" onclick="adminGrokTest()">Grok testen</button>
-  <button class="admin-btn" onclick="adminClear()" style="color:#f66;">🗑️ Datenbank zurücksetzen</button>
-  <button class="admin-btn" onclick="adminClose()" style="float:right;">Schließen</button>
-
-  <div class="log" id="admin-log">Bereit...</div>
+  <div class="adm-hd">
+    <span class="adm-title">Systemverwaltung</span>
+    <span class="adm-close" onclick="adminClose()">Schliessen ×</span>
+  </div>
+  <div class="adm-grid">
+    <div class="adm-box"><h3>Crawler-Status</h3><div class="adm-out" id="adm-status">—</div></div>
+    <div class="adm-box"><h3>Grok API</h3><div class="adm-out" id="adm-grok">—</div></div>
+    <div class="adm-box"><h3>Quellen</h3><div class="adm-out" id="adm-sources">—</div></div>
+    <div class="adm-box"><h3>Letzte Einträge</h3><div class="adm-out" id="adm-recent">—</div></div>
+  </div>
+  <div class="adm-actions">
+    <button class="adm-btn" onclick="adminCrawl()">Crawl ausführen</button>
+    <button class="adm-btn" onclick="adminHistorical()">Historisch neu laden (ab 2023)</button>
+    <button class="adm-btn" onclick="adminGrokTest()">Grok testen</button>
+    <button class="adm-btn d" onclick="adminClear()">Datenbank zurücksetzen</button>
+  </div>
+  <div class="adm-note">Tastenkürzel: Ctrl + Shift + A</div>
 </div>
 
+<!-- Leaflet MUST load before our script -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-let map, allData = [];
+const HIGH = new Set(["Brandanschlag","Sabotage","Gewalt","Militante Aktion","Aufruf zu Gewalt"]);
+const MED  = new Set(["Sachbeschädigung","Repression","Verhaftung","Besetzung","Schmiererei"]);
+const sev  = c => HIGH.has(c) ? "h" : MED.has(c) ? "m" : "l";
 
-// Admin Panel
-function adminOpen() { document.getElementById("admin").classList.add("open"); loadStats(); }
-function adminClose() { document.getElementById("admin").classList.remove("open"); }
+let allData = [], map, mg;
 
-document.addEventListener("keydown", e => {
-  if (e.ctrlKey && e.shiftKey && e.key.toUpperCase() === "A") {
-    e.preventDefault();
-    document.getElementById("admin").classList.contains("open") ? adminClose() : adminOpen();
-  }
-});
+// ── INIT MAP ──
+map = L.map("map", { center:[49.5,11], zoom:5, zoomControl:false, attributionControl:false });
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png", { maxZoom:19 }).addTo(map);
+L.control.zoom({ position:"bottomright" }).addTo(map);
+mg = L.layerGroup().addTo(map);
 
-async function apiCall(url, method = "GET") {
-  const logEl = document.getElementById("admin-log");
-  try {
-    const res = await fetch(url, { method });
-    const data = await res.json();
-    logEl.textContent += `\n→ ${method} ${url}\n${JSON.stringify(data, null, 2)}\n`;
-    return data;
-  } catch(e) {
-    logEl.textContent += `\n❌ Fehler bei ${url}: ${e.message}\n`;
-  }
+function mkIcon(s) {
+  const c = s==="h" ? "#b91c1c" : s==="m" ? "#d97706" : "#4b5563";
+  return L.divIcon({
+    className:"",
+    html:`<div style="width:8px;height:8px;border-radius:50%;background:${c};border:1px solid rgba(255,255,255,.15)"></div>`,
+    iconSize:[8,8], iconAnchor:[4,4]
+  });
 }
 
-async function adminCrawl() {
-  await apiCall("/api/crawl", "POST");
-  setTimeout(loadStats, 2000);
+function render(list) {
+  mg.clearLayers();
+  document.querySelectorAll(".incident").forEach(n=>n.remove());
+  document.getElementById("feed-cnt").textContent = list.length + " Einträge";
+  const empty = document.getElementById("feed-empty");
+  if (!list.length) { empty.style.display="flex"; return; }
+  empty.style.display = "none";
+  const feed = document.getElementById("feed");
+
+  list.forEach(inc => {
+    const s = sev(inc.category);
+    if (inc.lat && inc.lon && !isNaN(+inc.lat) && !isNaN(+inc.lon)) {
+      const pop =
+        `<div class="pop">
+           <div class="pop-type ${s}">${inc.category}</div>
+           <div class="pop-loc">${inc.location||"Unbekannt"}, ${inc.country||"—"}</div>
+           <div class="pop-meta">${inc.date||"—"}</div>
+           <div class="pop-desc">${(inc.description||"").substring(0,300)}</div>
+           ${inc.url?`<a class="pop-src" href="${inc.url}" target="_blank">Quelle →</a>`:""}
+         </div>`;
+      L.marker([+inc.lat,+inc.lon],{icon:mkIcon(s)}).bindPopup(pop,{maxWidth:300}).addTo(mg);
+    }
+    const row = document.createElement("div");
+    row.className = `incident ${s}`;
+    row.innerHTML =
+      `<div class="inc-hd">
+         <span class="inc-type ${s}">${inc.category}</span>
+         <span class="inc-date">${inc.date||"—"}</span>
+       </div>
+       <div class="inc-loc">${inc.location||"Unbekannt"}, ${inc.country||"—"}</div>
+       <div class="inc-txt">${inc.description||"—"}</div>`;
+    row.onclick = () => { if(inc.lat&&inc.lon) map.setView([+inc.lat,+inc.lon],11,{animate:true}); };
+    feed.appendChild(row);
+  });
 }
 
-async function adminHistorical() {
-  if (confirm("Historischen Crawl neu starten?")) {
-    await apiCall("/api/reset-historical", "POST");
-  }
-}
-
-async function adminGrokTest() {
-  await apiCall("/api/grok-test", "POST");
-}
-
-async function adminClear() {
-  if (confirm("Wirklich ALLE Daten löschen?")) {
-    await apiCall("/api/clear", "POST");
-  }
+function applyFilters() {
+  const co = document.getElementById("f-country").value;
+  const ca = document.getElementById("f-cat").value;
+  render(allData.filter(i => (!co||i.country===co) && (!ca||i.category===ca)));
 }
 
 async function loadStats() {
-  const data = await apiCall("/api/stats");
-  if (data) {
-    document.getElementById("admin-log").textContent += `\nTotal Einträge: ${data.total}\n`;
-  }
+  try {
+    const s = await fetch("/api/stats").then(r=>r.json());
+    document.getElementById("tb-total").textContent = s.total;
+    document.getElementById("tb-geo").textContent   = s.geocoded;
+
+    const mx = s.by_country[0]?.n || 1;
+    document.getElementById("dist-countries").innerHTML =
+      s.by_country.slice(0,7).map(c=>`
+        <div class="bar-item">
+          <div class="bar-hd"><span class="bar-nm">${c.country||"?"}</span><span class="bar-n">${c.n}</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:${Math.round(c.n/mx*100)}%"></div></div>
+        </div>`).join("");
+
+    document.getElementById("dist-cats").innerHTML =
+      s.by_cat.slice(0,12).map(c=>`
+        <div class="cat-row">
+          <div class="cat-sw ${sev(c.category)}"></div>
+          <span class="cat-nm">${c.category}</span>
+          <span class="cat-n">${c.n}</span>
+        </div>`).join("");
+
+    const lc = s.last_crawl
+      ? new Date(s.last_crawl).toLocaleString("de-CH",{timeZone:"Europe/Zurich",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"})
+      : "—";
+    const bPct = s.barrikade?.max_id
+      ? Math.round((s.barrikade.max_id-s.barrikade.current_id)/(s.barrikade.max_id-s.barrikade.floor_id)*100)+"%"
+      : "—";
+    document.getElementById("adm-status").textContent =
+      `Letzter Crawl:  ${lc}\nLäuft:          ${s.crawl_running?"Ja":"Nein"}\n\n`+
+      `Barrikade:      ${s.barrikade?.done?"Abgeschlossen":bPct+" (ID "+s.barrikade?.current_id+")"}\n`+
+      `Indymedia:      ${s.indymedia?.done?"Abgeschlossen":"Offset "+s.indymedia?.current_offset}`;
+    document.getElementById("adm-sources").textContent =
+      (s.by_source||[]).map(c=>`${(c.source||"").padEnd(26)} ${c.n}`).join("\n");
+    document.getElementById("adm-recent").textContent =
+      allData.slice(0,6).map(i=>`${i.date}|${i.category}\n${i.location},${i.country}\n${(i.description||"").substring(0,70)}\n`).join("——\n");
+  } catch(e) { console.error(e); }
 }
 
-// Leaflet Map
-map = L.map('map').setView([49.5, 11], 5);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+async function loadIncidents() {
+  try {
+    allData = await fetch("/api/incidents").then(r=>r.json());
+    applyFilters();
+  } catch(e) { console.error(e); }
+}
 
-// Initial Load
+function adminOpen()  { document.getElementById("admin").classList.add("open"); loadStats(); }
+function adminClose() { document.getElementById("admin").classList.remove("open"); }
+document.addEventListener("keydown", e => {
+  if (e.ctrlKey && e.shiftKey && e.key==="A") { e.preventDefault(); document.getElementById("admin").classList.contains("open") ? adminClose() : adminOpen(); }
+});
+
+async function adminCrawl() { await fetch("/api/crawl",{method:"POST"}); document.getElementById("adm-status").textContent="Crawl gestartet..."; setTimeout(loadStats,3000); }
+async function adminHistorical() { if(!confirm("Historisch neu starten ab 2023?"))return; await fetch("/api/reset-historical",{method:"POST"}); document.getElementById("adm-status").textContent="Reset — läuft..."; }
+async function adminGrokTest() { document.getElementById("adm-grok").textContent="Läuft..."; try{ const d=await fetch("/api/grok-test",{method:"POST"}).then(r=>r.json()); document.getElementById("adm-grok").textContent=JSON.stringify(d,null,2); }catch(e){ document.getElementById("adm-grok").textContent="Fehler: "+e.message; } }
+async function adminClear() { if(!confirm("Alle Daten löschen?"))return; await fetch("/api/clear",{method:"POST"}); allData=[];render([]);loadStats(); }
+
+function tick() {
+  document.getElementById("tb-time").textContent =
+    new Date().toLocaleTimeString("de-CH",{timeZone:"Europe/Zurich",hour:"2-digit",minute:"2-digit",second:"2-digit"});
+}
+
+// Start
 loadStats();
+loadIncidents();
+tick();
+setInterval(tick, 1000);
+setInterval(() => { loadStats(); loadIncidents(); }, 5*60*1000);
 </script>
 </body>
 </html>
