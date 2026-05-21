@@ -6,43 +6,25 @@ import requests
 from bs4 import BeautifulSoup
 import sqlite3
 from apscheduler.schedulers.background import BackgroundScheduler
-from fastapi import FastAPI, Request, BackgroundTasks, HTTPException, Depends
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, Request, BackgroundTasks, Depends, HTTPException, Form
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel
-from typing import Optional
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
 
-DB_PATH      = "/data/lex_threat.db" if os.path.isdir("/data") else "lex_threat.db"
-GROK_MODEL   = os.getenv("GROK_MODEL", "grok-4")
-ADMIN_PW     = os.getenv("ADMIN_PASSWORD", "lexeurope2024")  # set on Render!
+DB_PATH    = "/data/lex_threat.db" if os.path.isdir("/data") else "lex_threat.db"
+GROK_MODEL = os.getenv("GROK_MODEL", "grok-4")
+
+ADMIN_USER = os.getenv("ADMIN_USER", "admin")
+ADMIN_PASS = os.getenv("ADMIN_PASS", "changeme")
+ADMIN_TOKEN_STORE: dict[str, datetime] = {}   # token → expiry
+
 log.info(f"DB={DB_PATH}  model={GROK_MODEL}")
 
-# ── ACTIVE ADMIN TOKENS (in-memory, expire 8h) ──────────────────
-_tokens: dict[str, datetime] = {}
-
-def issue_token() -> str:
-    t = secrets.token_hex(32)
-    _tokens[t] = datetime.now() + timedelta(hours=8)
-    return t
-
-def verify_token(t: str) -> bool:
-    exp = _tokens.get(t)
-    if exp and datetime.now() < exp:
-        return True
-    _tokens.pop(t, None)
-    return False
-
-security = HTTPBearer(auto_error=False)
-
-def require_admin(creds: HTTPAuthorizationCredentials = Depends(security)):
-    if not creds or not verify_token(creds.credentials):
-        raise HTTPException(status_code=401, detail="Nicht authorisiert")
-
-# ── DATABASE ─────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────
+# DATABASE
+# ─────────────────────────────────────────────────────────────────
 def get_db():
     c = sqlite3.connect(DB_PATH, check_same_thread=False)
     c.row_factory = sqlite3.Row
@@ -55,7 +37,7 @@ def get_db():
         description  TEXT,
         source       TEXT,
         url          TEXT,
-        content_hash TEXT UNIQUE,
+        hash         TEXT UNIQUE,
         lat          REAL,
         lon          REAL,
         manual       INTEGER DEFAULT 0,
@@ -73,25 +55,51 @@ def meta_get(k):
     return r[0] if r else None
 
 def meta_set(k, v):
-    db.execute("INSERT OR REPLACE INTO metadata VALUES(?,?)", (k, str(v)))
+    db.execute("INSERT OR REPLACE INTO metadata VALUES (?,?)", (k, str(v)))
     db.commit()
 
-# ── SESSION ──────────────────────────────────────────────────────
-sess = requests.Session()
-sess.headers.update({
+def meta_del(k):
+    db.execute("DELETE FROM metadata WHERE key=?", (k,))
+    db.commit()
+
+# ─────────────────────────────────────────────────────────────────
+# AUTH
+# ─────────────────────────────────────────────────────────────────
+def make_token():
+    return secrets.token_hex(32)
+
+def verify_token(token: str) -> bool:
+    if not token or token not in ADMIN_TOKEN_STORE:
+        return False
+    if datetime.now() > ADMIN_TOKEN_STORE[token]:
+        del ADMIN_TOKEN_STORE[token]
+        return False
+    return True
+
+def require_admin(request: Request):
+    token = request.cookies.get("admin_token", "")
+    if not verify_token(token):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return token
+
+# ─────────────────────────────────────────────────────────────────
+# HTTP SESSION
+# ─────────────────────────────────────────────────────────────────
+session = requests.Session()
+session.headers.update({
     "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
     "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
-    "DNT":             "1",
+    "Accept-Encoding": "gzip, deflate, br",
+    "DNT": "1",
 })
 
-def fetch(url, timeout=20):
-    r = sess.get(url, timeout=timeout, allow_redirects=True)
+def fetch(url, timeout=25):
+    r = session.get(url, timeout=timeout, allow_redirects=True)
     r.raise_for_status()
     return r.text
 
-def get_text(url):
-    """Fetch URL → clean article text."""
+def get_article_text(url):
     try:
         html = fetch(url)
         soup = BeautifulSoup(html, "html.parser")
@@ -100,13 +108,16 @@ def get_text(url):
         el = (
             soup.find("article") or
             soup.find("main") or
-            soup.find(True, class_=re.compile(r"\b(article|content|post|entry|text|body|node|story|beitrag)\b", re.I)) or
+            soup.find(True, class_=re.compile(r"\b(article|content|post|entry|text|body|node|story)\b", re.I)) or
+            soup.find(True, id=re.compile(r"\b(article|content|main|post)\b", re.I)) or
             soup.body or soup
         )
-        txt = el.get_text(" ", strip=True)
-        return re.sub(r"\s{3,}", " ", txt)[:5000]
+        raw = el.get_text(" ", strip=True)
+        raw = re.sub(r"[ \t]{3,}", " ", raw)
+        raw = re.sub(r"\n{3,}", "\n\n", raw)
+        return raw[:5000]
     except Exception as e:
-        log.warning(f"get_text {url}: {e}")
+        log.warning(f"get_article_text {url}: {e}")
         return ""
 
 def date_from_url(url):
@@ -118,13 +129,15 @@ def date_from_url(url):
             pass
     return None
 
-# ── GEOCODING ────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────
+# GEOCODING
+# ─────────────────────────────────────────────────────────────────
 _last_geo = [0.0]
 
 def geocode(location, country):
-    if not location or location.strip() in ("","Unbekannt","Unknown","?"):
+    if not location or location.strip() in ("", "Unbekannt", "Unknown"):
         return None, None
-    key = f"{location.lower().strip()}|{country.lower().strip()}"
+    key = f"{location.strip().lower()}|{country.strip().lower()}"
     row = db.execute("SELECT lat,lon FROM geocache WHERE query=?", (key,)).fetchone()
     if row:
         return row[0], row[1]
@@ -135,72 +148,46 @@ def geocode(location, country):
         r = requests.get(
             "https://nominatim.openstreetmap.org/search",
             params={"q": f"{location}, {country}", "format": "json", "limit": 1},
-            headers={"User-Agent": "LEX-EUROPE/3.0"},
-            timeout=10,
+            headers={"User-Agent": "LEX-EUROPE-OSINT/4.0"},
+            timeout=10
         )
         _last_geo[0] = time.time()
         res = r.json()
         if res:
             lat, lon = float(res[0]["lat"]), float(res[0]["lon"])
-            db.execute("INSERT OR REPLACE INTO geocache VALUES(?,?,?)", (key,lat,lon))
+            db.execute("INSERT OR REPLACE INTO geocache VALUES (?,?,?)", (key, lat, lon))
             db.commit()
             return lat, lon
     except Exception as e:
         log.warning(f"Geocode '{location}': {e}")
-    db.execute("INSERT OR REPLACE INTO geocache VALUES(?,NULL,NULL)", (key,))
+    db.execute("INSERT OR REPLACE INTO geocache VALUES (?,NULL,NULL)", (key,))
     db.commit()
     return None, None
 
-# ── GROK ─────────────────────────────────────────────────────────
-CATS = ("Brandanschlag|Sabotage|Gewalt|Schmiererei|Aufruf zu Gewalt|"
-        "Militante Aktion|Sachbeschädigung|Demo/Kundgebung|"
-        "Besetzung|Repression|Verhaftung|Infrastrukturangriff|"
-        "Sonstiges|Unklassifiziert")
+# ─────────────────────────────────────────────────────────────────
+# GROK — only classifies, never decides relevance
+# Relevance is determined BEFORE calling Grok via keyword matching
+# ─────────────────────────────────────────────────────────────────
+CATEGORIES = [
+    "Brandanschlag", "Sabotage", "Gewalt", "Schmiererei",
+    "Aufruf zu Gewalt", "Militante Aktion", "Sachbeschädigung",
+    "Demo/Kundgebung", "Besetzung", "Repression", "Verhaftung", "Sonstiges"
+]
 
-def classify(text: str, mode: str = "strict") -> Optional[dict]:
-    """
-    mode='loose'  → barrikade / indymedia: accept any concrete event
-    mode='strict' → mainstream: confirmed left-extremist act only
-    """
+def classify(text: str) -> dict | None:
     api_key = os.getenv("GROK_API_KEY")
     if not api_key:
-        log.error("GROK_API_KEY not set")
+        log.error("GROK_API_KEY not set!")
         return None
 
-    rule = {
-        "loose": (
-            "Du analysierst Texte von linken/antifaschistischen Medien (barrikade.info, indymedia).\n"
-            "WICHTIG: Aktionen VON linken/antifaschistischen Gruppen GEGEN rechte Ziele "
-            "(Nazis, Faschisten, Rechtsextreme, AFD, Junge Tat, Identitaere, etc.) "
-            "sind IMMER relevant=true — als linke Militante Aktion / Sachbeschaedigung klassifizieren.\n"
-            "Beispiele fuer relevant=true: Farbe an Nazihaus geworfen, Auto von Rechtsextremen beschaedigt, "
-            "Antifa-Angriff auf rechte WG, Demo gegen Rechts, Besetzung, Verhaftung von Aktivisten, "
-            "Repression gegen linke Gruppen, Sabotage, Brandstiftung, Graffiti/Schmiererei.\n"
-            "relevant=false NUR: reiner Theorietext / politischer Essay ohne jedes konkrete Ereignis.\n"
-            "Im Zweifel: relevant=true."
-        ),
-        "strict": (
-            "Beschreibt der Text eine konkrete linksextreme/antifaschistische Gewalttat oder militante Aktion?\n"
-            "WICHTIG: Angriffe von Linken/Antifa AUF rechte Personen/Objekte/Gruppen "
-            "sind linke Aktionen — relevant=true.\n"
-            "relevant=true: Tat klar beschrieben, linker/antifaschistischer Kontext erkennbar.\n"
-            "relevant=false: reine Meinungen/Kommentare, kein konkreter Vorfall."
-        ),
-        "official": (
-            "Offizielle Behoerdenmeldung.\n"
-            "relevant=true wenn linksextreme Gewalt oder Aktivitaet beschrieben.\n"
-            "relevant=false bei rechtsextremen, islamistischen oder anderen Themen."
-        ),
-    }.get(mode, "")
-
+    cats = "|".join(CATEGORIES)
     prompt = (
-        f"{rule}\n\n"
-        f"TEXT:\n{text[:2200]}\n\n"
-        "Antworte NUR mit kompaktem JSON (kein Markdown):\n"
-        '{"land":"DE|AT|CH|FR|IT|GR|ES|UK|Andere",'
-        f'"kategorie":"{CATS}",'
-        '"ort":"Stadt oder Region",'
-        '"relevant":true}'
+        "Du bist ein Klassifikator für Sicherheitsvorfälle.\n"
+        "Weise dem folgenden Text genau eine Kategorie zu, bestimme Land und Ort.\n"
+        "Antworte NUR mit einem JSON-Objekt, ohne Markdown.\n\n"
+        f"Text:\n{text[:2500]}\n\n"
+        "Format:\n"
+        f'{{"land":"DE|AT|CH|FR|IT|GR|ES|UK|Andere","kategorie":"{cats}","ort":"Stadt oder Region"}}'
     )
 
     raw = ""
@@ -208,69 +195,120 @@ def classify(text: str, mode: str = "strict") -> Optional[dict]:
         r = requests.post(
             "https://api.x.ai/v1/chat/completions",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": GROK_MODEL, "messages": [{"role":"user","content":prompt}],
-                  "temperature": 0.0, "max_tokens": 200},
-            timeout=35,
+            json={
+                "model": GROK_MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.0,
+                "max_tokens": 120
+            },
+            timeout=35
         )
         r.raise_for_status()
         raw = r.json()["choices"][0]["message"]["content"].strip()
         raw = re.sub(r"^```[a-z]*\n?", "", raw)
         raw = re.sub(r"\n?```$", "", raw).strip()
         res = json.loads(raw)
-        for k, v in [("relevant",True),("ort","Unbekannt"),("land","Unbekannt"),("kategorie","Sonstiges")]:
-            res.setdefault(k, v)
-        log.info(f"Grok[{mode}]: {res}")
+        res.setdefault("ort", "Unbekannt")
+        res.setdefault("land", "Unbekannt")
+        res.setdefault("kategorie", "Sonstiges")
+        log.info(f"Grok → {res}")
         return res
     except requests.HTTPError:
         log.error(f"Grok HTTP {r.status_code}: {r.text[:300]}")
     except json.JSONDecodeError as e:
-        log.error(f"Grok JSON fail: {e} raw={raw[:200]}")
+        log.error(f"Grok JSON: {e} raw={raw[:150]}")
     except Exception as e:
-        log.error(f"Grok error: {e}")
+        log.error(f"Grok: {e}")
     return None
 
-# ── PERSISTENCE ──────────────────────────────────────────────────
-def chash(url: str, text: str) -> str:
+# ─────────────────────────────────────────────────────────────────
+# PERSISTENCE
+# ─────────────────────────────────────────────────────────────────
+def mk_hash(url, text):
     return hashlib.sha256((url + "|" + text[:300]).encode()).hexdigest()
 
-def seen(h: str) -> bool:
-    return db.execute("SELECT 1 FROM incidents WHERE content_hash=?", (h,)).fetchone() is not None
+def is_seen(h):
+    return db.execute("SELECT 1 FROM incidents WHERE hash=?", (h,)).fetchone() is not None
 
 def save_incident(ai: dict, text: str, source: str, url: str,
-                  date_str: str = None, manual: int = 0) -> bool:
-    h = chash(url, text)
-    if seen(h):
+                  date_str: str = None, manual: bool = False) -> bool:
+    h = mk_hash(url or text[:100], text)
+    if is_seen(h):
         return False
-    lat, lon = geocode(ai.get("ort",""), ai.get("land",""))
+    lat, lon = geocode(ai.get("ort", ""), ai.get("land", ""))
     d = date_str or datetime.now().strftime("%Y-%m-%d")
     try:
         db.execute(
             """INSERT OR IGNORE INTO incidents
-               (date,location,country,category,description,source,url,
-                content_hash,lat,lon,manual,timestamp)
-               VALUES(?,?,?,?,?,?,?,?,?,?,?,datetime('now'))""",
+               (date,location,country,category,description,source,url,hash,lat,lon,manual,timestamp)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'))""",
             (d, ai.get("ort","Unbekannt"), ai.get("land","Unbekannt"),
-             ai.get("kategorie","Sonstiges"), text[:800],
-             source, url, h, lat, lon, manual),
+             ai.get("kategorie","Sonstiges"), text[:700],
+             source, url, h, lat, lon, 1 if manual else 0)
         )
         db.commit()
         return True
     except Exception as e:
-        log.warning(f"save: {e}")
+        log.warning(f"save_incident: {e}")
         return False
 
-# ── RSS PARSING ──────────────────────────────────────────────────
-def rss_parse(xml_text: str) -> list:
+# ─────────────────────────────────────────────────────────────────
+# KEYWORD FILTER  (replaces Grok as relevance gate)
+# ─────────────────────────────────────────────────────────────────
+KEYWORDS = [
+    # Violence / attacks
+    "brandanschlag","sabotage","molotow","farbbeutel","brandsatz","in brand gesetzt",
+    "anschlag","sprengstoff","böller","pyrotechnik","feuer gelegt","anzünden",
+    # Property damage
+    "sachbeschädigung","scheibe eingeworfen","beschädigt","zerstört","verwüstet",
+    "farbe geschmiert","graffiti","schmiererei","bekennerschreiben",
+    # Political violence actors
+    "linksextrem","linksradikal","autonom","autonome","antifa","anarchi",
+    "schwarzer block","black bloc","militante","militant",
+    # Actions / events
+    "direkte aktion","blockade","besetzung","besetzt","hausbesetzung",
+    "demo","kundgebung","störaktion","barrikade","rigaer",
+    # Repression / legal
+    "verhaftung","festnahme","razzia","durchsuchung","repression",
+    # Infrastructure / targets
+    "bahn sabotage","gleise","strommasten","kabel durchgeschnitten",
+    "verfassungsschutz","extremismus","bundesverfassungsschutz",
+    # DE/AT/CH specific
+    "rote flora","köpi","liebig","wagenburg","infoladen",
+]
+
+def is_relevant(text: str, loose: bool = False) -> bool:
+    """
+    loose=True  → used for barrikade/indymedia — almost everything passes
+    loose=False → used for mainstream RSS — stricter filter
+    """
+    t = text.lower()
+    if loose:
+        # For activist sources: block only obvious off-topic content
+        off_topic = ["rezept", "wetter", "sport", "fussball", "bundesliga",
+                     "börse", "aktien", "film", "musik", "mode", "reise"]
+        if any(kw in t for kw in off_topic):
+            return False
+        return True  # accept everything else from activist sources
+    return any(kw in t for kw in KEYWORDS)
+
+# ─────────────────────────────────────────────────────────────────
+# RSS PARSING
+# ─────────────────────────────────────────────────────────────────
+def parse_rss(xml_text: str) -> list[tuple]:
+    """Returns list of (title, link, description, pubDate)."""
     items = []
     try:
         root = ET.fromstring(xml_text)
+        # RSS 2.0
         for item in root.iter("item"):
             t = (item.findtext("title") or "").strip()
-            l = (item.findtext("link")  or "").strip()
+            l = (item.findtext("link") or "").strip()
             d = (item.findtext("description") or "").strip()
             p = (item.findtext("pubDate") or "").strip()
             if l:
                 items.append((t, l, d, p))
+        # Atom
         if not items:
             NS = "http://www.w3.org/2005/Atom"
             for e in root.iter(f"{{{NS}}}entry"):
@@ -282,10 +320,10 @@ def rss_parse(xml_text: str) -> list:
                 if l:
                     items.append((t, l, d, p))
     except Exception as e:
-        log.warning(f"rss_parse: {e}")
+        log.warning(f"parse_rss: {e}")
     return items
 
-def rss_date(s: str) -> Optional[str]:
+def parse_date(s: str) -> str | None:
     if not s:
         return None
     for fmt in (
@@ -298,245 +336,139 @@ def rss_date(s: str) -> Optional[str]:
             pass
     return None
 
-# ── RSS FEED REGISTRY ────────────────────────────────────────────
-# Each entry: (source_name, feed_url, classify_mode)
-# mode "loose"   → activist sites, include broad range of events
-# mode "strict"  → mainstream media, only clear left-extremist acts
-# mode "official"→ authorities, Verfassungsschutz / BKA / LKA
-
+# ─────────────────────────────────────────────────────────────────
+# RSS FEED LIST
+# ─────────────────────────────────────────────────────────────────
 RSS_FEEDS = [
-
-    # ── ACTIVIST (loose) ────────────────────────────────────────
-    ("de.indymedia.org",   "https://de.indymedia.org/RSS/newswire.xml",              "loose"),
-    ("de.indymedia.org",   "https://de.indymedia.org/RSS/features.xml",              "loose"),
-    ("de.indymedia.org",   "https://de.indymedia.org/taxonomy/term/20/all/feed",     "loose"),  # Repression
-    ("de.indymedia.org",   "https://de.indymedia.org/taxonomy/term/56/all/feed",     "loose"),  # Antifaschismus
-    ("de.indymedia.org",   "https://de.indymedia.org/taxonomy/term/671/all/feed",    "loose"),
-    ("de.indymedia.org",   "https://de.indymedia.org/taxonomy/term/6127/all/feed",   "loose"),
-    ("de.indymedia.org",   "https://de.indymedia.org/taxonomy/term/40/all/feed",     "loose"),  # Soziale Kämpfe
-    ("de.indymedia.org",   "https://de.indymedia.org/taxonomy/term/139/all/feed",    "loose"),  # Antimilitarismus
-    ("de.indymedia.org",   "https://de.indymedia.org/taxonomy/term/1/all/feed",      "loose"),  # Aktionen
-    ("de.indymedia.org",   "https://de.indymedia.org/taxonomy/term/5/all/feed",      "loose"),  # Polizei
-    ("barrikade.info",     "https://barrikade.info/spip.php?page=backend",           "loose"),
-    ("barrikade.info",     "https://publish.barrikade.info/spip.php?page=backend",   "loose"),
-    ("barrikade.info",     "https://barrikade.info/feed/atom/",                      "loose"),
-    ("barrikade.info",     "https://barrikade.info/feed/",                           "loose"),
-
-    # ── OFFICIAL / SECURITY (official) ──────────────────────────
-    ("verfassungsschutz.de","https://www.verfassungsschutz.de/SiteGlobals/Functions/RSSNewsFeed/AlleMeldungen.xml","official"),
-    ("bka.de",             "https://www.bka.de/SiteGlobals/Functions/RSSNewsFeed/DE/RSSNewsFeed_Pressemitteilungen.xml","official"),
-
-    # ── GERMANY mainstream (strict) ─────────────────────────────
-    ("tagesschau.de",      "https://www.tagesschau.de/xml/rss2/",                    "strict"),
-    ("spiegel.de",         "https://www.spiegel.de/schlagzeilen/index.rss",          "strict"),
-    ("zeit.de",            "https://newsfeed.zeit.de/politik/index",                 "strict"),
-    ("sueddeutsche.de",    "https://rss.sueddeutsche.de/rss/Politik",                "strict"),
-    ("welt.de",            "https://www.welt.de/feeds/topnews.rss",                  "strict"),
-    ("faz.net",            "https://www.faz.net/rss/aktuell/",                       "strict"),
-    ("tagesspiegel.de",    "https://www.tagesspiegel.de/contentexport/feed/home",    "strict"),
-    ("deutschlandfunk.de", "https://www.deutschlandfunk.de/nachrichten-100.rss",     "strict"),
-    ("deutschlandfunk.de", "https://www.deutschlandfunk.de/politik-und-gesellschaft.2290.de.rss", "strict"),
-    ("focus.de",           "https://rss.focus.de/fol/News/news_schlagzeilen.xml",    "strict"),
-    ("n-tv.de",            "https://www.n-tv.de/rss",                                "strict"),
-    ("stern.de",           "https://www.stern.de/feed/standard/alle-nachrichten/",   "strict"),
-    ("ntv.de",             "https://www.n-tv.de/rss/politik",                        "strict"),
-    ("zdf.de",             "https://www.zdf.de/rss/zdf/nachrichten",                 "strict"),
-    ("dw.com",             "https://rss.dw.com/rdf/rss-de-all",                      "strict"),
-    ("rbb24.de",           "https://www.rbb24.de/index/rss.xml/index.xml",           "strict"),
-    ("ndr.de",             "https://www.ndr.de/nachrichten/index-rss.xml",           "strict"),
-    ("mdr.de",             "https://www.mdr.de/nachrichten/rss-nachrichten100.xml",  "strict"),
-    ("br24.de",            "https://www.br.de/nachrichten/index.rss",                "strict"),
-    ("wdr.de",             "https://www1.wdr.de/uebersicht100.feed",                 "strict"),
-    ("swraktuell.de",      "https://www.swraktuell.de/aktuell/rss/swr_aktuell.xml",  "strict"),
-    ("berliner-zeitung.de","https://www.berliner-zeitung.de/feed.xml",               "strict"),
-
-    # ── SWITZERLAND (strict) ────────────────────────────────────
-    ("srf.ch",             "https://www.srf.ch/news/bnf/rss/1646",                   "strict"),
-    ("nzz.ch",             "https://www.nzz.ch/recent.rss",                          "strict"),
-    ("20min.ch",           "https://api.20min.ch/rss/view/1",                        "strict"),
-    ("blick.ch",           "https://www.blick.ch/news/rss.xml",                      "strict"),
-    ("watson.ch",          "https://www.watson.ch/api/feeds/rss/schweiz",            "strict"),
-    ("tagesanzeiger.ch",   "https://www.tagesanzeiger.ch/rss.html",                  "strict"),
-
-    # ── AUSTRIA (strict) ────────────────────────────────────────
-    ("orf.at",             "https://rss.orf.at/news.xml",                            "strict"),
-    ("derstandard.at",     "https://www.derstandard.at/rss/inland",                  "strict"),
-    ("krone.at",           "https://www.krone.at/feed/news",                         "strict"),
-    ("diepresse.com",      "https://www.diepresse.com/rss/politik",                  "strict"),
-    ("kurier.at",          "https://kurier.at/sitemap.xml",                          "strict"),
+    # ── INDYMEDIA ──────────────────────────────────────────────
+    ("de.indymedia.org",   "https://de.indymedia.org/RSS/newswire.xml"),
+    ("de.indymedia.org",   "https://de.indymedia.org/RSS/features.xml"),
+    ("de.indymedia.org",   "https://de.indymedia.org/taxonomy/term/20/all/feed"),   # Repression
+    ("de.indymedia.org",   "https://de.indymedia.org/taxonomy/term/56/all/feed"),   # Antifa
+    ("de.indymedia.org",   "https://de.indymedia.org/taxonomy/term/671/all/feed"),  # Militanz
+    ("de.indymedia.org",   "https://de.indymedia.org/taxonomy/term/100/all/feed"),  # Sabotage
+    ("de.indymedia.org",   "https://de.indymedia.org/taxonomy/term/130/all/feed"),  # Brandanschlag
+    ("de.indymedia.org",   "https://de.indymedia.org/taxonomy/term/200/all/feed"),  # Demo
+    ("de.indymedia.org",   "https://de.indymedia.org/taxonomy/term/250/all/feed"),  # Besetzung
+    # ── VERFASSUNGSSCHUTZ ──────────────────────────────────────
+    ("verfassungsschutz.de", "https://www.verfassungsschutz.de/SiteGlobals/Functions/RSSNewsFeed/AlleMeldungen.xml"),
+    # ── ÖFFENTLICHE-RECHTLICHE DEUTSCHLAND ────────────────────
+    ("tagesschau.de",      "https://www.tagesschau.de/xml/rss2/"),
+    ("deutschlandfunk.de", "https://www.deutschlandfunk.de/nachrichten.rss"),
+    ("deutschlandfunk.de", "https://www.deutschlandfunk.de/sicherheit.rss"),
+    ("deutschlandfunk.de", "https://www.deutschlandfunk.de/inland.rss"),
+    ("zdf.de",             "https://www.zdf.de/rss/zdf/nachrichten"),
+    ("ndr.de",             "https://www.ndr.de/nachrichten/index-rss.xml"),
+    ("mdr.de",             "https://www.mdr.de/nachrichten/rss-nachrichten100.xml"),
+    ("rbb24.de",           "https://www.rbb24.de/index/rss.xml/index.xml"),
+    ("wdr.de",             "https://www1.wdr.de/nachrichten/index~rss2.xml"),
+    ("br24.de",            "https://www.br.de/nachrichten/rss"),
+    ("swr.de",             "https://www.swr.de/swraktuell/rss/feed.xml"),
+    # ── PRINTMEDIEN DEUTSCHLAND ────────────────────────────────
+    ("spiegel.de",         "https://www.spiegel.de/schlagzeilen/index.rss"),
+    ("zeit.de",            "https://newsfeed.zeit.de/politik/index"),
+    ("faz.net",            "https://www.faz.net/rss/aktuell/"),
+    ("sueddeutsche.de",    "https://rss.sueddeutsche.de/rss/Politik"),
+    ("welt.de",            "https://www.welt.de/feeds/topnews.rss"),
+    ("tagesspiegel.de",    "https://www.tagesspiegel.de/contentexport/feed/home"),
+    ("berliner-zeitung.de","https://www.berliner-zeitung.de/feed.xml"),
+    ("taz.de",             "https://taz.de/!p4608;rss/"),
+    ("junge-welt.de",      "https://www.jungewelt.de/rss.php"),
+    # ── SCHWEIZ ────────────────────────────────────────────────
+    ("srf.ch",             "https://www.srf.ch/news/bnf/rss/1646"),
+    ("nzz.ch",             "https://www.nzz.ch/recent.rss"),
+    ("20min.ch",           "https://api.20min.ch/rss/view/1"),
+    ("watson.ch",          "https://www.watson.ch/api/feeds/rss/schweiz"),
+    ("blick.ch",           "https://www.blick.ch/news/rss.xml"),
+    ("barrikade.info",     "https://barrikade.info/feed"),
+    # ── ÖSTERREICH ─────────────────────────────────────────────
+    ("orf.at",             "https://rss.orf.at/news.xml"),
+    ("derstandard.at",     "https://www.derstandard.at/rss/inland"),
+    ("krone.at",           "https://www.krone.at/feed/news"),
+    ("diepresse.com",      "https://www.diepresse.com/rss/politik"),
+    ("kleinezeitung.at",   "https://www.kleinezeitung.at/storage/rss/rss.politik.xml"),
 ]
 
-# Google News DACH search queries (RSS)
-GNEWS = [
-    ("DE", "linksextremismus brandanschlag"),
-    ("DE", "linksradikal anschlag infrastruktur"),
-    ("DE", "autonome sabotage angriff"),
+# Google News targeted queries for DACH left extremism
+GNEWS_QUERIES = [
+    ("DE", "linksextremismus anschlag infrastruktur"),
+    ("DE", "linksradikal sabotage bahn"),
+    ("DE", "autonome brandanschlag"),
     ("DE", "antifa gewalt sachbeschädigung"),
-    ("DE", "schwarzer block randalen"),
     ("DE", "bekennerschreiben linksextrem"),
-    ("DE", "militante linke aktion deutschland"),
-    ("DE", "linksextrem infrastrukturangriff"),
+    ("DE", "schwarzer block randalen"),
+    ("DE", "militante linke aktion"),
+    ("DE", "linksextrem verhaftung"),
     ("CH", "linksextrem anschlag schweiz"),
-    ("CH", "autonome zürich bern sabotage"),
-    ("CH", "linksradikal schweiz infrastruktur"),
+    ("CH", "autonome sabotage zürich bern"),
     ("AT", "linksextremismus österreich anschlag"),
-    ("AT", "autonome wien sabotage linksradikal"),
+    ("AT", "autonome wien sabotage"),
+    ("DE", "bundesverfassungsschutz linksextremismus"),
+    ("DE", "rigaer strasse angriff"),
 ]
 
-# Keyword pre-filter (loose: one hit = forward to Grok)
-SIGNALS = {
-    "linksextrem","linksradikal","autonom","antifa","black bloc","schwarzer block",
-    "brandanschlag","sabotage","molotow","farbbeutel","militant","barrikade",
-    "bekennerschreiben","besetzung","rigaer","anarchi","brandsatz","in brand",
-    "sachbeschädigung","krawalle","randalen","vermummt","infrastrukturangriff",
-    "zugstrecke gesperrt","bahnstrecke unterbrochen","sabotageakt",
-    "anschlag auf","angegriffen","attackiert",
-}
+ACTIVIST_SOURCES = {"de.indymedia.org", "barrikade.info"}
 
-def headline_match(title: str, desc: str) -> bool:
-    combined = (title + " " + desc).lower()
-    return any(s in combined for s in SIGNALS)
-
-# ── CRAWL ONE FEED ───────────────────────────────────────────────
-def crawl_feed(name: str, url: str, mode: str, max_items: int = 15) -> int:
+def run_feed(source_name: str, feed_url: str, max_articles: int = 12) -> int:
+    is_activist = any(s in source_name for s in ACTIVIST_SOURCES)
     inserted = 0
     try:
-        xml   = fetch(url, timeout=18)
-        items = rss_parse(xml)
-        log.info(f"  {name} [{mode}]: {len(items)} items")
-        checked = 0
+        xml   = fetch(feed_url, timeout=18)
+        items = parse_rss(xml)
+        log.info(f"  {source_name}: {len(items)} items in feed")
+        processed = 0
         for title, link, desc, pub in items:
-            if checked >= max_items:
+            if processed >= max_articles:
                 break
-            # For loose/official: always check; for strict: require keyword
-            if mode == "strict" and not headline_match(title, desc):
+            preview = (title + " " + desc).lower()
+            # Activist sources: much looser pre-filter
+            if is_activist:
+                if not is_relevant(preview, loose=True):
+                    continue
+            else:
+                if not is_relevant(preview, loose=False):
+                    continue
+            processed += 1
+            full_text = get_article_text(link)
+            if len(full_text) < 80:
+                full_text = title + ". " + desc
+            if is_activist:
+                if not is_relevant(full_text, loose=True):
+                    continue
+            else:
+                if not is_relevant(full_text, loose=False):
+                    continue
+            h = mk_hash(link, full_text)
+            if is_seen(h):
                 continue
-            checked += 1
-            text = get_text(link)
-            if len(text) < 100:
-                continue
-            h = chash(link, text)
-            if seen(h):
-                continue
-            ai = classify(text, mode)
-            if (ai and ai.get("relevant") and
-                    ai.get("kategorie") not in ("Unklassifiziert",)):
-                d = rss_date(pub) or date_from_url(link)
-                if save_incident(ai, text, name, link, d):
-                    inserted += 1
-                    log.info(f"    +1 {ai['kategorie']} / {ai['ort']}")
+            # Classify with Grok
+            ai = classify(full_text)
+            if ai:
+                # Activist sources: save everything
+                # Mainstream: skip pure "Sonstiges"
+                if is_activist or ai.get("kategorie") not in ("Sonstiges",):
+                    d = parse_date(pub) or date_from_url(link)
+                    if save_incident(ai, full_text, source_name, link, d):
+                        inserted += 1
+                        log.info(f"    ✓ {source_name}: {ai['kategorie']} / {ai['ort']}")
+                else:
+                    log.info(f"    – skipped Sonstiges: {source_name}")
             time.sleep(0.5)
     except Exception as e:
-        log.warning(f"  feed {name} ({url}): {e}")
+        log.warning(f"  feed {source_name} ({feed_url}): {e}")
     return inserted
 
-def crawl_gnews() -> int:
+def run_gnews() -> int:
     inserted = 0
-    for country, q in GNEWS:
-        url = (f"https://news.google.com/rss/search"
-               f"?q={quote_plus(q)}&hl=de&gl={country}&ceid={country}:de")
-        inserted += crawl_feed(f"google-news/{country}", url, "strict", max_items=6)
+    for country, q in GNEWS_QUERIES:
+        url = f"https://news.google.com/rss/search?q={quote_plus(q)}&hl=de&gl={country}&ceid={country}:de"
+        inserted += run_feed(f"gnews/{q[:30]}", url, max_articles=6)
         time.sleep(0.4)
     return inserted
 
-# ── MASTER CRAWLER ───────────────────────────────────────────────
-
-# ── BARRIKADE ARTICLE-ID SCRAPER ─────────────────────────────────
-# barrikade.info uses numeric IDs: /article/6493, /article/7490 etc.
-# ID ~4000 ≈ start of 2023. We crawl newest → oldest in batches.
-
-BARRIKADE_MIN_ID = 4000   # covers back to 2023
-BARRIKADE_BATCH  = 300    # IDs per run
-
-def barrikade_max_id() -> int:
-    try:
-        html = fetch("https://barrikade.info/", timeout=15)
-        ids  = [int(m) for m in re.findall(r"/article/(\d+)", html)]
-        if ids:
-            mx = max(ids)
-            log.info(f"barrikade: max_id={mx}")
-            return mx
-    except Exception as e:
-        log.warning(f"barrikade_max_id: {e}")
-    return 7600
-
-def crawl_barrikade_ids() -> int:
-    DONE_K  = "b_done"
-    CURR_K  = "b_curr"
-    MAX_K   = "b_max"
-
-    mx = barrikade_max_id()
-    saved_mx = int(meta_get(MAX_K) or 0)
-    if mx > saved_mx:
-        meta_set(MAX_K, mx)
-
-    # Always live-sweep latest 80 IDs for fresh content
-    live_stop = max(saved_mx + 1, mx - 80)
-    log.info(f"barrikade live sweep: {mx}→{live_stop}")
-    inserted = 0
-    for aid in range(mx, live_stop - 1, -1):
-        url  = f"https://barrikade.info/article/{aid}"
-        text = get_text(url)
-        if len(text) < 80:
-            time.sleep(0.2)
-            continue
-        h = chash(url, text)
-        if seen(h):
-            time.sleep(0.1)
-            continue
-        ai = classify(text, "loose")
-        if ai and ai.get("relevant") and ai.get("kategorie") != "Unklassifiziert":
-            if save_incident(ai, text, "barrikade.info", url, date_from_url(url)):
-                inserted += 1
-                log.info(f"  barrikade live +{inserted} id={aid}: {ai['kategorie']}/{ai['ort']}")
-        time.sleep(0.5)
-
-    # Historical batch (2023 onwards)
-    if not meta_get(DONE_K):
-        start = int(meta_get(CURR_K) or mx)
-        stop  = max(BARRIKADE_MIN_ID, start - BARRIKADE_BATCH)
-        log.info(f"barrikade hist: {start}→{stop}")
-        misses = 0
-        for aid in range(start, stop - 1, -1):
-            url  = f"https://barrikade.info/article/{aid}"
-            try:
-                text = get_text(url)
-                if len(text) < 80:
-                    misses += 1
-                    if misses >= 40:
-                        meta_set(DONE_K, datetime.now().isoformat())
-                        break
-                    time.sleep(0.2)
-                    continue
-                misses = 0
-                h = chash(url, text)
-                if seen(h):
-                    time.sleep(0.1)
-                    continue
-                ai = classify(text, "loose")
-                if ai and ai.get("relevant") and ai.get("kategorie") != "Unklassifiziert":
-                    if save_incident(ai, text, "barrikade.info", url, date_from_url(url)):
-                        inserted += 1
-                        log.info(f"  barrikade hist +{inserted} id={aid}: {ai['kategorie']}/{ai['ort']}")
-                time.sleep(0.55)
-            except requests.HTTPError as e:
-                if e.response.status_code == 404:
-                    misses += 1
-                    time.sleep(0.2)
-                else:
-                    time.sleep(2)
-            except Exception as e:
-                log.warning(f"barrikade id={aid}: {e}")
-                time.sleep(0.5)
-
-        meta_set(CURR_K, stop - 1)
-        if stop <= BARRIKADE_MIN_ID:
-            meta_set(DONE_K, datetime.now().isoformat())
-            log.info("barrikade historical: COMPLETE")
-
-    log.info(f"barrikade total: +{inserted}")
-    return inserted
-
+# ─────────────────────────────────────────────────────────────────
+# MASTER CRAWLER
+# ─────────────────────────────────────────────────────────────────
 _running = [False]
 
 def should_run() -> bool:
@@ -547,41 +479,41 @@ def should_run() -> bool:
 
 def run_crawler(force: bool = False):
     if _running[0]:
-        log.info("Crawler already running")
+        log.info("Crawler already running — skipped")
         return
     if not force and not should_run():
-        log.info("Crawler: skipped (<4h)")
+        log.info("Crawler: skipped (< 4h since last run)")
         return
-
     _running[0] = True
     total = 0
     log.info("══════ CRAWLER START ══════")
     try:
-        total += crawl_barrikade_ids()
-        for name, url, mode in RSS_FEEDS:
-            total += crawl_feed(name, url, mode)
+        for name, url in RSS_FEEDS:
+            total += run_feed(name, url)
             time.sleep(0.3)
-        total += crawl_gnews()
+        total += run_gnews()
     except Exception as e:
-        log.error(f"run_crawler: {e}")
+        log.error(f"run_crawler: {e}", exc_info=True)
     finally:
         _running[0] = False
         meta_set("last_crawl", datetime.now().isoformat())
     log.info(f"══════ CRAWLER DONE — +{total} new ══════")
 
-# ── FASTAPI ──────────────────────────────────────────────────────
-app       = FastAPI(title="LEX EUROPE")
+# ─────────────────────────────────────────────────────────────────
+# FASTAPI APP
+# ─────────────────────────────────────────────────────────────────
+app = FastAPI(title="LEX EUROPE")
 templates = Jinja2Templates(directory="templates")
 
-# ── Public ───────────────────────────────────────────────────────
+# ── PUBLIC ──────────────────────────────────────────────────────
 @app.get("/", response_class=HTMLResponse)
-async def index(req: Request):
-    return templates.TemplateResponse("index.html", {"request": req})
+async def index(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/api/incidents")
 async def get_incidents():
     rows = db.execute(
-        "SELECT id,date,location,country,category,description,url,lat,lon,manual "
+        "SELECT id,date,location,country,category,description,url,lat,lon,manual,source "
         "FROM incidents ORDER BY date DESC, timestamp DESC"
     ).fetchall()
     return JSONResponse([dict(r) for r in rows])
@@ -590,146 +522,507 @@ async def get_incidents():
 async def get_stats():
     total    = db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
     geocoded = db.execute("SELECT COUNT(*) FROM incidents WHERE lat IS NOT NULL").fetchone()[0]
-    manual   = db.execute("SELECT COUNT(*) FROM incidents WHERE manual=1").fetchone()[0]
     return JSONResponse({
-        "total": total, "geocoded": geocoded, "manual": manual,
+        "total": total, "geocoded": geocoded,
         "last_crawl":    meta_get("last_crawl"),
         "crawl_running": _running[0],
         "by_country": [dict(r) for r in db.execute(
-            "SELECT country,COUNT(*) n FROM incidents GROUP BY country ORDER BY n DESC").fetchall()],
+            "SELECT country, COUNT(*) n FROM incidents GROUP BY country ORDER BY n DESC").fetchall()],
         "by_cat": [dict(r) for r in db.execute(
-            "SELECT category,COUNT(*) n FROM incidents GROUP BY category ORDER BY n DESC").fetchall()],
+            "SELECT category, COUNT(*) n FROM incidents GROUP BY category ORDER BY n DESC").fetchall()],
         "by_source": [dict(r) for r in db.execute(
-            "SELECT source,COUNT(*) n FROM incidents GROUP BY source ORDER BY n DESC").fetchall()],
+            "SELECT source, COUNT(*) n FROM incidents GROUP BY source ORDER BY n DESC").fetchall()],
     })
 
-# ── Admin auth ───────────────────────────────────────────────────
-class LoginRequest(BaseModel):
-    password: str
+# ── AUTH ────────────────────────────────────────────────────────
+@app.get("/admin/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request, "error": ""})
 
-@app.post("/api/admin/login")
-async def admin_login(req: LoginRequest):
-    if req.password != ADMIN_PW:
-        raise HTTPException(status_code=401, detail="Falsches Passwort")
-    return JSONResponse({"token": issue_token()})
+@app.post("/admin/login")
+async def do_login(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...)
+):
+    if username == ADMIN_USER and password == ADMIN_PASS:
+        token = make_token()
+        ADMIN_TOKEN_STORE[token] = datetime.now() + timedelta(hours=12)
+        resp = RedirectResponse("/admin", status_code=302)
+        resp.set_cookie("admin_token", token, httponly=True, samesite="strict", max_age=43200)
+        return resp
+    return templates.TemplateResponse("login.html", {"request": request, "error": "Ungültige Zugangsdaten"})
 
-@app.post("/api/admin/logout")
-async def admin_logout(creds: HTTPAuthorizationCredentials = Depends(security)):
-    if creds:
-        _tokens.pop(creds.credentials, None)
+@app.get("/admin/logout")
+async def do_logout(request: Request):
+    token = request.cookies.get("admin_token","")
+    if token in ADMIN_TOKEN_STORE:
+        del ADMIN_TOKEN_STORE[token]
+    resp = RedirectResponse("/admin/login", status_code=302)
+    resp.delete_cookie("admin_token")
+    return resp
+
+# ── ADMIN PANEL ──────────────────────────────────────────────────
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_panel(request: Request):
+    token = request.cookies.get("admin_token","")
+    if not verify_token(token):
+        return RedirectResponse("/admin/login", status_code=302)
+    total   = db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
+    running = _running[0]
+    last    = meta_get("last_crawl") or "—"
+    recent  = [dict(r) for r in db.execute(
+        "SELECT id,date,location,country,category,source FROM incidents ORDER BY timestamp DESC LIMIT 20"
+    ).fetchall()]
+    return templates.TemplateResponse("admin.html", {
+        "request": request,
+        "total": total, "running": running,
+        "last_crawl": last, "recent": recent,
+        "categories": CATEGORIES,
+    })
+
+# ── ADMIN API (protected) ────────────────────────────────────────
+@app.post("/admin/api/crawl")
+async def admin_crawl(bg: BackgroundTasks, _=Depends(require_admin)):
+    bg.add_task(run_crawler, True)
+    return JSONResponse({"status": "Crawler gestartet"})
+
+@app.post("/admin/api/stop-crawl")
+async def admin_stop(_=Depends(require_admin)):
+    _running[0] = False
+    return JSONResponse({"status": "Crawl-Flag zurückgesetzt"})
+
+@app.post("/admin/api/add-incident")
+async def admin_add_incident(
+    request: Request,
+    _=Depends(require_admin)
+):
+    data = await request.json()
+    required = ["date","location","country","category","description"]
+    for f in required:
+        if not data.get(f):
+            raise HTTPException(400, f"Feld '{f}' fehlt")
+    ai = {
+        "land":      data["country"],
+        "kategorie": data["category"],
+        "ort":       data["location"],
+    }
+    text = data["description"]
+    url  = data.get("url", f"manual-{datetime.now().isoformat()}")
+    ok = save_incident(ai, text, data.get("source","Manuell"), url, data["date"], manual=True)
+    return JSONResponse({"ok": ok, "message": "Gespeichert" if ok else "Bereits vorhanden"})
+
+@app.delete("/admin/api/incident/{inc_id}")
+async def admin_delete(inc_id: int, _=Depends(require_admin)):
+    db.execute("DELETE FROM incidents WHERE id=?", (inc_id,))
+    db.commit()
     return JSONResponse({"ok": True})
 
-# ── Protected admin endpoints ────────────────────────────────────
-@app.post("/api/admin/crawl", dependencies=[Depends(require_admin)])
-async def trigger_crawl(bg: BackgroundTasks):
-    bg.add_task(run_crawler, True)
-    return JSONResponse({"status": "crawl gestartet"})
-
-@app.post("/api/admin/clear", dependencies=[Depends(require_admin)])
-async def clear_db():
+@app.post("/admin/api/clear")
+async def admin_clear(_=Depends(require_admin)):
     db.execute("DELETE FROM incidents")
     db.execute("DELETE FROM metadata")
     db.commit()
-    return JSONResponse({"status": "cleared"})
+    return JSONResponse({"status": "Datenbank geleert"})
 
-@app.post("/api/admin/grok-test", dependencies=[Depends(require_admin)])
-async def grok_test():
+@app.post("/admin/api/grok-test")
+async def admin_grok_test(_=Depends(require_admin)):
     res = classify(
-        "Heute Nacht setzten Unbekannte in Berlin-Neukölln zwei Polizeifahrzeuge in Brand. "
-        "Ein Bekennerschreiben einer militanten autonomen Gruppe wurde am Tatort gefunden.",
-        mode="loose"
+        "Unbekannte Täter haben in der Nacht auf Samstag in Berlin-Kreuzberg "
+        "mehrere Fahrzeuge der Bundespolizei in Brand gesetzt. "
+        "Ein Bekennerschreiben einer militanten autonomen Gruppe wurde am Tatort hinterlassen."
     )
-    return JSONResponse(res or {"error": "no response"})
+    return JSONResponse(res or {"error": "Keine Antwort"})
 
-class ClassifyUrlRequest(BaseModel):
-    url: str
-
-@app.post("/api/admin/classify-url", dependencies=[Depends(require_admin)])
-async def classify_url(req: ClassifyUrlRequest):
-    """Fetch URL, classify, return result for manual review before saving."""
-    text = get_text(req.url)
-    if len(text) < 80:
-        raise HTTPException(400, "Artikel konnte nicht geladen werden")
-    ai = classify(text, mode="strict")
-    if not ai:
-        raise HTTPException(500, "Grok lieferte keine Antwort")
+@app.get("/admin/api/status")
+async def admin_status(_=Depends(require_admin)):
+    total    = db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
+    geocoded = db.execute("SELECT COUNT(*) FROM incidents WHERE lat IS NOT NULL").fetchone()[0]
+    sources  = [dict(r) for r in db.execute(
+        "SELECT source, COUNT(*) n FROM incidents GROUP BY source ORDER BY n DESC LIMIT 20"
+    ).fetchall()]
     return JSONResponse({
-        "ai":      ai,
-        "preview": text[:400],
-        "url":     req.url,
+        "total": total, "geocoded": geocoded,
+        "crawl_running": _running[0],
+        "last_crawl": meta_get("last_crawl"),
+        "feed_count": len(RSS_FEEDS),
+        "sources": sources,
     })
-
-class ManualIncidentRequest(BaseModel):
-    date:        str
-    location:    str
-    country:     str
-    category:    str
-    description: str
-    url:         Optional[str] = ""
-    source:      Optional[str] = "Manuell"
-
-@app.post("/api/admin/incident", dependencies=[Depends(require_admin)])
-async def create_manual_incident(req: ManualIncidentRequest):
-    """Manually add an incident."""
-    ai = {
-        "land":      req.country,
-        "ort":       req.location,
-        "kategorie": req.category,
-        "relevant":  True,
-    }
-    text = req.description
-    url  = req.url or f"manual://{req.date}/{req.location}"
-    ok   = save_incident(ai, text, req.source or "Manuell", url, req.date, manual=1)
-    if not ok:
-        return JSONResponse({"status": "duplicate or error"}, status_code=409)
-    return JSONResponse({"status": "gespeichert"})
-
-@app.delete("/api/admin/incident/{inc_id}", dependencies=[Depends(require_admin)])
-async def delete_incident(inc_id: int):
-    db.execute("DELETE FROM incidents WHERE id=?", (inc_id,))
-    db.commit()
-    return JSONResponse({"status": "gelöscht"})
 
 @app.get("/api/diagnose")
 async def diagnose():
-    """Diagnostic endpoint — no auth required for debugging."""
-    out = {}
-    out["env"] = {
-        "GROK_API_KEY_set": bool(os.getenv("GROK_API_KEY")),
-        "GROK_API_KEY_len": len(os.getenv("GROK_API_KEY","") or ""),
-        "GROK_MODEL": GROK_MODEL,
-        "ADMIN_PASSWORD_set": bool(os.getenv("ADMIN_PASSWORD")),
-        "DB_PATH": DB_PATH,
-    }
-    for test_url in ["https://barrikade.info/","https://de.indymedia.org/"]:
-        try:
-            html = fetch(test_url, timeout=10)
-            out[test_url] = {"ok": True, "len": len(html)}
-        except Exception as e:
-            out[test_url] = {"ok": False, "error": str(e)}
+    report: dict = {}
     api_key = os.getenv("GROK_API_KEY","")
+    report["env"] = {
+        "GROK_API_KEY_set": bool(api_key),
+        "GROK_API_KEY_len": len(api_key),
+        "GROK_MODEL": GROK_MODEL,
+        "DB_PATH": DB_PATH,
+        "ADMIN_USER_set": bool(ADMIN_USER),
+        "ADMIN_PASS_set": bool(ADMIN_PASS and ADMIN_PASS != "changeme"),
+    }
+    # Test a few feeds
+    for name, url in RSS_FEEDS[:4]:
+        try:
+            xml   = fetch(url, timeout=10)
+            items = parse_rss(xml)
+            report[f"feed_{name}"] = {"ok": True, "items": len(items), "url": url}
+        except Exception as e:
+            report[f"feed_{name}"] = {"ok": False, "error": str(e), "url": url}
+    # Grok
     if api_key:
         try:
             r = requests.post(
                 "https://api.x.ai/v1/chat/completions",
-                headers={"Authorization":f"Bearer {api_key}","Content-Type":"application/json"},
-                json={"model":GROK_MODEL,"messages":[{"role":"user","content":"Antworte nur: OK"}],
-                      "max_tokens":5,"temperature":0.0},
-                timeout=20,
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={"model": GROK_MODEL,
+                      "messages": [{"role":"user","content":"Antworte nur: OK"}],
+                      "max_tokens": 5, "temperature": 0.0},
+                timeout=15
             )
-            out["grok"] = {"status": r.status_code, "response": r.text[:200]}
+            report["grok"] = {
+                "ok": r.status_code == 200,
+                "status": r.status_code,
+                "response": r.json()["choices"][0]["message"]["content"] if r.status_code==200 else r.text[:200],
+            }
         except Exception as e:
-            out["grok"] = {"error": str(e)}
-    out["db"] = {
+            report["grok"] = {"ok": False, "error": str(e)}
+    report["db"] = {
         "incidents": db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0],
-        "metadata":  [dict(r) for r in db.execute("SELECT * FROM metadata").fetchall()],
     }
-    return JSONResponse(out)
+    return JSONResponse(report)
 
 @app.on_event("startup")
 async def startup():
     sched = BackgroundScheduler(daemon=True, timezone="Europe/Zurich")
-    sched.add_job(run_crawler, "interval", hours=4, id="main",
+    sched.add_job(run_crawler, "interval", hours=2, id="main",
                   next_run_time=datetime.now() + timedelta(seconds=20))
     sched.start()
-    log.info(f"LEX EUROPE ready — model={GROK_MODEL} — first crawl in 20s")
+    log.info(f"LEX EUROPE v5 ready — {len(RSS_FEEDS)} RSS feeds + {len(GNEWS_QUERIES)} GNews queries — crawl in 20s")
+
+# ═══════════════════════════════════════════════════════════════
+# HISTORICAL CRAWL MODULE
+# Runs separately from the regular RSS crawler.
+# Triggered manually via /admin/api/crawl-historical
+# ═══════════════════════════════════════════════════════════════
+
+BARRIKADE_FLOOR_FULL = 1      # Go all the way back to article #1
+BARRIKADE_BATCH_HIST = 300    # IDs per run (saves progress between runs)
+
+def barrikade_max_id_current() -> int:
+    try:
+        html = fetch("https://barrikade.info/")
+        ids  = [int(m) for m in re.findall(r"/article/(\d+)", html)]
+        return max(ids) if ids else 7600
+    except Exception as e:
+        log.warning(f"barrikade_max_id: {e}")
+        return 7600
+
+def historical_barrikade():
+    """
+    Iterate ALL barrikade.info article IDs from max down to 1.
+    Saves progress in metadata so it resumes after restarts.
+    """
+    DONE_KEY = "hist_b_done"
+    CURR_KEY = "hist_b_curr"
+
+    if meta_get(DONE_KEY):
+        log.info("barrikade historical: already complete")
+        return 0
+
+    if meta_get(CURR_KEY) is None:
+        start = barrikade_max_id_current()
+        meta_set("hist_b_max", start)
+        meta_set(CURR_KEY, start)
+        log.info(f"barrikade historical: initialised at max_id={start}")
+
+    curr  = int(meta_get(CURR_KEY))
+    stop  = max(BARRIKADE_FLOOR_FULL, curr - BARRIKADE_BATCH_HIST)
+    total = int(meta_get("hist_b_max") or curr)
+    pct   = round((total - curr) / max(total, 1) * 100, 1)
+
+    log.info(f"barrikade historical: IDs {curr}→{stop}  ({pct}% done)")
+    inserted = 0
+    misses   = 0
+
+    for aid in range(curr, stop - 1, -1):
+        url  = f"https://barrikade.info/article/{aid}"
+        try:
+            text = get_article_text(url)
+            if len(text) < 60:
+                misses += 1
+                if misses >= 60:
+                    log.info(f"barrikade: 60 consecutive misses at {aid}, marking done")
+                    meta_set(DONE_KEY, datetime.now().isoformat())
+                    return inserted
+                time.sleep(0.2)
+                continue
+            misses = 0
+            h = mk_hash(url, text)
+            if is_seen(h):
+                time.sleep(0.1)
+                continue
+            if not is_relevant(text):
+                time.sleep(0.3)
+                continue
+            ai = classify(text)
+            if ai:
+                if save_incident(ai, text, "barrikade.info", url, date_from_url(url)):
+                    inserted += 1
+                    log.info(f"  barrikade hist +{inserted} id={aid}: {ai['kategorie']}/{ai['ort']}")
+            time.sleep(0.55)
+        except requests.HTTPError as e:
+            if e.response.status_code == 404:
+                misses += 1
+                time.sleep(0.2)
+            else:
+                log.warning(f"barrikade id={aid} HTTP {e.response.status_code}")
+                time.sleep(2)
+        except Exception as e:
+            log.warning(f"barrikade id={aid}: {e}")
+            time.sleep(0.5)
+
+    meta_set(CURR_KEY, stop - 1)
+    if stop <= BARRIKADE_FLOOR_FULL:
+        meta_set(DONE_KEY, datetime.now().isoformat())
+        log.info("barrikade historical: COMPLETE — all articles processed")
+    else:
+        log.info(f"barrikade historical: batch done, resuming from {stop-1} next run")
+
+    log.info(f"barrikade historical: +{inserted} this batch")
+    return inserted
+
+
+def historical_indymedia():
+    """
+    Iterate indymedia.org via offset pagination back through all years.
+    """
+    DONE_KEY = "hist_im_done"
+    CURR_KEY = "hist_im_offset"
+
+    if meta_get(DONE_KEY):
+        log.info("indymedia historical: already complete")
+        return 0
+
+    start_off = int(meta_get(CURR_KEY) or 0)
+    end_off   = start_off + 40 * 20   # 40 pages per batch
+    log.info(f"indymedia historical: offsets {start_off}→{end_off}")
+    inserted = 0
+    empty    = 0
+
+    for off in range(start_off, end_off, 20):
+        links = []
+        for base in [
+            f"https://de.indymedia.org/?limit=20&offset={off}",
+            f"https://de.indymedia.org/index.html?limit=20&offset={off}",
+        ]:
+            try:
+                html  = fetch(base)
+                soup  = BeautifulSoup(html, "html.parser")
+                for a in soup.find_all("a", href=True):
+                    href = a["href"].strip()
+                    if not href or any(x in href for x in ["#","mailto:","javascript:",".css",".js","?"]):
+                        continue
+                    full = urljoin("https://de.indymedia.org", href)
+                    if "indymedia.org" not in full:
+                        continue
+                    path = full.replace("https://de.indymedia.org","").strip("/")
+                    if path and path not in ("impressum","about","contact","rss","datenschutz"):
+                        links.append(full)
+                if links:
+                    break
+            except Exception as e:
+                log.warning(f"indymedia off={off}: {e}")
+
+        if not links:
+            empty += 1
+            if empty >= 8:
+                meta_set(DONE_KEY, datetime.now().isoformat())
+                log.info("indymedia historical: COMPLETE (8 empty pages)")
+                return inserted
+            time.sleep(1.5)
+            continue
+        empty = 0
+
+        for url in list(dict.fromkeys(links))[:18]:
+            text = get_article_text(url)
+            if len(text) < 60:
+                continue
+            h = mk_hash(url, text)
+            if is_seen(h):
+                continue
+            if not is_relevant(text):
+                time.sleep(0.3)
+                continue
+            ai = classify(text)
+            if ai:
+                if save_incident(ai, text, "de.indymedia.org", url, date_from_url(url)):
+                    inserted += 1
+                    log.info(f"  indymedia hist +{inserted} off={off}: {ai['kategorie']}/{ai['ort']}")
+            time.sleep(0.65)
+
+        meta_set(CURR_KEY, off + 20)
+        time.sleep(1.0)
+
+    log.info(f"indymedia historical: +{inserted} this batch")
+    return inserted
+
+
+def historical_wayback(sources: list[str] = None):
+    """
+    Use the Wayback Machine CDX API to find archived snapshots of
+    key sources and extract articles from them.
+    Covers content going back to 2010+.
+    """
+    if sources is None:
+        sources = [
+            "barrikade.info",
+            "de.indymedia.org",
+            "linksunten.indymedia.org",   # archived, historically important
+        ]
+
+    DONE_KEY = "hist_wb_done"
+    if meta_get(DONE_KEY):
+        log.info("wayback historical: already complete")
+        return 0
+
+    inserted = 0
+    CDX = "http://web.archive.org/cdx/search/cdx"
+
+    for src in sources:
+        log.info(f"Wayback CDX: querying {src} ...")
+        try:
+            # Get URLs of archived article pages, 2015–2023
+            params = {
+                "url":        f"{src}/*",
+                "output":     "json",
+                "fl":         "timestamp,original",
+                "filter":     ["statuscode:200", "mimetype:text/html"],
+                "from":       "20150101",
+                "to":         "20231231",
+                "limit":      500,
+                "fastLatest": "true",
+                "collapse":   "urlkey",   # deduplicate by URL
+            }
+            r = requests.get(CDX, params=params, timeout=30,
+                             headers={"User-Agent": "LEX-EUROPE-OSINT/4.0"})
+            r.raise_for_status()
+            rows = r.json()
+            if not rows or len(rows) < 2:
+                log.info(f"Wayback {src}: no results")
+                continue
+
+            # First row is the header
+            header = rows[0]
+            ts_idx = header.index("timestamp")
+            ur_idx = header.index("original")
+            entries = rows[1:]
+            log.info(f"Wayback {src}: {len(entries)} archived URLs")
+
+            for row in entries:
+                ts  = row[ts_idx]   # e.g. 20190815123045
+                url = row[ur_idx]   # original URL
+
+                # Only process article-like URLs
+                if not any(x in url for x in ["/article/","/news/","/bericht/","/feature/"]):
+                    if src == "barrikade.info" and "/article/" not in url:
+                        continue
+                    if src == "de.indymedia.org" and len(url.replace(f"http://{src}","").strip("/")) < 4:
+                        continue
+
+                h = mk_hash(url, url)  # lightweight seen-check on URL alone
+                if is_seen(h):
+                    continue
+
+                # Reconstruct Wayback URL
+                wb_url = f"https://web.archive.org/web/{ts}/{url}"
+                try:
+                    text = get_article_text(wb_url)
+                    if len(text) < 80:
+                        time.sleep(0.3)
+                        continue
+                    if not is_relevant(text):
+                        time.sleep(0.3)
+                        continue
+                    # Parse date from timestamp
+                    try:
+                        d = datetime.strptime(ts[:8], "%Y%m%d").strftime("%Y-%m-%d")
+                    except ValueError:
+                        d = date_from_url(url)
+
+                    ai = classify(text)
+                    if ai:
+                        if save_incident(ai, text, f"{src} (archiv)", url, d):
+                            inserted += 1
+                            log.info(f"  wayback +{inserted} {src}: {ai['kategorie']}/{ai['ort']} [{d}]")
+                    time.sleep(1.2)   # Wayback rate limit: be polite
+                except Exception as e:
+                    log.warning(f"wayback article {wb_url}: {e}")
+                    time.sleep(1.0)
+
+        except Exception as e:
+            log.error(f"Wayback CDX {src}: {e}")
+        time.sleep(2.0)
+
+    meta_set(DONE_KEY, datetime.now().isoformat())
+    log.info(f"wayback historical: +{inserted} total")
+    return inserted
+
+
+_hist_running = [False]
+
+def run_historical(reset: bool = False):
+    """
+    Full historical crawl — runs independently of the regular crawler.
+    Each function saves its own progress and resumes on restart.
+    """
+    if _hist_running[0]:
+        log.info("Historical crawler already running")
+        return
+    if reset:
+        for k in ("hist_b_done","hist_b_curr","hist_b_max",
+                  "hist_im_done","hist_im_offset","hist_wb_done"):
+            meta_del(k)
+        log.info("Historical progress reset")
+
+    _hist_running[0] = True
+    log.info("══════ HISTORICAL CRAWL START ══════")
+    try:
+        historical_barrikade()
+        historical_indymedia()
+        historical_wayback()
+    except Exception as e:
+        log.error(f"run_historical: {e}", exc_info=True)
+    finally:
+        _hist_running[0] = False
+    log.info("══════ HISTORICAL CRAWL DONE ══════")
+
+
+# ── NEW ADMIN ENDPOINTS ──────────────────────────────────────────
+
+@app.post("/admin/api/crawl-historical")
+async def start_historical(bg: BackgroundTasks, reset: bool = False, _=Depends(require_admin)):
+    bg.add_task(run_historical, reset)
+    return JSONResponse({"status": f"Historischer Crawl gestartet (reset={reset})"})
+
+@app.get("/admin/api/hist-status")
+async def hist_status(_=Depends(require_admin)):
+    b_max  = int(meta_get("hist_b_max") or 0)
+    b_curr = int(meta_get("hist_b_curr") or 0)
+    b_pct  = round((b_max - b_curr) / max(b_max, 1) * 100, 1) if b_max else 0
+    return JSONResponse({
+        "running": _hist_running[0],
+        "barrikade": {
+            "done":    bool(meta_get("hist_b_done")),
+            "current": b_curr,
+            "max":     b_max,
+            "pct":     b_pct,
+        },
+        "indymedia": {
+            "done":   bool(meta_get("hist_im_done")),
+            "offset": int(meta_get("hist_im_offset") or 0),
+        },
+        "wayback": {
+            "done": bool(meta_get("hist_wb_done")),
+        },
+    })
