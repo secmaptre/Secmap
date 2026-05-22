@@ -642,7 +642,8 @@ const CO_BOUNDS={
   FR:[[41.3,-5.1],[51.1,9.6]],IT:[[36.6,6.6],[47.1,18.5]],GR:[[34.8,19.4],[41.8,29.7]],
   ES:[[35.9,-9.3],[43.8,4.3]],UK:[[49.9,-8.2],[60.9,2.1]]
 };
-const YEARS=[2018,2019,2020,2021,2022,2023,2024,2025];
+const THIS_YEAR=new Date().getFullYear();
+const YEARS=(()=>{const a=[];for(let y=2018;y<=THIS_YEAR;y++)a.push(y);return a;})();
 
 function sev(c){return SEV_H.has(c)?'h':SEV_M.has(c)?'m':'l';}
 function col(c){return CAT_COL[c]||'#3a5570';}
@@ -932,7 +933,21 @@ function initYearBtns(){
   row.innerHTML=['ALLE',...YEARS].map(y=>`
     <button class="yrbtn" onclick="filterYear(${y==='ALLE'?'null':y})" id="yr-${y}">${y}</button>`
   ).join('');
-  document.getElementById('yr-ALLE').classList.add('on');
+}
+
+function setDefaultYear(){
+  // Default to current year unless URL already specifies a date range
+  const p=new URLSearchParams(location.search);
+  if(!p.get('von')&&!p.get('bis')){
+    activeYr=THIS_YEAR;
+    document.getElementById('f-von').value=`${THIS_YEAR}-01-01`;
+    document.getElementById('f-bis').value=`${THIS_YEAR}-12-31`;
+    document.querySelectorAll('.yrbtn').forEach(b=>b.classList.remove('on'));
+    const yb=document.getElementById(`yr-${THIS_YEAR}`);
+    if(yb) yb.classList.add('on');
+  } else {
+    document.getElementById('yr-ALLE').classList.add('on');
+  }
 }
 
 function filterYear(yr){
@@ -1315,6 +1330,7 @@ function filterLoc(loc){
 // ── INIT ───────────────────────────────────────────────────────────
 decodeURL();
 initYearBtns();
+setDefaultYear();
 loadTimeline();
 setInterval(loadData,5*60*1000);
 runBoot();
