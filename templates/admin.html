@@ -131,6 +131,21 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 /* ── TOAST ── */
 #toast{position:fixed;bottom:20px;right:20px;background:rgba(8,14,24,0.97);border:1px solid var(--pb2);padding:8px 14px;font-family:var(--mono);font-size:10px;color:var(--accent);opacity:0;transition:opacity .25s;pointer-events:none;z-index:200;border-radius:2px;}
 #toast.show{opacity:1;}
+
+/* ── MOBILE RESPONSIVE ── */
+@media(max-width:768px){
+  .wrap{grid-template-columns:1fr;padding:16px 12px;gap:14px;}
+  .full{grid-column:1;}
+  .metrics{grid-template-columns:1fr 1fr;}
+  .fgrid{grid-template-columns:1fr;}
+  .field.full{grid-column:1;}
+  .brow{gap:6px;}
+  .btn{font-size:8px;padding:5px 10px;letter-spacing:.5px;}
+  #topbar{padding:0 12px;height:44px;}
+  .tb-name{font-size:11px;letter-spacing:2px;}
+  .tbl th,.tbl td{padding:6px 8px;font-size:8px;}
+  .card{padding:14px;}
+}
 </style>
 </head>
 <body>
