@@ -2,465 +2,513 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEX EUROPE</title>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SECMAP // LEX EUROPE · Threat Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:     #060709;
-  --s0:     #0b0d11;
-  --s1:     #0f1117;
-  --s2:     #141720;
-  --s3:     #1a1e28;
-  --line:   #1e2230;
-  --line2:  #262c3d;
-  --line3:  #2e3548;
-  --accent: #3b82f6;
-  --a2:     #60a5fa;
-  --a-dim:  rgba(59,130,246,0.12);
-  --red:    #ef4444;
-  --r-dim:  rgba(239,68,68,0.12);
-  --amber:  #f59e0b;
-  --green:  #10b981;
-  --t0:     #ffffff;
-  --t1:     #e2e8f0;
-  --t2:     #94a3b8;
-  --t3:     #4b5563;
-  --t4:     #2d3444;
-  --mono:   'JetBrains Mono',monospace;
-  --sans:   'Inter',sans-serif;
+  --bg:#060c14;
+  --panel:rgba(5,11,22,0.94);
+  --pb:rgba(0,180,255,0.15);
+  --pb2:rgba(0,200,255,0.32);
+  --accent:#00c8ff;
+  --ag:rgba(0,200,255,0.18);
+  --amber:#f0a500;
+  --amg:rgba(240,165,0,0.18);
+  --red:#ff3355;
+  --rdg:rgba(255,51,85,0.18);
+  --green:#00e87a;
+  --t0:#e8f4ff;
+  --t1:#a0bcd4;
+  --t2:#5a7a92;
+  --t3:#2a4055;
+  --mono:'JetBrains Mono',monospace;
+  --sans:'Inter','Segoe UI',sans-serif;
 }
-html,body{
-  height:100%;overflow:hidden;
-  background:var(--bg);color:var(--t1);
-  font-family:var(--mono);font-size:11px;line-height:1.5;
-  -webkit-font-smoothing:antialiased;
-}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--t1);font-family:var(--sans);-webkit-font-smoothing:antialiased;}
 
-/* ── NOISE OVERLAY ── */
-body::after{
-  content:'';position:fixed;inset:0;
-  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
-  pointer-events:none;z-index:9000;opacity:.4;
-}
+/* Subtle scanline overlay */
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.025) 2px,rgba(0,0,0,0.025) 4px);pointer-events:none;z-index:1;}
 
 /* ── MAP ── */
-#map{position:fixed;inset:0;z-index:0;filter:brightness(.85) saturate(.6);}
+#map{position:fixed;inset:0;z-index:0;}
 
-/* ── TOPBAR ── */
-#bar{
-  position:fixed;top:0;left:0;right:0;height:38px;z-index:500;
-  background:rgba(6,7,9,.94);border-bottom:1px solid var(--line2);
-  backdrop-filter:blur(12px);
-  display:flex;align-items:center;padding:0 0 0 16px;gap:0;
+/* ── TOP BAR ── */
+#topbar{
+  position:fixed;top:0;left:0;right:0;height:50px;z-index:20;
+  background:var(--panel);border-bottom:1px solid var(--pb);
+  display:flex;align-items:center;padding:0 14px;gap:18px;
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
 }
-.bar-id{
-  font-size:11px;font-weight:600;letter-spacing:.14em;color:var(--t0);
-  padding-right:16px;margin-right:0;
-}
-.bar-div{width:1px;height:16px;background:var(--line3);margin:0 14px;}
-.bar-sys{font-size:9px;color:var(--t3);letter-spacing:.1em;}
-.bar-tags{display:flex;align-items:center;gap:6px;margin-left:14px;}
-.tag{
-  font-size:8px;letter-spacing:.1em;padding:2px 7px;
-  border:1px solid var(--line3);color:var(--t3);
-}
-.tag.live{color:var(--green);border-color:rgba(16,185,129,.3);background:rgba(16,185,129,.06);}
-.bar-right{margin-left:auto;display:flex;align-items:center;height:100%;}
-.bar-metric{
-  display:flex;flex-direction:column;align-items:flex-end;
-  padding:0 18px;height:100%;justify-content:center;
-  border-left:1px solid var(--line);
-}
-.bm-val{font-size:14px;font-weight:600;color:var(--t1);line-height:1;}
-.bm-lbl{font-size:8px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;margin-top:1px;}
-#bar-clock{
-  padding:0 18px;height:100%;display:flex;align-items:center;
-  border-left:1px solid var(--line);
-  font-size:11px;color:var(--t3);letter-spacing:.06em;min-width:80px;
-}
+.brand{display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.brand-icon{font-size:20px;color:var(--accent);line-height:1;}
+.brand-text{display:flex;flex-direction:column;}
+.brand-name{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:3px;color:var(--accent);}
+.brand-sub{font-family:var(--mono);font-size:8px;letter-spacing:1.5px;color:var(--t2);}
+.tb-div{width:1px;height:22px;background:var(--pb);flex-shrink:0;}
+.stat-chip{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;color:var(--t2);white-space:nowrap;flex-shrink:0;}
+.stat-chip b{color:var(--t0);font-weight:500;}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:livepulse 2.4s ease-in-out infinite;flex-shrink:0;}
+@keyframes livepulse{0%,100%{opacity:1;box-shadow:0 0 6px var(--green);}50%{opacity:.35;box-shadow:0 0 2px var(--green);}}
+.tb-spacer{flex:1;}
+.classify-tag{font-family:var(--mono);font-size:8px;font-weight:500;letter-spacing:2px;color:rgba(255,255,255,0.07);white-space:nowrap;}
+.tb-actions{display:flex;gap:7px;align-items:center;}
+.btn-ghost{font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:1px;padding:5px 11px;border:1px solid var(--pb2);border-radius:2px;background:transparent;color:var(--accent);cursor:pointer;transition:background .15s;text-decoration:none;white-space:nowrap;}
+.btn-ghost:hover{background:var(--ag);}
+.btn-ghost.on{background:var(--ag);border-color:var(--accent);}
 
-/* ── LEFT ── */
+/* ── LEFT PANEL ── */
 #left{
-  position:fixed;top:38px;left:0;bottom:0;width:232px;z-index:400;
-  background:rgba(6,7,9,.92);border-right:1px solid var(--line);
-  backdrop-filter:blur(10px);
-  display:flex;flex-direction:column;overflow:hidden;
-}
-.lsec{padding:12px 14px;border-bottom:1px solid var(--line);flex-shrink:0;}
-.lsec.grow{flex:1;overflow-y:auto;}
-.lsec.grow::-webkit-scrollbar{width:2px;}
-.lsec.grow::-webkit-scrollbar-thumb{background:var(--line3);}
-.sec-lbl{
-  font-size:8px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
-  color:var(--t3);margin-bottom:10px;display:flex;align-items:center;gap:6px;
-}
-.sec-lbl::before{content:'';width:12px;height:1px;background:var(--line3);}
-
-/* Filters */
-.frow{margin-bottom:9px;}
-.frow:last-child{margin-bottom:0;}
-.flbl{font-size:8px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px;display:block;}
-select{
-  width:100%;background:var(--s1);border:1px solid var(--line2);
-  color:var(--t2);padding:5px 22px 5px 8px;
-  font-family:var(--mono);font-size:10px;
-  outline:none;cursor:pointer;appearance:none;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%232d3444'/%3E%3C/svg%3E");
-  background-repeat:no-repeat;background-position:right 8px center;
-  transition:border-color .15s;
-}
-select:focus{border-color:var(--line3);}
-
-/* Bars */
-.bitem{margin-bottom:9px;}
-.bitem:last-child{margin-bottom:0;}
-.bhd{display:flex;justify-content:space-between;margin-bottom:3px;}
-.bnm{font-size:9px;color:var(--t2);}
-.bn{font-size:9px;color:var(--accent);}
-.btrack{height:1px;background:var(--line);}
-.bfill{height:100%;background:var(--accent);opacity:.5;transition:width .4s;}
-
-/* Cat rows */
-.crow{display:flex;align-items:center;gap:7px;padding:4px 0;border-bottom:1px solid var(--line);}
-.crow:last-child{border-bottom:none;}
-.csw{width:2px;height:11px;flex-shrink:0;}
-.csw.h{background:var(--red);}
-.csw.m{background:var(--amber);}
-.csw.l{background:var(--line3);}
-.cnm{font-size:9px;color:var(--t2);flex:1;}
-.cn{font-size:9px;color:var(--t3);}
-
-/* ── RIGHT ── */
-#right{
-  position:fixed;top:38px;right:0;bottom:0;width:288px;z-index:400;
-  background:rgba(6,7,9,.92);border-left:1px solid var(--line);
-  backdrop-filter:blur(10px);
+  position:fixed;top:50px;left:0;bottom:28px;width:288px;z-index:10;
+  background:var(--panel);border-right:1px solid var(--pb);
   display:flex;flex-direction:column;
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
 }
-#rhd{
-  padding:10px 14px;border-bottom:1px solid var(--line);
-  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+
+/* ── RIGHT PANEL ── */
+#right{
+  position:fixed;top:50px;right:0;bottom:28px;width:308px;z-index:10;
+  background:var(--panel);border-left:1px solid var(--pb);
+  display:flex;flex-direction:column;
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
 }
-.rtitle{font-size:8px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--t3);}
-#fcnt{font-size:9px;color:var(--t3);}
-#feed{flex:1;overflow-y:auto;}
-#feed::-webkit-scrollbar{width:2px;}
-#feed::-webkit-scrollbar-thumb{background:var(--line3);}
+
+/* Panel header */
+.phdr{padding:9px 14px 8px;border-bottom:1px solid var(--pb);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
+.phdr-title{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:2px;color:var(--accent);}
+.phdr-count{font-family:var(--mono);font-size:10px;color:var(--t2);}
+
+/* Panel body */
+.pbody{flex:1;overflow-y:auto;padding:12px 14px;scrollbar-width:thin;scrollbar-color:var(--pb) transparent;}
+.pbody::-webkit-scrollbar{width:3px;}
+.pbody::-webkit-scrollbar-thumb{background:var(--pb);}
+
+/* Filter sections */
+.fsec{margin-bottom:14px;}
+.flbl{display:block;font-family:var(--mono);font-size:8px;letter-spacing:2px;color:var(--t2);margin-bottom:5px;}
+.finput,.fsel{width:100%;background:rgba(0,0,0,0.45);border:1px solid var(--pb);border-radius:2px;color:var(--t0);font-family:var(--mono);font-size:10px;padding:6px 9px;outline:none;transition:border-color .15s;}
+.finput:focus,.fsel:focus{border-color:var(--accent);}
+.fsel option{background:#080f1c;}
+.frow2{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+
+/* Search */
+.srch-wrap{position:relative;}
+.srch-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--t2);pointer-events:none;}
+.srch-inp{padding-left:26px !important;}
+
+/* Reset button */
+.btn-reset{width:100%;padding:5px;margin-top:8px;font-family:var(--mono);font-size:9px;letter-spacing:1px;background:transparent;border:1px solid var(--pb);border-radius:2px;color:var(--t2);cursor:pointer;transition:all .15s;}
+.btn-reset:hover{border-color:var(--red);color:var(--red);}
+
+.sep{border:none;border-top:1px solid var(--pb);margin:12px 0;}
+.stitle{font-family:var(--mono);font-size:8px;letter-spacing:2px;color:var(--t2);margin-bottom:8px;}
+
+/* Distribution bars */
+.dbar{margin-bottom:8px;}
+.dbar-hd{display:flex;justify-content:space-between;margin-bottom:3px;font-family:var(--mono);font-size:9px;color:var(--t1);}
+.dbar-n{color:var(--accent);}
+.dbar-track{height:2px;background:rgba(255,255,255,0.05);border-radius:1px;overflow:hidden;}
+.dbar-fill{height:100%;border-radius:1px;transition:width .5s ease;}
+
+/* Category list */
+.clist{display:flex;flex-direction:column;gap:4px;}
+.citem{display:flex;align-items:center;gap:7px;padding:4px 5px;border-radius:2px;cursor:pointer;transition:background .12s;}
+.citem:hover{background:rgba(255,255,255,0.04);}
+.citem.sel{background:rgba(0,200,255,0.08);}
+.cdot{width:5px;height:5px;border-radius:50%;flex-shrink:0;}
+.cname{font-family:var(--mono);font-size:9px;color:var(--t1);flex:1;}
+.cn{font-family:var(--mono);font-size:9px;color:var(--t2);}
 
 /* Incident cards */
-.icard{
-  padding:10px 14px;border-bottom:1px solid var(--line);
-  cursor:pointer;transition:background .1s;
-  border-left:2px solid transparent;
-}
-.icard:hover{background:rgba(255,255,255,.025);}
-.icard.h{border-left-color:var(--red);}
-.icard.m{border-left-color:var(--amber);}
-.icard.l{border-left-color:var(--line3);}
-.ihd{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:6px;}
-.itype{font-size:8px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;}
-.itype.h{color:var(--red);}
-.itype.m{color:var(--amber);}
-.itype.l{color:var(--t3);}
-.idate{font-size:8px;color:var(--t4);flex-shrink:0;}
-.iloc{font-size:11px;font-weight:500;color:var(--t1);font-family:var(--sans);margin-bottom:3px;}
-.itxt{font-size:9px;color:var(--t3);line-height:1.5;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+.icard{padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;transition:background .12s;border-left:2px solid transparent;margin:0 -14px;}
+.icard:hover{background:rgba(0,200,255,0.04);}
+.icard-hd{display:flex;align-items:center;gap:7px;margin-bottom:4px;}
+.ibadge{font-family:var(--mono);font-size:8px;font-weight:600;letter-spacing:.5px;padding:2px 6px;border-radius:2px;white-space:nowrap;}
+.idate{font-family:var(--mono);font-size:8px;color:var(--t2);margin-left:auto;flex-shrink:0;}
+.iloc{font-family:var(--mono);font-size:9px;color:var(--t1);margin-bottom:3px;}
+.idesc{font-size:10px;color:var(--t2);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.ifeed-empty{font-family:var(--mono);font-size:10px;color:var(--t2);opacity:.5;text-align:center;padding:40px 0;}
 
-#fempty{display:none;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:8px;}
-#fempty p{font-size:9px;color:var(--t4);text-align:center;letter-spacing:.06em;}
+/* Severity colors */
+.sh{background:rgba(255,51,85,0.14);color:var(--red);border:1px solid rgba(255,51,85,0.28);}
+.sm{background:rgba(240,165,0,0.12);color:var(--amber);border:1px solid rgba(240,165,0,0.25);}
+.sl{background:rgba(0,200,255,0.09);color:var(--accent);border:1px solid rgba(0,200,255,0.2);}
 
-/* ── MAP CORNER LABELS ── */
-.map-corner{
-  position:fixed;z-index:300;
-  font-size:8px;color:rgba(255,255,255,.15);letter-spacing:.08em;
-  pointer-events:none;
+/* ── STATUS BAR ── */
+#statusbar{
+  position:fixed;bottom:0;left:0;right:0;height:28px;z-index:20;
+  background:var(--panel);border-top:1px solid var(--pb);
+  display:flex;align-items:center;padding:0 14px;gap:18px;
+  backdrop-filter:blur(16px);font-family:var(--mono);font-size:8px;color:var(--t2);
 }
-#mc-tl{top:50px;left:244px;}
-#mc-br{bottom:10px;right:300px;text-align:right;}
-#mc-coord{bottom:10px;left:244px;color:rgba(59,130,246,.25);}
+.si{display:flex;gap:5px;align-items:center;white-space:nowrap;}
+.sk{opacity:.55;}
+.sv{color:var(--t1);}
+#tl-chart{flex:1;height:14px;min-width:100px;}
+#threat-lvl{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:1.5px;padding:2px 8px;border-radius:2px;flex-shrink:0;}
+#coords{font-family:var(--mono);font-size:8px;color:var(--t3);}
 
-/* ── POPUP ── */
-.leaflet-popup-content-wrapper{
-  background:rgba(11,13,17,.97);border:1px solid var(--line2);
-  border-radius:0;color:var(--t1);font-family:var(--mono);
-  box-shadow:0 4px 32px rgba(0,0,0,.8);padding:0;
-}
-.leaflet-popup-content{margin:0;width:290px!important;}
-.leaflet-popup-tip{background:var(--line2);}
-.leaflet-container a.leaflet-popup-close-button{color:var(--t3);top:8px;right:8px;font-size:14px;}
-.pop{padding:14px;}
-.pop-type{font-size:8px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;margin-bottom:4px;}
-.pop-type.h{color:var(--red);}
-.pop-type.m{color:var(--amber);}
-.pop-loc{font-family:var(--sans);font-size:14px;font-weight:500;color:var(--t0);margin-bottom:2px;}
-.pop-meta{font-size:8px;color:var(--t3);margin-bottom:10px;letter-spacing:.04em;}
-.pop-desc{font-size:9px;color:var(--t2);line-height:1.6;border-top:1px solid var(--line);padding-top:10px;margin-bottom:10px;}
-.pop-src{font-size:8px;color:var(--accent);text-decoration:none;letter-spacing:.04em;}
-.pop-src:hover{color:var(--a2);}
+/* Map corners */
+.mc{position:fixed;z-index:5;font-family:var(--mono);font-size:8px;pointer-events:none;letter-spacing:.5px;}
+#mc-tl{top:58px;left:298px;color:rgba(0,200,255,0.18);}
+#mc-br{bottom:36px;right:318px;text-align:right;color:rgba(0,200,255,0.12);}
 
-/* ── ADMIN OVERLAY (Ctrl+Shift+A) ── */
-#adm{
-  display:none;position:fixed;inset:38px 288px 0 232px;z-index:600;
-  background:rgba(6,7,9,.98);border:1px solid var(--line2);
-  padding:22px;overflow-y:auto;backdrop-filter:blur(16px);
-}
-#adm.open{display:block;}
-.adm-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--line);}
-.adm-title{font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--t2);}
-.adm-close{font-size:9px;color:var(--t3);cursor:pointer;letter-spacing:.06em;}
-.adm-close:hover{color:var(--t1);}
-.adm-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;}
-.adm-box h3{font-size:8px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);margin-bottom:7px;}
-.adm-out{
-  background:var(--s0);border:1px solid var(--line);
-  padding:9px;font-family:var(--mono);font-size:9px;color:var(--t2);
-  white-space:pre-wrap;min-height:44px;max-height:150px;
-  overflow-y:auto;line-height:1.7;
-}
-.adm-actions{display:flex;gap:8px;flex-wrap:wrap;}
-.abtn{
-  padding:6px 14px;background:transparent;border:1px solid var(--line2);
-  color:var(--t2);font-family:var(--mono);font-size:9px;
-  cursor:pointer;letter-spacing:.06em;transition:all .15s;
-}
-.abtn:hover{background:var(--s2);border-color:var(--line3);color:var(--t1);}
-.abtn.d:hover{border-color:var(--red);color:var(--red);}
-.adm-note{font-size:8px;color:var(--t4);margin-top:12px;letter-spacing:.06em;}
+/* Leaflet overrides */
+.leaflet-control-zoom{border:1px solid var(--pb) !important;border-radius:2px !important;}
+.leaflet-control-zoom a{background:var(--panel) !important;color:var(--accent) !important;border-color:var(--pb) !important;font-size:14px !important;}
+.leaflet-control-zoom a:hover{background:var(--ag) !important;}
+.leaflet-popup-content-wrapper{background:rgba(4,10,20,0.97) !important;border:1px solid var(--pb2) !important;border-radius:3px !important;backdrop-filter:blur(16px) !important;}
+.leaflet-popup-tip{background:var(--pb) !important;}
+.leaflet-popup-content{color:var(--t1) !important;font-family:var(--sans);margin:0 !important;}
+.leaflet-container a.leaflet-popup-close-button{color:var(--t2) !important;top:8px !important;right:8px !important;}
+.pop{padding:14px;min-width:220px;max-width:280px;}
+.pop-cat{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:1px;margin-bottom:5px;}
+.pop-loc{font-size:13px;font-weight:600;color:var(--t0);margin-bottom:2px;}
+.pop-meta{font-family:var(--mono);font-size:8px;color:var(--t2);margin-bottom:9px;}
+.pop-desc{font-size:10px;color:var(--t1);line-height:1.55;border-top:1px solid var(--pb);padding-top:9px;margin-bottom:9px;}
+.pop-src{font-family:var(--mono);font-size:8px;color:var(--accent);text-decoration:none;opacity:.8;}
+.pop-src:hover{opacity:1;}
 </style>
 </head>
 <body>
 
 <div id="map"></div>
+<div class="mc" id="mc-tl">PROJ: WGS84 · EPSG:3857</div>
+<div class="mc" id="mc-br">TILES: CARTO DARK MATTER</div>
 
-<!-- corner labels -->
-<div class="map-corner" id="mc-tl">PROJ: EPSG:3857 · WGS84</div>
-<div class="map-corner" id="mc-br">TILES: CARTO · DARK MATTER</div>
-<div class="map-corner" id="mc-coord" id="mc-coord">LAT — · LON —</div>
-
-<!-- TOPBAR -->
-<div id="bar">
-  <div class="bar-id">LEX EUROPE</div>
-  <div class="bar-div"></div>
-  <div class="bar-sys">THREAT INTELLIGENCE · DACH-REGION</div>
-  <div class="bar-tags">
-    <span class="tag live">● LIVE</span>
-    <span class="tag">OSINT</span>
-    <span class="tag">LINKSEXTREMISMUS</span>
-  </div>
-  <div class="bar-right">
-    <div class="bar-metric">
-      <span class="bm-val" id="bm-total">—</span>
-      <span class="bm-lbl">Einträge</span>
-    </div>
-    <div class="bar-metric">
-      <span class="bm-val" id="bm-geo" style="color:var(--t3)">—</span>
-      <span class="bm-lbl">Geocodiert</span>
-    </div>
-    <div id="bar-clock">—</div>
-  </div>
-</div>
-
-<!-- LEFT -->
-<div id="left">
-  <div class="lsec">
-    <div class="sec-lbl">Filterparameter</div>
-    <div class="frow">
-      <label class="flbl">Land</label>
-      <select id="fc" onchange="applyFilters()">
-        <option value="">Alle Länder</option>
-        <option value="DE">Deutschland</option>
-        <option value="AT">Österreich</option>
-        <option value="CH">Schweiz</option>
-        <option value="FR">Frankreich</option>
-        <option value="IT">Italien</option>
-        <option value="GR">Griechenland</option>
-        <option value="Andere">Andere</option>
-      </select>
-    </div>
-    <div class="frow">
-      <label class="flbl">Vorfallstyp</label>
-      <select id="fk" onchange="applyFilters()">
-        <option value="">Alle Typen</option>
-        <option value="Brandanschlag">Brandanschlag</option>
-        <option value="Sabotage">Sabotage</option>
-        <option value="Gewalt">Gewalt</option>
-        <option value="Militante Aktion">Militante Aktion</option>
-        <option value="Aufruf zu Gewalt">Aufruf zu Gewalt</option>
-        <option value="Sachbeschädigung">Sachbeschädigung</option>
-        <option value="Demo/Kundgebung">Demo / Kundgebung</option>
-        <option value="Besetzung">Besetzung</option>
-        <option value="Repression">Repression</option>
-        <option value="Schmiererei">Schmiererei</option>
-      </select>
+<!-- TOP BAR -->
+<header id="topbar">
+  <div class="brand">
+    <span class="brand-icon">◈</span>
+    <div class="brand-text">
+      <div class="brand-name">SECMAP</div>
+      <div class="brand-sub">LEX EUROPE · THREAT INTELLIGENCE</div>
     </div>
   </div>
-  <div class="lsec">
-    <div class="sec-lbl">Länderverteilung</div>
-    <div id="dist-c"></div>
+  <div class="tb-div"></div>
+  <div class="stat-chip"><span class="live-dot"></span> LIVE</div>
+  <div class="stat-chip">EINTRÄGE <b id="tc">—</b></div>
+  <div class="stat-chip">GEODATEN <b id="tg">—</b></div>
+  <div class="stat-chip">SYNC <b id="ts">—</b></div>
+  <div class="tb-spacer"></div>
+  <span class="classify-tag">OSINT // RESTRICTED // LEX-EU</span>
+  <div class="tb-actions">
+    <button class="btn-ghost" id="btn-heat" onclick="toggleHeat()">⊞ HEATMAP</button>
+    <a class="btn-ghost" href="/admin" target="_blank">⚙ ADMIN</a>
   </div>
-  <div class="lsec grow">
-    <div class="sec-lbl">Vorfallsklassifikation</div>
-    <div id="dist-k"></div>
-  </div>
-</div>
+</header>
 
-<!-- RIGHT -->
-<div id="right">
-  <div id="rhd">
-    <span class="rtitle">Ereignisprotokoll</span>
-    <span id="fcnt">—</span>
+<!-- LEFT PANEL -->
+<aside id="left">
+  <div class="phdr">
+    <span class="phdr-title">FILTER // ANALYSE</span>
+    <span class="phdr-count" id="fcount"></span>
   </div>
-  <div id="feed">
-    <div id="fempty" style="display:flex">
-      <p>KEINE DATEN VORHANDEN<br>CRAWLER AKTIV</p>
+  <div class="pbody">
+
+    <div class="fsec">
+      <span class="flbl">⌕ VOLLTEXTSUCHE</span>
+      <div class="srch-wrap">
+        <span class="srch-icon">🔍</span>
+        <input class="finput srch-inp" id="f-srch" type="text" placeholder="Stichwort…" oninput="debounce()">
+      </div>
     </div>
-  </div>
-</div>
 
-<!-- ADMIN (Ctrl+Shift+A) -->
-<div id="adm">
-  <div class="adm-hd">
-    <span class="adm-title">Systemverwaltung</span>
-    <span class="adm-close" onclick="admClose()">SCHLIESSEN ×</span>
+    <div class="fsec">
+      <span class="flbl">FILTER</span>
+      <div class="frow2">
+        <select class="fsel" id="f-co" onchange="applyFilters()">
+          <option value="">LAND: ALLE</option>
+          <option value="DE">🇩🇪 Deutschland</option>
+          <option value="AT">🇦🇹 Österreich</option>
+          <option value="CH">🇨🇭 Schweiz</option>
+          <option value="FR">🇫🇷 Frankreich</option>
+          <option value="IT">🇮🇹 Italien</option>
+          <option value="GR">🇬🇷 Griechenland</option>
+          <option value="ES">🇪🇸 Spanien</option>
+          <option value="UK">🇬🇧 UK</option>
+        </select>
+        <select class="fsel" id="f-ca" onchange="applyFilters()">
+          <option value="">TYP: ALLE</option>
+          <option>Brandanschlag</option>
+          <option>Sabotage</option>
+          <option>Gewalt</option>
+          <option>Militante Aktion</option>
+          <option>Aufruf zu Gewalt</option>
+          <option>Sachbeschädigung</option>
+          <option>Demo/Kundgebung</option>
+          <option>Besetzung</option>
+          <option>Verhaftung</option>
+          <option>Repression</option>
+          <option>Schmiererei</option>
+          <option>Sonstiges</option>
+        </select>
+      </div>
+      <div class="frow2" style="margin-top:7px">
+        <input class="finput" id="f-von" type="date" onchange="applyFilters()" title="Von Datum">
+        <input class="finput" id="f-bis" type="date" onchange="applyFilters()" title="Bis Datum">
+      </div>
+      <button class="btn-reset" onclick="resetFilters()">✕ ZURÜCKSETZEN</button>
+    </div>
+
+    <hr class="sep">
+    <div class="stitle">NACH LAND</div>
+    <div id="dist-co" class="fsec"></div>
+
+    <hr class="sep">
+    <div class="stitle">NACH VORFALLTYP</div>
+    <div id="dist-ca" class="clist"></div>
   </div>
-  <div class="adm-grid">
-    <div class="adm-box"><h3>Crawler-Status</h3><div class="adm-out" id="ao-status">—</div></div>
-    <div class="adm-box"><h3>Grok API</h3><div class="adm-out" id="ao-grok">—</div></div>
-    <div class="adm-box"><h3>Quellen (Top)</h3><div class="adm-out" id="ao-src">—</div></div>
-    <div class="adm-box"><h3>Letzte Einträge</h3><div class="adm-out" id="ao-rec">—</div></div>
+</aside>
+
+<!-- RIGHT PANEL -->
+<aside id="right">
+  <div class="phdr">
+    <span class="phdr-title">⚡ THREAT FEED</span>
+    <span class="phdr-count" id="rcount">—</span>
   </div>
-  <div class="adm-actions">
-    <button class="abtn" style="border-color:rgba(59,130,246,.4);color:var(--a2)" onclick="window.open('/admin','_blank')">Admin-Panel öffnen →</button>
+  <div class="pbody" id="feed">
+    <div class="ifeed-empty">LADE DATENSÄTZE…</div>
   </div>
-  <div class="adm-note">CTRL + SHIFT + A · Sitzung lokal · Keine Speicherung</div>
-</div>
+</aside>
+
+<!-- STATUS BAR -->
+<footer id="statusbar">
+  <div class="si"><span class="sk">QUELLEN</span><span class="sv" id="s-src">—</span></div>
+  <div class="si"><span class="sk">DB</span><span class="sv" id="s-db">—</span></div>
+  <svg id="tl-chart" viewBox="0 0 400 14" preserveAspectRatio="none"></svg>
+  <span id="coords">LAT — · LON —</span>
+  <div class="si"><span class="sk">CRAWLER</span><span class="sv" id="s-cr">—</span></div>
+  <div id="threat-lvl"></div>
+</footer>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-const HIGH = new Set(["Brandanschlag","Sabotage","Gewalt","Militante Aktion","Aufruf zu Gewalt"]);
-const MED  = new Set(["Sachbeschädigung","Repression","Verhaftung","Besetzung","Schmiererei"]);
-const sev  = c => HIGH.has(c)?"h":MED.has(c)?"m":"l";
+// ── CONSTANTS ──────────────────────────────
+const SEV_H = new Set(['Brandanschlag','Gewalt','Militante Aktion','Aufruf zu Gewalt']);
+const SEV_M = new Set(['Sabotage','Sachbeschädigung','Besetzung','Demo/Kundgebung']);
+const CAT_COL = {
+  'Brandanschlag':'#ff3355','Gewalt':'#ff3355','Militante Aktion':'#ff3355',
+  'Aufruf zu Gewalt':'#ff6644','Sabotage':'#f0a500','Sachbeschädigung':'#f0a500',
+  'Besetzung':'#f0a500','Demo/Kundgebung':'#a0c8ff',
+  'Schmiererei':'#5a7a92','Verhaftung':'#00c8ff','Repression':'#00c8ff','Sonstiges':'#3a5570'
+};
+const CO_COL  = {DE:'#00c8ff',AT:'#f0a500',CH:'#00e87a',FR:'#a0c8ff',IT:'#c080ff',GR:'#ff8844',ES:'#ff6644',UK:'#80c8ff'};
+const CO_FLAG = {DE:'🇩🇪',AT:'🇦🇹',CH:'🇨🇭',FR:'🇫🇷',IT:'🇮🇹',GR:'🇬🇷',ES:'🇪🇸',UK:'🇬🇧'};
 
-let data=[], map, mg;
+function sev(c){return SEV_H.has(c)?'h':SEV_M.has(c)?'m':'l';}
+function col(c){return CAT_COL[c]||'#3a5570';}
 
-// MAP
-map = L.map("map",{center:[49.8,11],zoom:5,zoomControl:false,attributionControl:false});
-L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",{maxZoom:19}).addTo(map);
-L.control.zoom({position:"bottomright"}).addTo(map);
-mg = L.layerGroup().addTo(map);
+// ── STATE ──────────────────────────────────
+let all=[], vis=[], map, mLayer, heatMode=false, dTimer=null;
 
-// live coordinates in corner
-map.on("mousemove", e => {
-  document.getElementById("mc-coord").textContent =
+// ── MAP ────────────────────────────────────
+map = L.map('map',{center:[49.8,11],zoom:5,zoomControl:false,attributionControl:false});
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd'}).addTo(map);
+L.control.zoom({position:'bottomright'}).addTo(map);
+L.control.attribution({prefix:'SECMAP · © CartoDB · © OpenStreetMap'}).addTo(map);
+mLayer = L.layerGroup().addTo(map);
+
+map.on('mousemove',e=>{
+  document.getElementById('coords').textContent =
     `LAT ${e.latlng.lat.toFixed(4)} · LON ${e.latlng.lng.toFixed(4)}`;
 });
 
-function mkIcon(s) {
-  const cols={h:"#ef4444",m:"#f59e0b",l:"#2e3548"};
-  const glow={h:"rgba(239,68,68,.5)",m:"rgba(245,158,11,.4)",l:"none"};
-  const c=cols[s], g=glow[s];
-  return L.divIcon({
-    className:"",
-    html:`<div style="width:8px;height:8px;border-radius:50%;background:${c};box-shadow:0 0 6px ${g};border:1px solid rgba(255,255,255,.1)"></div>`,
-    iconSize:[8,8],iconAnchor:[4,4]
+// ── MARKERS ────────────────────────────────
+function renderMarkers(list){
+  mLayer.clearLayers();
+  if(heatMode){renderHeat(list);return;}
+  list.filter(i=>i.lat&&i.lon).forEach(i=>{
+    const c=col(i.category), s=sev(i.category);
+    const m=L.circleMarker([i.lat,i.lon],{
+      radius:s==='h'?6:s==='m'?5:4,
+      fillColor:c,color:c,weight:1.5,opacity:.9,fillOpacity:.45
+    });
+    m.bindPopup(`<div class="pop">
+      <div class="pop-cat" style="color:${c}">${i.category.toUpperCase()}</div>
+      <div class="pop-loc">📍 ${i.location||'—'}, ${i.country||'—'}</div>
+      <div class="pop-meta">📅 ${i.date||'—'} &nbsp;·&nbsp; ${i.source||'—'}</div>
+      <div class="pop-desc">${(i.description||'').substring(0,320)}</div>
+      ${i.url&&i.url.startsWith('http')?`<a class="pop-src" href="${i.url}" target="_blank">→ QUELLE AUFRUFEN</a>`:''}
+    </div>`,{maxWidth:300});
+    m.on('click',()=>hlFeed(i.id));
+    mLayer.addLayer(m);
   });
 }
 
-function render(list) {
-  mg.clearLayers();
-  document.querySelectorAll(".icard").forEach(n=>n.remove());
-  const empty=document.getElementById("fempty");
-  document.getElementById("fcnt").textContent=list.length+" Einträge";
-  if(!list.length){empty.style.display="flex";return;}
-  empty.style.display="none";
-  const feed=document.getElementById("feed");
-  list.forEach(inc=>{
-    const s=sev(inc.category);
-    if(inc.lat&&inc.lon&&!isNaN(+inc.lat)&&!isNaN(+inc.lon)){
-      const pop=`<div class="pop">
-        <div class="pop-type ${s}">${inc.category}</div>
-        <div class="pop-loc">${inc.location||"—"}, ${inc.country||"—"}</div>
-        <div class="pop-meta">${inc.date||"—"} · ${inc.source||""}</div>
-        <div class="pop-desc">${(inc.description||"").substring(0,300)}</div>
-        ${inc.url?`<a class="pop-src" href="${inc.url}" target="_blank">QUELLE AUFRUFEN →</a>`:""}
-      </div>`;
-      L.marker([+inc.lat,+inc.lon],{icon:mkIcon(s)}).bindPopup(pop,{maxWidth:310}).addTo(mg);
-    }
-    const card=document.createElement("div");
-    card.className=`icard ${s}`;
-    card.innerHTML=`
-      <div class="ihd">
-        <span class="itype ${s}">${inc.category}</span>
-        <span class="idate">${inc.date||"—"}</span>
+function renderHeat(list){
+  list.filter(i=>i.lat&&i.lon).forEach(i=>{
+    const s=sev(i.category);
+    const r=s==='h'?22:s==='m'?14:8;
+    const c=col(i.category);
+    L.circleMarker([i.lat,i.lon],{radius:r,fillColor:c,color:'transparent',weight:0,fillOpacity:.06}).addTo(mLayer);
+    L.circleMarker([i.lat,i.lon],{radius:4,fillColor:c,color:'transparent',weight:0,fillOpacity:.3}).addTo(mLayer);
+  });
+}
+
+// ── FEED ───────────────────────────────────
+function renderFeed(list){
+  const el=document.getElementById('feed');
+  document.getElementById('rcount').textContent=list.length.toLocaleString('de');
+  if(!list.length){el.innerHTML='<div class="ifeed-empty">KEINE VORFÄLLE GEFUNDEN</div>';return;}
+  el.innerHTML=list.slice(0,250).map(i=>{
+    const s=sev(i.category);
+    const desc=(i.description||'').substring(0,130);
+    return `<div class="icard" id="ic-${i.id}" onclick="flyTo(${i.lat},${i.lon},${i.id})" style="border-left-color:${col(i.category)}">
+      <div class="icard-hd">
+        <span class="ibadge s${s}">${i.category}</span>
+        <span class="idate">${i.date||'—'}</span>
       </div>
-      <div class="iloc">${inc.location||"—"}, ${inc.country||"—"}</div>
-      <div class="itxt">${inc.description||"—"}</div>`;
-    card.onclick=()=>{if(inc.lat&&inc.lon)map.setView([+inc.lat,+inc.lon],11,{animate:true});};
-    feed.appendChild(card);
-  });
+      <div class="iloc">📍 ${i.location||'—'} · <span style="opacity:.65">${i.country||'—'}</span></div>
+      <div class="idesc">${desc}${desc.length>=130?'…':''}</div>
+    </div>`;
+  }).join('');
 }
 
-function applyFilters(){
-  const co=document.getElementById("fc").value;
-  const ca=document.getElementById("fk").value;
-  render(data.filter(i=>(!co||i.country===co)&&(!ca||i.category===ca)));
+function flyTo(lat,lon,id){
+  if(lat&&lon) map.flyTo([lat,lon],12,{duration:1.1,easeLinearity:.4});
+  hlFeed(id);
+}
+function hlFeed(id){
+  document.querySelectorAll('.icard').forEach(e=>e.style.background='');
+  const el=document.getElementById(`ic-${id}`);
+  if(el){el.style.background='rgba(0,200,255,0.07)';el.scrollIntoView({behavior:'smooth',block:'nearest'});}
 }
 
-async function loadStats(){
+// ── DISTRIBUTIONS ──────────────────────────
+function renderDists(list){
+  const bCo={}, bCa={};
+  list.forEach(i=>{bCo[i.country]=(bCo[i.country]||0)+1; bCa[i.category]=(bCa[i.category]||0)+1;});
+  const mxCo=Math.max(...Object.values(bCo),1);
+  const mxCa=Math.max(...Object.values(bCa),1);
+
+  document.getElementById('dist-co').innerHTML=Object.entries(bCo)
+    .sort((a,b)=>b[1]-a[1]).slice(0,8).map(([c,n])=>{
+      const clr=CO_COL[c]||'#5a7a92', fl=CO_FLAG[c]||'';
+      return `<div class="dbar">
+        <div class="dbar-hd"><span>${fl} ${c}</span><span class="dbar-n">${n}</span></div>
+        <div class="dbar-track"><div class="dbar-fill" style="width:${Math.round(n/mxCo*100)}%;background:${clr}"></div></div>
+      </div>`;
+    }).join('');
+
+  const selCa=document.getElementById('f-ca').value;
+  document.getElementById('dist-ca').innerHTML=Object.entries(bCa)
+    .sort((a,b)=>b[1]-a[1]).map(([c,n])=>`
+      <div class="citem${c===selCa?' sel':''}" onclick="filterCat('${c}')">
+        <div class="cdot" style="background:${col(c)}"></div>
+        <span class="cname">${c}</span>
+        <span class="cn">${n}</span>
+      </div>`).join('');
+}
+
+function filterCat(cat){
+  const el=document.getElementById('f-ca');
+  el.value=el.value===cat?'':cat;
+  applyFilters();
+}
+
+// ── TIMELINE CHART ─────────────────────────
+async function loadTimeline(){
   try{
-    const s=await fetch("/api/stats").then(r=>r.json());
-    document.getElementById("bm-total").textContent=s.total;
-    document.getElementById("bm-geo").textContent=s.geocoded;
-    const mx=s.by_country[0]?.n||1;
-    document.getElementById("dist-c").innerHTML=s.by_country.slice(0,7).map(c=>`
-      <div class="bitem">
-        <div class="bhd"><span class="bnm">${c.country||"?"}</span><span class="bn">${c.n}</span></div>
-        <div class="btrack"><div class="bfill" style="width:${Math.round(c.n/mx*100)}%"></div></div>
-      </div>`).join("");
-    document.getElementById("dist-k").innerHTML=s.by_cat.slice(0,12).map(c=>`
-      <div class="crow">
-        <div class="csw ${sev(c.category)}"></div>
-        <span class="cnm">${c.category}</span>
-        <span class="cn">${c.n}</span>
-      </div>`).join("");
-    const lc=s.last_crawl?new Date(s.last_crawl).toLocaleString("de-CH",{timeZone:"Europe/Zurich",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}):"—";
-    document.getElementById("ao-status").textContent=
-      `Letzter Crawl:  ${lc}\nLäuft:          ${s.crawl_running?"JA":"NEIN"}`;
-    document.getElementById("ao-src").textContent=
-      (s.by_source||[]).map(c=>`${(c.source||"").substring(0,22).padEnd(22)} ${c.n}`).join("\n");
-    document.getElementById("ao-rec").textContent=
-      data.slice(0,5).map(i=>`${i.date}  ${i.category}\n${i.location}, ${i.country}\n`).join("—\n");
-  }catch(e){console.error(e);}
+    const data=await fetch('/api/timeline').then(r=>r.json());
+    if(!data.length) return;
+    const svg=document.getElementById('tl-chart');
+    const W=400, H=14;
+    const rows=data.slice(-48);
+    const mx=Math.max(...rows.map(d=>d.n),1);
+    const bw=W/rows.length;
+    svg.innerHTML=rows.map((d,i)=>{
+      const h=Math.max(1,Math.round(d.n/mx*H));
+      const clr=d.high>0?'#ff3355':'rgba(0,200,255,0.45)';
+      return `<rect x="${i*bw}" y="${H-h}" width="${bw-.5}" height="${h}" fill="${clr}" opacity=".75"/>`;
+    }).join('');
+  }catch(e){}
 }
 
+// ── FILTERS ────────────────────────────────
+function applyFilters(){
+  const co=document.getElementById('f-co').value;
+  const ca=document.getElementById('f-ca').value;
+  const von=document.getElementById('f-von').value;
+  const bis=document.getElementById('f-bis').value;
+  const srch=(document.getElementById('f-srch').value||'').toLowerCase().trim();
+  vis=all.filter(i=>{
+    if(co&&i.country!==co) return false;
+    if(ca&&i.category!==ca) return false;
+    if(von&&i.date<von) return false;
+    if(bis&&i.date>bis) return false;
+    if(srch){
+      const hay=((i.description||'')+' '+(i.location||'')+' '+(i.category||'')).toLowerCase();
+      if(!hay.includes(srch)) return false;
+    }
+    return true;
+  });
+  document.getElementById('fcount').textContent=vis.length;
+  renderMarkers(vis);
+  renderFeed(vis);
+  renderDists(vis);
+}
+
+function resetFilters(){
+  ['f-co','f-ca','f-von','f-bis'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f-srch').value='';
+  applyFilters();
+}
+
+function debounce(){
+  clearTimeout(dTimer);
+  dTimer=setTimeout(applyFilters,280);
+}
+
+// ── HEATMAP TOGGLE ─────────────────────────
+function toggleHeat(){
+  heatMode=!heatMode;
+  const btn=document.getElementById('btn-heat');
+  btn.textContent=heatMode?'⊞ MARKER':'⊞ HEATMAP';
+  btn.classList.toggle('on',heatMode);
+  renderMarkers(vis);
+}
+
+// ── THREAT LEVEL ───────────────────────────
+function updateThreat(list){
+  const hi=list.filter(i=>SEV_H.has(i.category)).length;
+  const pct=list.length>0?hi/list.length:0;
+  const el=document.getElementById('threat-lvl');
+  if(pct>.35){el.textContent='▲ HOCH';el.style.cssText='background:rgba(255,51,85,0.18);color:#ff3355;border:1px solid rgba(255,51,85,0.35);padding:2px 8px;border-radius:2px;';}
+  else if(pct>.15){el.textContent='◆ MITTEL';el.style.cssText='background:rgba(240,165,0,0.15);color:#f0a500;border:1px solid rgba(240,165,0,0.3);padding:2px 8px;border-radius:2px;';}
+  else{el.textContent='● NIEDRIG';el.style.cssText='background:rgba(0,200,255,0.09);color:#00c8ff;border:1px solid rgba(0,200,255,0.22);padding:2px 8px;border-radius:2px;';}
+}
+
+// ── DATA LOAD ──────────────────────────────
 async function loadData(){
   try{
-    data=await fetch("/api/incidents").then(r=>r.json());
+    const [inc,stats]=await Promise.all([
+      fetch('/api/incidents').then(r=>r.json()),
+      fetch('/api/stats').then(r=>r.json())
+    ]);
+    all=inc;
+    document.getElementById('tc').textContent=stats.total.toLocaleString('de');
+    const gp=stats.total>0?Math.round(stats.geocoded/stats.total*100):0;
+    document.getElementById('tg').textContent=gp+'%';
+    if(stats.last_crawl){
+      const d=new Date(stats.last_crawl);
+      document.getElementById('ts').textContent=d.toLocaleTimeString('de',{hour:'2-digit',minute:'2-digit'});
+    }
+    document.getElementById('s-src').textContent=stats.by_source?.length||'—';
+    document.getElementById('s-db').textContent=stats.total+' EIN.';
+    document.getElementById('s-cr').textContent=stats.crawl_running?'⟳ AKTIV':'● BEREIT';
+    updateThreat(all);
     applyFilters();
   }catch(e){console.error(e);}
 }
 
-// ADMIN
-function admOpen(){document.getElementById("adm").classList.add("open");loadStats();}
-function admClose(){document.getElementById("adm").classList.remove("open");}
-document.addEventListener("keydown",e=>{
-  if(e.ctrlKey&&e.shiftKey&&e.key==="A"){e.preventDefault();document.getElementById("adm").classList.contains("open")?admClose():admOpen();}
-});
-async function admCrawl(){await fetch("/admin/api/crawl",{method:"POST"});document.getElementById("ao-status").textContent="Crawler gestartet...";setTimeout(loadStats,3000);}
-async function admStop(){const r=await fetch("/admin/api/stop-crawl",{method:"POST"});const d=await r.json();document.getElementById("ao-status").textContent=d.status;}
-async function admGrok(){document.getElementById("ao-grok").textContent="Teste...";try{const d=await fetch("/admin/api/grok-test",{method:"POST"}).then(r=>r.json());document.getElementById("ao-grok").textContent=JSON.stringify(d,null,2);}catch(e){document.getElementById("ao-grok").textContent="Fehler: "+e.message;}}
-async function admClear(){if(!confirm("Alle Daten löschen?"))return;await fetch("/admin/api/clear",{method:"POST"});data=[];render([]);loadStats();}
-
-function tick(){
-  document.getElementById("bar-clock").textContent=
-    new Date().toLocaleTimeString("de-CH",{timeZone:"Europe/Zurich",hour:"2-digit",minute:"2-digit",second:"2-digit"});
-}
-loadStats();loadData();tick();
-setInterval(tick,1000);
-setInterval(()=>{loadStats();loadData();},5*60*1000);
+// ── INIT ───────────────────────────────────
+loadData();
+loadTimeline();
+setInterval(loadData,5*60*1000);
 </script>
 </body>
 </html>
