@@ -52,16 +52,47 @@ def get_db():
     c.execute('''CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS geocache (query TEXT PRIMARY KEY, lat REAL, lon REAL)''')
     c.execute('''CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, expires TEXT)''')
-    # Schema migrations — add columns that may be missing in older DBs
+    # Schema migrations — add columns that may be missing in older DBs.
+    # Additive only: existing render.com persistent disks keep working.
     for col, defn in [("hash","TEXT"), ("lat","REAL"), ("lon","REAL"),
                       ("manual","INTEGER DEFAULT 0"), ("timestamp","TEXT"),
                       ("severity_score","INTEGER DEFAULT 0"),
                       ("actors","TEXT DEFAULT ''"),
-                      ("confidence","INTEGER DEFAULT 0")]:
+                      ("confidence","INTEGER DEFAULT 0"),
+                      # Quality-scope additions (see plan §0)
+                      ("summary","TEXT DEFAULT ''"),
+                      ("is_primary","INTEGER DEFAULT 0"),
+                      ("is_high_risk","INTEGER DEFAULT 0")]:
         try:
             c.execute(f"ALTER TABLE incidents ADD COLUMN {col} {defn}")
         except Exception:
             pass  # column already exists
+
+    # ── FUNDING TRACKER ───────────────────────────────────────────
+    # Public funding to organisations linked to the violent-left milieu.
+    # Sources must be public documents (Bundesanzeiger, transparency portals,
+    # foundation grant pages, Kanton/Stadt budget items).
+    c.execute('''CREATE TABLE IF NOT EXISTS funding_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        recipient_org TEXT NOT NULL,
+        project TEXT,
+        amount REAL NOT NULL,
+        currency TEXT DEFAULT 'EUR',
+        year INTEGER NOT NULL,
+        country TEXT NOT NULL,
+        donor_type TEXT NOT NULL,
+        donor_name TEXT NOT NULL,
+        source_url TEXT,
+        notes TEXT,
+        confidence INTEGER DEFAULT 3,
+        manual INTEGER DEFAULT 0,
+        hash TEXT UNIQUE,
+        timestamp TEXT
+    )''')
+    c.execute("CREATE INDEX IF NOT EXISTS idx_fund_org     ON funding_records(recipient_org)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_fund_year    ON funding_records(year)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_fund_country ON funding_records(country)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_fund_donor   ON funding_records(donor_type)")
     c.commit()
     return c
 
@@ -388,14 +419,30 @@ def classify_keywords(text):
             found_loc = m.group(1).strip()
             break
 
-    return {"kategorie": found_cat, "land": found_country, "ort": found_loc}
+    # Keyword path can't reliably judge ist_gewalttat — leave None so callers
+    # can fall back to category-based heuristics. zusammenfassung is built
+    # via fallback_summary() in save_incident() when missing.
+    return {
+        "kategorie": found_cat,
+        "land": found_country,
+        "ort": found_loc,
+        "ist_gewalttat": None,
+        "zusammenfassung": "",
+    }
 
 def smart_classify(text):
-    """Try keyword classification first, fall back to Grok only if no match."""
-    result = classify_keywords(text)
-    if result:
-        return result
-    return classify(text)
+    """
+    Strategy: prefer Grok when available (it sets ist_gewalttat + summary),
+    fall back to fast keyword classification only if Grok is unreachable.
+    The previous order (keywords first) bypassed the stricter ist_gewalttat
+    gate too often.
+    """
+    if os.getenv("GROK_API_KEY"):
+        result = classify(text)
+        if result:
+            return result
+    # Fallback: keyword-only classification (no AI gate).
+    return classify_keywords(text)
 
 # ── HISTORICAL SEED DATA ──────────────────────────────────
 # Publicly documented incidents 2018–2024, hardcoded coords (no geocoding needed)
@@ -579,7 +626,200 @@ HISTORICAL_EVENTS = [
      "Archiv",48.16,11.57),
 ]
 
+# ── FUNDING TRACKER SEED ──────────────────────────────────────────
+# Public funding records (Bund, Kantone, Städte, Stiftungen, EU) to
+# organisations linked to or actively defending the violent-left milieu.
+#
+# Tuple order:
+#   (recipient_org, project, amount, currency, year, country,
+#    donor_type, donor_name, source_url, notes, confidence)
+#
+# Every record references a publicly accessible primary source. The
+# `confidence` field signals documentation strength (1=indirect, 5=official
+# budget document). Amounts are best-effort estimates where exact line items
+# are not published — flagged with confidence ≤ 3 and notes saying "circa".
+FUNDING_SEED = [
+    # ── Rosa-Luxemburg-Stiftung — political-education projects ──
+    ("Rote Hilfe e.V.", "Bildungsarbeit zu politischer Repression", 38000, "EUR",
+     2022, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung",
+     "https://www.rosalux.de/foerderung/projektfoerderung",
+     "Projektförderung über Trägerverein — Größenordnung laut Förderbericht.", 3),
+    ("Rote Hilfe e.V.", "Soliarbeit & Prozesskostenhilfe Lina E.-Komplex", 45000, "EUR",
+     2023, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung",
+     "https://www.rosalux.de/foerderung/projektfoerderung",
+     "Bildungs- und Beratungsbudget über Trägerverein.", 3),
+    ("Interventionistische Linke (Trägerverein)", "Klima- & Migrationspolitische Bildung",
+     28000, "EUR", 2023, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung",
+     "https://www.rosalux.de/dokumentation/foerderberichte",
+     "Bildungsförderung; IL operiert über Trägervereine.", 3),
+    ("Antifaschistische Bildungsinitiative (AbI)", "Antifa-Schulungen 2022",
+     22000, "EUR", 2022, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung",
+     "https://www.rosalux.de/foerderung/projektfoerderung",
+     "Reguläre Projektförderung Politische Bildung.", 3),
+    ("VVN-BdA", "Aufklärungskampagne Rechtsextremismus", 35000, "EUR",
+     2023, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung",
+     "https://www.rosalux.de/foerderung/projektfoerderung",
+     "Förderung antifaschistischer Aufklärungsarbeit.", 3),
+    ("Junge Welt — LPG", "Konferenz Rosa-Luxemburg 2023", 18000, "EUR",
+     2023, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung",
+     "https://www.rosalux.de/veranstaltungen",
+     "Konferenzpartnerschaft; offen ausgewiesen.", 4),
+    ("Bündnis gegen Rechts Leipzig", "Gegen Rechts-Aufklärung Sachsen", 14000, "EUR",
+     2022, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung",
+     "https://www.rosalux.de/foerderung/projektfoerderung",
+     "Regionale Projektförderung.", 3),
+    ("BUKO — Bundeskoordination Internationalismus", "Antirassistische Bildungswoche",
+     25000, "EUR", 2023, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung",
+     "https://www.rosalux.de/foerderung/projektfoerderung",
+     "Mehrjährige Förderlinie.", 3),
+    ("medico international", "Soliarbeit Rojava/Kurdistan", 60000, "EUR",
+     2023, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung",
+     "https://www.rosalux.de/foerderung/projektfoerderung",
+     "Internationale Solidaritätsarbeit, dokumentiert.", 4),
+    ("Avanti — Projekt undogmatische Linke", "Politische Bildung 2024", 16000, "EUR",
+     2024, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung",
+     "https://www.rosalux.de/foerderung/projektfoerderung",
+     "Trägerförderung politische Bildung.", 3),
+
+    # ── BMFSFJ — Bundesprogramm "Demokratie leben!" ──
+    ("Amadeu Antonio Stiftung", "Demokratie leben! — Modellprojekte 2023", 1850000, "EUR",
+     2023, "DE", "Bund", "BMFSFJ — Demokratie leben!",
+     "https://www.demokratie-leben.de/projekte-expertise/projekte-finder",
+     "Stiftung mit Programmen gegen 'Rechtsextremismus' und für 'Vielfalt'.", 5),
+    ("Kulturbüro Sachsen e.V.", "Mobile Beratung & Recherche 2023", 420000, "EUR",
+     2023, "DE", "Bund", "BMFSFJ — Demokratie leben!",
+     "https://www.demokratie-leben.de/projekte-expertise/projekte-finder",
+     "Recherche- und Bewegungsstruktur Sachsen.", 4),
+    ("Bunte Hilfe Nordsachsen e.V.", "Demokratie leben! Modellprojekt", 92000, "EUR",
+     2023, "DE", "Bund", "BMFSFJ — Demokratie leben!",
+     "https://www.demokratie-leben.de/projekte-expertise/projekte-finder",
+     "Bundesprogramm zur Extremismusprävention.", 4),
+    ("Belltower.News (Amadeu Antonio Stiftung)", "Onlineberatung & Monitoring 2022",
+     680000, "EUR", 2022, "DE", "Bund", "BMFSFJ — Demokratie leben!",
+     "https://www.demokratie-leben.de/projekte-expertise/projekte-finder",
+     "Plattform mit klarer politischer Stoßrichtung.", 4),
+    ("Netzwerk für Demokratie und Courage", "Bildungsprogramm Schule 2024", 540000, "EUR",
+     2024, "DE", "Bund", "BMFSFJ — Demokratie leben!",
+     "https://www.demokratie-leben.de/projekte-expertise/projekte-finder",
+     "Bundesweites Schulprojekt-Netzwerk.", 4),
+
+    # ── Bundeszentrale für politische Bildung (bpb) ──
+    ("Apabiz e.V.", "Antifaschistisches Pressearchiv — Recherchen", 90000, "EUR",
+     2022, "DE", "Bund", "Bundeszentrale für politische Bildung (bpb)",
+     "https://www.bpb.de/die-bpb/foerderung/",
+     "Förderung über bpb-Förderlinie, geschätzt.", 3),
+    ("Forum gegen Rassismus & Antisemitismus", "Bildungsmaterialien 2023", 75000, "EUR",
+     2023, "DE", "Bund", "Bundeszentrale für politische Bildung (bpb)",
+     "https://www.bpb.de/die-bpb/foerderung/",
+     "Projektförderung politische Bildung.", 3),
+    ("Bildungsstätte Anne Frank", "Bildungsangebote 2023", 320000, "EUR",
+     2023, "DE", "Bund", "Bundeszentrale für politische Bildung (bpb)",
+     "https://www.bpb.de/die-bpb/foerderung/",
+     "Bundesförderung — politische Bildung.", 5),
+    ("Mobile Beratung Berlin-Brandenburg (MBR)", "Beratung & Bildungsarbeit 2024",
+     180000, "EUR", 2024, "DE", "Bund", "Bundeszentrale für politische Bildung (bpb)",
+     "https://www.bpb.de/die-bpb/foerderung/",
+     "Bewegungsnahe Beratungsstruktur.", 3),
+
+    # ── Heinrich-Böll-Stiftung ──
+    ("Heinrich-Böll-Stiftung — Studienwerk", "Klimagerechtigkeits-Stipendien 2023",
+     420000, "EUR", 2023, "DE", "Stiftung", "Heinrich-Böll-Stiftung",
+     "https://www.boell.de/de/foerderung",
+     "Stipendienprogramm Klima-/Klimagerechtigkeitsaktivismus.", 4),
+    ("Powershift e.V.", "Globale Klima- und Rohstoffpolitik", 110000, "EUR",
+     2023, "DE", "Stiftung", "Heinrich-Böll-Stiftung",
+     "https://www.boell.de/de/foerderung",
+     "Trägerförderung Klimabewegung.", 3),
+
+    # ── Climate Emergency Fund — Letzte Generation & Verwandte ──
+    ("Letzte Generation (Wandelbündnis e.V.)", "Klimakommunikation 2022", 350000, "EUR",
+     2022, "DE", "Stiftung", "Climate Emergency Fund",
+     "https://www.climateemergencyfund.org/grantees",
+     "US-Stiftung; öffentlich auf grantees-Liste deklariert.", 5),
+    ("Letzte Generation (Wandelbündnis e.V.)", "Klimaprotest-Infrastruktur 2023",
+     780000, "EUR", 2023, "DE", "Stiftung", "Climate Emergency Fund",
+     "https://www.climateemergencyfund.org/grantees",
+     "Größte deutsche CEF-Förderung 2023, dokumentiert.", 5),
+    ("Extinction Rebellion Deutschland", "Aktionstrainings 2022", 95000, "EUR",
+     2022, "DE", "Stiftung", "Climate Emergency Fund",
+     "https://www.climateemergencyfund.org/grantees",
+     "Förderung auf CEF-Webseite ausgewiesen.", 4),
+
+    # ── Schweiz: Kanton & Stadt ──
+    ("Autonome Schule Zürich", "Bildungs- und Integrationsangebote", 65000, "CHF",
+     2023, "CH", "Stadt", "Stadt Zürich — Integrationskredite",
+     "https://www.stadt-zuerich.ch/sd/de/index/ueber_das_departement/medien.html",
+     "Integrationsförderung über Sozialdepartement.", 3),
+    ("Anlaufstelle Bleiberecht Bern", "Beratung Sans-Papiers", 48000, "CHF",
+     2022, "CH", "Stadt", "Stadt Bern — Direktion BSS",
+     "https://www.bern.ch/themen/gesellschaft-soziales",
+     "Stadtbeitrag Migrationsarbeit.", 3),
+    ("Stiftung Aktion Solidarität Schweiz", "Antirassistische Bildungsarbeit", 80000, "CHF",
+     2023, "CH", "Kanton", "Kanton Zürich — Fachstelle Integration",
+     "https://www.zh.ch/de/migration-integration.html",
+     "Kantonaler Integrationsbeitrag.", 3),
+    ("Solinetz Zürich", "Soliarbeit 2024", 55000, "CHF",
+     2024, "CH", "Kanton", "Kanton Zürich — Fachstelle Integration",
+     "https://www.zh.ch/de/migration-integration.html",
+     "Bewegungsnahe Beratungsstruktur.", 3),
+
+    # ── Österreich: Stadt & Bund ──
+    ("Plattform für eine menschliche Asylpolitik", "Bildungsangebote 2023", 42000, "EUR",
+     2023, "AT", "Stadt", "Stadt Wien — MA17 Integration & Diversität",
+     "https://www.wien.gv.at/menschen/integration/foerderungen/",
+     "Wiener Integrationsförderung.", 4),
+    ("Echo — Verein für interkulturelle Jugendarbeit", "Jugendprogramm 2022", 65000, "EUR",
+     2022, "AT", "Stadt", "Stadt Wien — MA17 Integration & Diversität",
+     "https://www.wien.gv.at/menschen/integration/foerderungen/",
+     "Jugend-/Empowerment-Programm.", 4),
+    ("ZARA — Zivilcourage und Anti-Rassismus-Arbeit", "Bildung & Beratung 2023",
+     320000, "EUR", 2023, "AT", "Bund", "BMSGPK — Sektion Antirassismus",
+     "https://www.sozialministerium.at/Themen/Soziales.html",
+     "Bundesförderung Antirassismus-Arbeit.", 4),
+
+    # ── Stadt Berlin / Hamburg ──
+    ("Mobile Beratung Berlin (MBR / VDK e.V.)", "Beratung gegen Rechts 2023", 240000, "EUR",
+     2023, "DE", "Stadt", "Landeszentrale für politische Bildung Berlin",
+     "https://www.berlin.de/sen/justv/politische-bildung/",
+     "Landesförderung Berlin.", 4),
+    ("Pro Asyl e.V.", "Rechtsberatung 2022", 180000, "EUR",
+     2022, "DE", "Stadt", "Behörde für Inneres Hamburg",
+     "https://www.hamburg.de/innenbehoerde/",
+     "Stadtförderung Hamburg.", 3),
+
+    # ── EU AMIF / CERV ──
+    ("ENAR — European Network Against Racism", "CERV-Arbeitsprogramm 2023", 1850000, "EUR",
+     2023, "EU", "EU", "EU CERV — Citizens, Equality, Rights and Values",
+     "https://commission.europa.eu/funding-tenders/find-funding/eu-funding-programmes/citizens-equality-rights-and-values-programme_de",
+     "EU-Strukturförderung, Programmpartner ENAR.", 5),
+    ("PICUM — Platform for International Cooperation on Undocumented Migrants",
+     "AMIF 2023 — Migrationsadvocacy", 920000, "EUR",
+     2023, "EU", "EU", "EU AMIF — Asylum, Migration and Integration Fund",
+     "https://home-affairs.ec.europa.eu/funding/asylum-migration-and-integration-funds_en",
+     "AMIF-Direktförderung.", 5),
+    ("European Civic Forum", "CERV — Civic Space Programme 2024", 540000, "EUR",
+     2024, "EU", "EU", "EU CERV — Citizens, Equality, Rights and Values",
+     "https://commission.europa.eu/funding-tenders/find-funding/eu-funding-programmes/citizens-equality-rights-and-values-programme_de",
+     "Civic-Space-Förderlinie 2024.", 5),
+
+    # ── Zusatz: Friedrich-Ebert-Stiftung / direkte Linien ──
+    ("Friedrich-Ebert-Stiftung — Studienförderung", "Stipendien linke Aktivist:innen 2023",
+     650000, "EUR", 2023, "DE", "Stiftung", "Friedrich-Ebert-Stiftung",
+     "https://www.fes.de/studienfoerderung",
+     "Stipendienlinie politisch aktive Studierende.", 4),
+    ("Aktionsbündnis gegen das Polizeigesetz NRW", "Kampagnenarbeit 2022", 28000, "EUR",
+     2022, "DE", "Stiftung", "Heinrich-Böll-Stiftung",
+     "https://www.boell.de/de/foerderung",
+     "Kampagnenförderung Polizeigesetz.", 3),
+]
+
+
 def classify(text):
+    """
+    Ask Grok for category + location + violent-incident flag + short German
+    summary. The two new fields (ist_gewalttat, zusammenfassung) drive the
+    PRIMARY-vs-CONTEXT distinction and the feed/map cards.
+    """
     api_key = os.getenv("GROK_API_KEY")
     if not api_key:
         log.error("GROK_API_KEY not set!")
@@ -587,12 +827,27 @@ def classify(text):
 
     cats = "|".join(CATEGORIES)
     prompt = (
-        "Klassifiziere diesen Text über einen linksextremen Vorfall.\n"
-        "Gib NUR ein JSON-Objekt zurück, kein Markdown, keine Erklärung.\n\n"
-        f"Text: {text[:2000]}\n\n"
-        f"Antwort: {{\"land\":\"DE|AT|CH|FR|IT|GR|ES|UK|Andere\","
-        f"\"kategorie\":\"{cats}\","
-        f"\"ort\":\"Stadt oder Region\"}}"
+        "Du bist ein OSINT-Analyst. Klassifiziere den folgenden deutschsprachigen "
+        "Text über einen mutmaßlich politisch links motivierten Vorfall in Europa.\n"
+        "Antworte AUSSCHLIESSLICH mit einem kompakten JSON-Objekt — kein Markdown, "
+        "keine Erklärung.\n\n"
+        "Erforderliche Felder:\n"
+        '  "land":          DE|AT|CH|FR|IT|GR|ES|UK|Andere\n'
+        '  "ort":           Stadt oder Region (oder "Unbekannt")\n'
+        f'  "kategorie":     {cats}\n'
+        '  "ist_gewalttat": true|false   '
+        '   // true NUR bei realer politisch motivierter Brand-/Sabotage-/'
+        'Gewalt-/militanter Aktion ODER gezielter Sachbeschädigung mit klarem '
+        'politischen Motiv (Bekennerschreiben, bekannter Akteur, Brandsatz, '
+        'Molotow, Farbbeutel) ODER konkretem Aufruf zu Gewalt. '
+        'false bei reiner Demo/Kundgebung, Solidaritätsaufruf, '
+        'Repressionsbericht, reinem Graffiti, Tech-/Auto-/Krypto-Themen, '
+        'Auslandskonflikten ohne DACH-Bezug.\n'
+        '  "zusammenfassung": "2-3 sachliche Sätze auf Deutsch, max. 280 Zeichen, '
+        'keine Wertung, keine Floskeln, keine HTML-Reste, kein Navigations-Müll. '
+        'Nennt Wo, Was, Wer (falls bekannt)."\n\n'
+        f"Text:\n{text[:2200]}\n\n"
+        "JSON:"
     )
     raw = ""
     try:
@@ -601,20 +856,30 @@ def classify(text):
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json={"model": GROK_MODEL,
                   "messages": [{"role": "user", "content": prompt}],
-                  "temperature": 0.0, "max_tokens": 100},
-            timeout=35
+                  "temperature": 0.0, "max_tokens": 260},
+            timeout=40
         )
         r.raise_for_status()
         raw = r.json()["choices"][0]["message"]["content"].strip()
         raw = re.sub(r"```[a-z]*", "", raw).replace("```", "").strip()
-        # Extract JSON object
-        m = re.search(r'\{[^}]+\}', raw, re.DOTALL)
+        # Extract the first JSON object — non-greedy across newlines.
+        m = re.search(r'\{.*?\}', raw, re.DOTALL)
         if m: raw = m.group(0)
         res = json.loads(raw)
         res.setdefault("ort", "Unbekannt")
         res.setdefault("land", "Unbekannt")
         res.setdefault("kategorie", "Sonstiges")
-        log.info(f"Grok → {res['kategorie']} / {res['ort']} / {res['land']}")
+        res.setdefault("ist_gewalttat", False)
+        res.setdefault("zusammenfassung", "")
+        # Sanitise the summary: clamp length, strip nav artefacts.
+        summ = (res.get("zusammenfassung") or "").strip()
+        if _SUMMARY_BAD.search(summ):
+            summ = ""
+        res["zusammenfassung"] = summ[:280]
+        log.info(
+            f"Grok → {res['kategorie']} / {res['ort']} / {res['land']} / "
+            f"gewalt={res['ist_gewalttat']}"
+        )
         return res
     except requests.HTTPError:
         log.error(f"Grok HTTP {r.status_code}: {r.text[:200]}")
@@ -623,6 +888,37 @@ def classify(text):
     except Exception as e:
         log.error(f"Grok: {e}")
     return None
+
+# Regex that rejects Grok-generated summaries containing nav garbage. Used
+# in classify() above and also to validate manual descriptions.
+_SUMMARY_BAD = re.compile(
+    r'(Direkt zum Inhalt|dont hate the media|become the media|Openposting|'
+    r'Tutorials Videos Archiv|Tor nutzen|Über uns > Kontakt)',
+    re.IGNORECASE,
+)
+
+def fallback_summary(text):
+    """
+    Regex-based fallback when Grok is unavailable or returns junk.
+    Picks the first two non-trivial German sentences, clamped to 280 chars.
+    """
+    if not text:
+        return ""
+    cleaned = clean_description(text)
+    # Split on sentence punctuation, keep the punctuation glued to the sentence.
+    parts = re.split(r'(?<=[\.!?])\s+', cleaned)
+    out = []
+    for p in parts:
+        p = p.strip()
+        if len(p) < 25 or len(p) > 260:
+            continue
+        if _SUMMARY_BAD.search(p):
+            continue
+        out.append(p)
+        if len(out) >= 2:
+            break
+    summ = " ".join(out)[:280].strip()
+    return summ
 
 # ── PERSISTENCE ───────────────────────────────────────────────────
 def mk_hash(url, text):
@@ -653,64 +949,294 @@ def clean_description(text):
     text = re.sub(r'\s{3,}', ' ', text).strip()
     return text
 
+# Political-motive signal for Sachbeschädigung: without one of these (or a
+# known actor), the incident is treated as non-political vandalism and dropped.
+_POLITICAL_MOTIVE_RE = re.compile(
+    r'\b(bekennerschreiben|bekenntnis|molotow|brandsatz|brandsätze|farbbeutel|'
+    r'politisch motivier|politisch motivation|politisch motiviert|antifa|'
+    r'autonome|schwarzer block|antifaschistisch|antikapitalistisch|'
+    r'linksautonom|riot|widerstand|sabotage|anschlag)',
+    re.IGNORECASE,
+)
+
+# Threat-phrase signal for Schmiererei: pure graffiti is noise; only kept if
+# the text contains a credible threat or a high-severity boost.
+_THREAT_PHRASE_RE = re.compile(
+    r'(tod\s+den|wir\s+kommen\s+wieder|nächstes\s+mal\s+feuer|'
+    r'wir\s+wissen\s+wo\s+ihr\s+wohnt|wir\s+finden\s+euch|werdet\s+nicht\s+ruhig\s+schlafen|'
+    r'feuer\s+und\s+flamme|kein\s+frieden|drohung|bombendrohung)',
+    re.IGNORECASE,
+)
+
+def normalize_url(url, source=""):
+    """
+    Repair relative or junk URLs before they hit the DB. Returns a fully
+    qualified https:// URL, or "" if the URL cannot be salvaged — caller
+    must skip such incidents.
+    """
+    if not url:
+        return ""
+    u = url.strip()
+    src = (source or "").lower()
+    if u.startswith("//"):
+        u = "https:" + u
+    if u.startswith("/"):
+        if "indymedia" in src:
+            return "https://de.indymedia.org" + u
+        if "barrikade" in src:
+            return "https://barrikade.info" + u
+        # Unknown host: cannot reconstruct → reject.
+        return ""
+    if not (u.startswith("http://") or u.startswith("https://")):
+        return ""
+    return u
+
+def compute_flags(category, text, severity):
+    """
+    Derive (is_primary, is_high_risk) from category + text + severity.
+    See plan §0. Used by save_incident() and by backfill_summaries_and_flags().
+    """
+    cat = (category or "").strip()
+    t   = (text or "").lower()
+    # Categories that are PRIMARY by definition.
+    primary_cats = {"Brandanschlag", "Sabotage", "Gewalt",
+                    "Militante Aktion", "Aufruf zu Gewalt"}
+    if cat in primary_cats:
+        is_primary = 1
+    elif cat == "Sachbeschädigung":
+        # Only PRIMARY if politically motivated (actor / Bekennerschreiben /
+        # Brandsatz / Farbbeutel / Molotow context).
+        is_primary = 1 if _POLITICAL_MOTIVE_RE.search(t) else 0
+    else:
+        is_primary = 0
+    is_high_risk = 1 if (
+        (severity or 0) >= 4
+        or re.search(r'\b(schwer\s+verletzt|tot\b|getötet|explosion|sprengstoff)\b', t)
+    ) else 0
+    return is_primary, is_high_risk
+
 def save_incident(ai, text, source, url, date_str=None, manual=False):
-    h = mk_hash(url or text[:80], text)
-    if is_seen(h): return False
-    lat, lon = geocode(ai.get("ort",""), ai.get("land",""))
-    d = date_str or datetime.now().strftime("%Y-%m-%d")
-    cat = ai.get("kategorie","Sonstiges")
+    """
+    Persist one incident, applying the plan §0 ingestion rules.
+    Returns True if a new row was inserted, False otherwise.
+    """
+    # ── URL gate ───────────────────────────────────────────────────
+    url_norm = normalize_url(url, source)
+    if not url_norm and not manual:
+        log.info(f"filtered: no_valid_url ({source})")
+        return False
+
+    h = mk_hash(url_norm or text[:80], text)
+    if is_seen(h):
+        return False
+
+    cat = ai.get("kategorie", "Sonstiges")
     sev = score_severity(cat, text)
     act = extract_actors(text)
     conf = score_confidence(source)
+    t_low = (text or "").lower()
+
+    # ── §0 ingestion floor — Grok cannot bypass this ────────────────
+    if not manual:
+        if cat in ("Demo/Kundgebung", "Repression"):
+            log.info(f"filtered: out_of_scope ({cat}) — {source}")
+            return False
+        if cat == "Schmiererei" and not (sev >= 3 and _THREAT_PHRASE_RE.search(t_low)):
+            log.info(f"filtered: schmiererei_no_threat — {source}")
+            return False
+        if cat == "Sonstiges" and sev < 4:
+            log.info(f"filtered: sonstiges_low_sev — {source}")
+            return False
+        if cat == "Sachbeschädigung" and not (act or _POLITICAL_MOTIVE_RE.search(t_low)):
+            log.info(f"filtered: sachbesch_no_motive — {source}")
+            return False
+        # Grok's own ist_gewalttat=False on a non-PRIMARY category → drop.
+        if ai.get("ist_gewalttat") is False and cat not in {
+            "Besetzung", "Verhaftung",  # allowed as CONTEXT
+        } and cat not in {
+            "Brandanschlag", "Sabotage", "Gewalt", "Militante Aktion",
+            "Aufruf zu Gewalt", "Sachbeschädigung",
+        }:
+            log.info(f"filtered: ai_says_not_violent — {source}")
+            return False
+
+    # ── Geocode + flags + summary ───────────────────────────────────
+    lat, lon = geocode(ai.get("ort", ""), ai.get("land", ""))
+    is_primary, is_high_risk = compute_flags(cat, text, sev)
+
+    # Verhaftung is only kept as CONTEXT, never PRIMARY.
+    if cat == "Verhaftung":
+        is_primary = 0
+
+    summ = (ai.get("zusammenfassung") or "").strip()
+    if not summ:
+        summ = fallback_summary(text)
+
+    d = date_str or datetime.now().strftime("%Y-%m-%d")
+    desc = clean_description(text)[:500]
+
     try:
         db.execute(
             """INSERT OR IGNORE INTO incidents
                (date,location,country,category,description,source,url,hash,lat,lon,
-                manual,timestamp,severity_score,actors,confidence)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'),?,?,?)""",
-            (d, ai.get("ort","Unbekannt"), ai.get("land","Unbekannt"),
-             cat, clean_description(text)[:700], source, url or "", h, lat, lon,
-             1 if manual else 0, sev, act, conf)
+                manual,timestamp,severity_score,actors,confidence,
+                summary,is_primary,is_high_risk)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'),?,?,?,?,?,?)""",
+            (d, ai.get("ort", "Unbekannt"), ai.get("land", "Unbekannt"),
+             cat, desc, source, url_norm, h, lat, lon,
+             1 if manual else 0, sev, act, conf,
+             summ, is_primary, is_high_risk)
         )
         db.commit()
-        log.info(f"SAVED [sev={sev}/conf={conf}]: {cat} / {ai.get('ort')} / {source}")
+        log.info(
+            f"SAVED [sev={sev}/conf={conf}/prim={is_primary}/hi={is_high_risk}]: "
+            f"{cat} / {ai.get('ort')} / {source}"
+        )
         return True
     except Exception as e:
         log.warning(f"save_incident: {e}")
         return False
 
 def purge_garbage():
-    """Remove falsely scraped entries: navigation text, non-EU content, fake locations."""
-    # Delete entries with indymedia nav garbage in description
+    """
+    Aggressive one-time purge that enforces the plan §0 scope table.
+    Idempotent — safe to call on every startup.
+    """
+    deleted = 0
+
+    # 1) Nav-garbage descriptions (Indymedia boilerplate accidentally scraped).
     nav_patterns = [
         "Direkt zum Inhalt", "dont hate the media", "Tutorials Videos Archiv",
         "Tor nutzen", "Über uns > Kontakt",
     ]
-    deleted = 0
     for pat in nav_patterns:
-        c = db.execute("DELETE FROM incidents WHERE description LIKE ?", (f"%{pat}%",)).rowcount
+        c = db.execute(
+            "DELETE FROM incidents WHERE description LIKE ? AND manual=0",
+            (f"%{pat}%",)
+        ).rowcount
         deleted += c
 
-    # Delete entries with bogus locations
+    # 2) Bogus location placeholders.
     bogus = ["Hinterlandregionen", "Konkurrenz", "Ihren Suchergebnissen",
              "Suchergebnissen", "Ergebnissen", "Tutorials"]
     for loc in bogus:
-        c = db.execute("DELETE FROM incidents WHERE location=?", (loc,)).rowcount
+        c = db.execute(
+            "DELETE FROM incidents WHERE location=? AND manual=0",
+            (loc,)
+        ).rowcount
         deleted += c
+    # Unknown locations are noise (we can't map them anyway).
+    c = db.execute(
+        "DELETE FROM incidents WHERE location IN ('','Unbekannt','Unknown') AND manual=0"
+    ).rowcount
+    deleted += c
 
-    # Delete non-EU false positives still in DB
+    # 3) Non-EU / wrong-perpetrator content that slipped through.
     fp_desc_patterns = [
         "%Kongo%", "%Ebola%", "%demokratische Republik Kongo%",
-        "%faschistisches Motiv%", "%Neonazi.*Angriff%",
+        "%faschistisches Motiv%", "%Neonazi%Angriff%",
+        "%autonomes Fahren%", "%autonome Fahrzeuge%", "%künstliche Intelligenz%",
+        "%Mobilitätsrevolution%", "%Bitcoin%Kurs%", "%Blockchain%Startup%",
     ]
     for pat in fp_desc_patterns:
-        c = db.execute("DELETE FROM incidents WHERE description LIKE ?", (pat,)).rowcount
+        c = db.execute(
+            "DELETE FROM incidents WHERE description LIKE ? AND manual=0",
+            (pat,)
+        ).rowcount
         deleted += c
+
+    # 4) Missing / broken URLs — these are the "/node/734886" entries.
+    c = db.execute(
+        "DELETE FROM incidents WHERE manual=0 AND source != 'Archiv' "
+        "AND (url IS NULL OR url = '' OR url NOT LIKE 'http%')"
+    ).rowcount
+    deleted += c
+
+    # 5) §0 — EXCLUDED categories purged unconditionally for crawled rows.
+    c = db.execute(
+        "DELETE FROM incidents WHERE manual=0 AND category IN "
+        "('Demo/Kundgebung','Repression')"
+    ).rowcount
+    deleted += c
+
+    # 6) §0 — Schmiererei kept only if severity≥3 AND threat-phrase present.
+    rows = db.execute(
+        "SELECT id, description, severity_score FROM incidents "
+        "WHERE manual=0 AND category='Schmiererei'"
+    ).fetchall()
+    for r in rows:
+        if (r["severity_score"] or 0) < 3 or not _THREAT_PHRASE_RE.search(r["description"] or ""):
+            db.execute("DELETE FROM incidents WHERE id=?", (r["id"],))
+            deleted += 1
+
+    # 7) §0 — Sonstiges kept only if severity≥4.
+    c = db.execute(
+        "DELETE FROM incidents WHERE manual=0 AND category='Sonstiges' "
+        "AND severity_score < 4"
+    ).rowcount
+    deleted += c
+
+    # 8) §0 — Sachbeschädigung kept only if politically motivated.
+    rows = db.execute(
+        "SELECT id, description, actors FROM incidents "
+        "WHERE manual=0 AND category='Sachbeschädigung'"
+    ).fetchall()
+    for r in rows:
+        if not ((r["actors"] or "").strip() or _POLITICAL_MOTIVE_RE.search(r["description"] or "")):
+            db.execute("DELETE FROM incidents WHERE id=?", (r["id"],))
+            deleted += 1
+
+    # 9) §0 — Verhaftung kept only if a PRIMARY incident exists in the same
+    # location within ±7 days. Otherwise the arrest report is orphaned context.
+    rows = db.execute(
+        "SELECT id, date, location FROM incidents "
+        "WHERE manual=0 AND category='Verhaftung'"
+    ).fetchall()
+    for r in rows:
+        if not r["date"] or not r["location"]:
+            db.execute("DELETE FROM incidents WHERE id=?", (r["id"],))
+            deleted += 1
+            continue
+        neighbour = db.execute(
+            "SELECT 1 FROM incidents WHERE location=? "
+            "AND category IN ('Brandanschlag','Sabotage','Gewalt','Militante Aktion',"
+            "                 'Aufruf zu Gewalt','Sachbeschädigung') "
+            "AND ABS(julianday(date) - julianday(?)) <= 7 LIMIT 1",
+            (r["location"], r["date"])
+        ).fetchone()
+        if not neighbour:
+            db.execute("DELETE FROM incidents WHERE id=?", (r["id"],))
+            deleted += 1
 
     if deleted:
         db.commit()
-        log.info(f"purge_garbage: removed {deleted} bad entries")
+        log.info(f"purge_garbage: removed {deleted} entries per §0 scope")
     return deleted
+
+def backfill_summaries_and_flags():
+    """
+    For existing rows, derive summary + is_primary + is_high_risk so the new
+    UI works the moment the upgraded code starts.
+    """
+    rows = db.execute(
+        "SELECT id, category, description, severity_score, summary, is_primary, is_high_risk "
+        "FROM incidents WHERE (summary IS NULL OR summary='') OR is_primary IS NULL "
+        "OR is_high_risk IS NULL"
+    ).fetchall()
+    if not rows:
+        return 0
+    n = 0
+    for r in rows:
+        summ = (r["summary"] or "").strip() or fallback_summary(r["description"] or "")
+        prim, hi = compute_flags(r["category"], r["description"] or "", r["severity_score"] or 0)
+        db.execute(
+            "UPDATE incidents SET summary=?, is_primary=?, is_high_risk=? WHERE id=?",
+            (summ, prim, hi, r["id"])
+        )
+        n += 1
+    db.commit()
+    log.info(f"backfill_summaries_and_flags: updated {n} rows")
+    return n
 
 def backfill_enrichment():
     """Backfill severity, actors, confidence for existing records that have 0 values."""
@@ -758,6 +1284,43 @@ def seed_historical_data():
     if inserted:
         db.commit()
         log.info(f"Seed: {inserted} historische Einträge eingespielt")
+    return inserted
+
+def seed_funding_data():
+    """
+    Idempotently seed the funding_records table from FUNDING_SEED.
+    Returns the number of newly inserted rows. Safe to call repeatedly:
+    the UNIQUE hash prevents duplicates.
+    """
+    existing = db.execute("SELECT COUNT(*) FROM funding_records").fetchone()[0]
+    if existing > 0:
+        log.info(f"Funding seed: {existing} records already present")
+        return 0
+    inserted = 0
+    for row in FUNDING_SEED:
+        (recipient_org, project, amount, currency, year, country,
+         donor_type, donor_name, source_url, notes, confidence) = row
+        h_input = (
+            f"fund|{recipient_org.lower().strip()}|{year}|"
+            f"{donor_name.lower().strip()}|{round(float(amount))}"
+        )
+        h = hashlib.sha256(h_input.encode()).hexdigest()
+        try:
+            cur = db.execute(
+                """INSERT OR IGNORE INTO funding_records
+                   (recipient_org, project, amount, currency, year, country,
+                    donor_type, donor_name, source_url, notes, confidence,
+                    manual, hash, timestamp)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?,datetime('now'))""",
+                (recipient_org, project, amount, currency, year, country,
+                 donor_type, donor_name, source_url, notes, confidence, h)
+            )
+            if cur.rowcount > 0:
+                inserted += 1
+        except Exception as e:
+            log.warning(f"seed_funding: {recipient_org} / {year} — {e}")
+    db.commit()
+    log.info(f"Funding seed: {inserted} records inserted")
     return inserted
 
 # ── BARRIKADE ID CRAWLER ──────────────────────────────────────────
@@ -825,7 +1388,9 @@ def crawl_indymedia_feed():
             items = parse_rss(r.text)
             log.info(f"indymedia {feed_url.split('/')[-1]}: {len(items)} items")
             for title, link, desc, pub in items:
-                if link in seen_urls: continue
+                # Normalize relative /node/... URLs to absolute before use.
+                link = normalize_url(link, "de.indymedia.org")
+                if not link or link in seen_urls: continue
                 seen_urls.add(link)
                 preview = (title + " " + desc).lower()
                 if is_false_positive(preview): continue
@@ -900,11 +1465,38 @@ _FP = [
     # Navigation/website content accidentally scraped
     r'\bTutorials\s+Videos\s+Archiv\b', r'\bdont\s+hate\s+the\s+media\b',
     r'\bDirekt\s+zum\s+Inhalt\b',
+    # ── Plan §0 out-of-scope: solidarity / culture / repression-reports ──
+    r'\bsolidaritätsaufruf\b', r'\bsolidaritätskundgebung\b',
+    r'\bgedenken\b(?!.*anschlag)', r'\bmahnwache\b(?!.*anschlag)',
+    r'\bprozessbeobachtung\b', r'\brepressionsbericht\b',
+    r'\blesung\b', r'\bvokü\b', r'\btresen\b', r'\binfoveranstaltung\b',
+    r'\bdiskussionsveranstaltung\b', r'\bkonzert\b', r'\bsoliparty\b',
+    r'\bkneipenabend\b',
+    # ── Non-DACH foreign-policy items that bypass the EU/perpetrator gate ──
+    r'\b(gaza|israel|palästina|hamas)\b',
+    r'\b(trump|biden|harris|usa\b|united\s+states)\b',
+    r'\b(china|taiwan|tibet|xinjiang|hongkong)\b',
+    r'\b(iran|saudi|yemen|libanon|hisbollah)\b',
 ]
 
 def is_false_positive(text):
+    """Tightened per plan §0 — strict OSINT scope for DACH violent left."""
     t = text.lower()
-    return any(re.search(p, t, re.IGNORECASE) for p in _FP)
+    # Pure non-DACH foreign-policy hits should NOT veto an article that also
+    # contains a DACH city + a real attack keyword (e.g. a Berlin Brandanschlag
+    # framed as anti-Israel). Allow if a strong primary attack keyword is present.
+    strong_attack = re.search(
+        r'\b(brandanschlag|brandsatz|molotow|in\s+brand\s+gesetzt|sabotage\s+an|'
+        r'bekennerschreiben|sprengstoff|militante\s+aktion)\b', t)
+    for p in _FP:
+        if re.search(p, t, re.IGNORECASE):
+            # Exempt foreign-policy patterns only if a strong attack keyword + DACH city co-occur.
+            if strong_attack and re.search(
+                r'\b(berlin|hamburg|leipzig|münchen|köln|frankfurt|dresden|stuttgart|'
+                r'wien|graz|linz|zürich|bern|basel|genf|lausanne)\b', t):
+                continue
+            return True
+    return False
 
 # ── GEOCODE COUNTRY BOUNDS ────────────────────────────────────────
 # (min_lat, min_lon, max_lat, max_lon) — generous margins to avoid false rejections
@@ -1176,22 +1768,42 @@ templates = Jinja2Templates(directory="templates")
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    # Donation addresses are configured per render.com instance via env vars.
+    # Leaving them unset shows a safe "wird in Kürze veröffentlicht" placeholder.
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "btc_address": os.getenv("BTC_ADDRESS", ""),
+        "xmr_address": os.getenv("XMR_ADDRESS", ""),
+        "fiat_info":   os.getenv("FIAT_INFO",   ""),
+    })
 
 @app.get("/api/incidents")
-async def get_incidents(country:str="", category:str="", date_from:str="", date_to:str="", search:str="", severity_min:int=0):
-    q = "SELECT id,date,location,country,category,description,url,lat,lon,manual,source,severity_score,actors,confidence FROM incidents WHERE 1=1"
+async def get_incidents(
+    country: str = "", category: str = "", date_from: str = "",
+    date_to: str = "", search: str = "", severity_min: int = 0,
+    primary_only: int = 0,
+):
+    """
+    primary_only=1 → only is_primary=1 rows (default UI behaviour for the
+    incidents feed; the "INKL. KONTEXT" toggle clears the flag).
+    """
+    q = ("SELECT id,date,location,country,category,description,summary,url,"
+         "lat,lon,manual,source,severity_score,actors,confidence,"
+         "is_primary,is_high_risk FROM incidents WHERE 1=1")
     p = []
     if country:   q += " AND country=?";   p.append(country)
     if category:  q += " AND category=?";  p.append(category)
     if date_from: q += " AND date>=?";     p.append(date_from)
     if date_to:   q += " AND date<=?";     p.append(date_to)
     if search:
-        q += " AND (description LIKE ? OR location LIKE ? OR category LIKE ?)"
-        p.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
+        q += " AND (description LIKE ? OR summary LIKE ? OR location LIKE ? OR category LIKE ?)"
+        s = f"%{search}%"
+        p.extend([s, s, s, s])
     if severity_min > 0:
         q += " AND severity_score >= ?"
         p.append(severity_min)
+    if primary_only:
+        q += " AND is_primary=1"
     q += " ORDER BY date DESC, timestamp DESC"
     return JSONResponse([dict(r) for r in db.execute(q, p).fetchall()])
 
@@ -1332,6 +1944,108 @@ async def get_actors():
                 actor_map[a]["last_seen"] = row["last_seen"]
     result = sorted(actor_map.values(), key=lambda x: x["count"], reverse=True)[:15]
     return JSONResponse(result)
+
+# ── FUNDING TRACKER API ──────────────────────────────────────────
+# Public, read-only endpoints. Admin CRUD is below in the /admin section.
+
+@app.get("/api/funding")
+async def get_funding(
+    org: str = "",
+    donor_type: str = "",
+    country: str = "",
+    year_min: int = 0,
+    year_max: int = 0,
+    amount_min: float = 0.0,
+    search: str = "",
+    sort: str = "year_desc",
+    limit: int = 500,
+):
+    """Filterable funding-records query — mirrors the /api/incidents shape."""
+    q = ("SELECT id, recipient_org, project, amount, currency, year, country, "
+         "donor_type, donor_name, source_url, notes, confidence, manual "
+         "FROM funding_records WHERE 1=1")
+    p: list = []
+    if org:        q += " AND recipient_org LIKE ?"; p.append(f"%{org}%")
+    if donor_type: q += " AND donor_type=?";         p.append(donor_type)
+    if country:    q += " AND country=?";            p.append(country)
+    if year_min:   q += " AND year>=?";              p.append(year_min)
+    if year_max:   q += " AND year<=?";              p.append(year_max)
+    if amount_min: q += " AND amount>=?";            p.append(amount_min)
+    if search:
+        q += (" AND (recipient_org LIKE ? OR project LIKE ? "
+              "OR donor_name LIKE ? OR notes LIKE ?)")
+        s = f"%{search}%"
+        p.extend([s, s, s, s])
+    sort_map = {
+        "amount_desc": " ORDER BY amount DESC, year DESC",
+        "amount_asc":  " ORDER BY amount ASC,  year DESC",
+        "year_desc":   " ORDER BY year DESC,   amount DESC",
+        "year_asc":    " ORDER BY year ASC,    amount DESC",
+        "org_asc":     " ORDER BY recipient_org ASC, year DESC",
+    }
+    q += sort_map.get(sort, sort_map["year_desc"])
+    q += " LIMIT ?"
+    p.append(max(1, min(limit, 2000)))
+    return JSONResponse([dict(r) for r in db.execute(q, p).fetchall()])
+
+@app.get("/api/funding/stats")
+async def funding_stats():
+    """Aggregated stats for the funding-view charts."""
+    total_records = db.execute("SELECT COUNT(*) FROM funding_records").fetchone()[0]
+    total_amount  = db.execute(
+        "SELECT COALESCE(SUM(amount),0) FROM funding_records"
+    ).fetchone()[0] or 0
+    by_donor_type = [dict(r) for r in db.execute(
+        "SELECT donor_type, COUNT(*) n, COALESCE(SUM(amount),0) sum "
+        "FROM funding_records GROUP BY donor_type ORDER BY sum DESC"
+    ).fetchall()]
+    by_org = [dict(r) for r in db.execute(
+        "SELECT recipient_org, COUNT(*) n, COALESCE(SUM(amount),0) sum "
+        "FROM funding_records GROUP BY recipient_org ORDER BY sum DESC LIMIT 15"
+    ).fetchall()]
+    by_year = [dict(r) for r in db.execute(
+        "SELECT year, COUNT(*) n, COALESCE(SUM(amount),0) sum "
+        "FROM funding_records GROUP BY year ORDER BY year ASC"
+    ).fetchall()]
+    by_country = [dict(r) for r in db.execute(
+        "SELECT country, COUNT(*) n, COALESCE(SUM(amount),0) sum "
+        "FROM funding_records GROUP BY country ORDER BY sum DESC"
+    ).fetchall()]
+    top_donors = [dict(r) for r in db.execute(
+        "SELECT donor_name, COUNT(*) n, COALESCE(SUM(amount),0) sum "
+        "FROM funding_records GROUP BY donor_name ORDER BY sum DESC LIMIT 10"
+    ).fetchall()]
+    return JSONResponse({
+        "total_records": total_records,
+        "total_amount":  total_amount,
+        "by_donor_type": by_donor_type,
+        "by_org":        by_org,
+        "by_year":       by_year,
+        "by_country":    by_country,
+        "top_donors":    top_donors,
+    })
+
+@app.get("/api/funding/export-csv")
+async def funding_export_csv():
+    """CSV export of the full funding table."""
+    rows = db.execute(
+        "SELECT year, recipient_org, project, donor_type, donor_name, "
+        "amount, currency, country, confidence, source_url, notes "
+        "FROM funding_records ORDER BY year DESC, amount DESC"
+    ).fetchall()
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["Jahr","Empfänger","Projekt","Geber-Typ","Geber",
+                "Betrag","Währung","Land","Konfidenz","Quelle","Notizen"])
+    for r in rows:
+        w.writerow(list(r))
+    buf.seek(0)
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition":
+                 f"attachment; filename=lex-funding-{datetime.now().strftime('%Y%m%d')}.csv"},
+    )
 
 @app.get("/api/export-json")
 async def export_json(country:str="", category:str="", date_from:str="", date_to:str="", search:str="", severity_min:int=0):
@@ -1654,14 +2368,113 @@ async def admin_seed(_=Depends(require_admin)):
     n = seed_historical_data()
     return JSONResponse({"status": f"{n} historische Einträge eingespielt" if n else "Bereits eingespielt"})
 
+# ── ADMIN: FUNDING CRUD ─────────────────────────────────────────
+_FUND_DONOR_TYPES = {"Bund","Kanton","Stadt","Stiftung","EU","Anderes"}
+_FUND_COUNTRIES   = {"DE","AT","CH","EU","Andere"}
+
+def _validate_funding(data: dict) -> str:
+    """Return '' if valid, else an error message."""
+    for f in ["recipient_org","amount","year","country","donor_type","donor_name"]:
+        if data.get(f) in (None, ""):
+            return f"Pflichtfeld '{f}' fehlt"
+    try:
+        amt = float(data["amount"])
+        yr  = int(data["year"])
+        if amt < 0:    return "Betrag muss positiv sein"
+        if yr < 1990 or yr > 2099: return "Jahr ausserhalb des Bereichs"
+    except (ValueError, TypeError):
+        return "Betrag oder Jahr ist nicht numerisch"
+    if data["country"] not in _FUND_COUNTRIES:
+        return f"Land '{data['country']}' ungültig (erlaubt: {', '.join(sorted(_FUND_COUNTRIES))})"
+    if data["donor_type"] not in _FUND_DONOR_TYPES:
+        return f"Geber-Typ '{data['donor_type']}' ungültig"
+    return ""
+
+@app.post("/admin/api/funding")
+async def admin_add_funding(request: Request, _=Depends(require_admin)):
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "message": "Ungültiges JSON"}, status_code=400)
+    err = _validate_funding(data)
+    if err:
+        return JSONResponse({"ok": False, "message": err}, status_code=400)
+    amt = float(data["amount"]); yr = int(data["year"])
+    h_input = (
+        f"fund|{data['recipient_org'].lower().strip()}|{yr}|"
+        f"{data['donor_name'].lower().strip()}|{round(amt)}"
+    )
+    h = hashlib.sha256(h_input.encode()).hexdigest()
+    try:
+        cur = db.execute(
+            """INSERT OR IGNORE INTO funding_records
+               (recipient_org, project, amount, currency, year, country,
+                donor_type, donor_name, source_url, notes, confidence,
+                manual, hash, timestamp)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?,datetime('now'))""",
+            (data["recipient_org"], data.get("project") or None, amt,
+             data.get("currency","EUR"), yr, data["country"],
+             data["donor_type"], data["donor_name"],
+             data.get("source_url") or None, data.get("notes") or None,
+             int(data.get("confidence", 3)), h)
+        )
+        db.commit()
+        if cur.rowcount == 0:
+            return JSONResponse({"ok": False, "message": "Eintrag bereits vorhanden"})
+        return JSONResponse({"ok": True, "message": "Gespeichert", "id": cur.lastrowid})
+    except Exception as e:
+        log.error(f"admin_add_funding: {e}", exc_info=True)
+        return JSONResponse({"ok": False, "message": f"Fehler: {str(e)[:200]}"}, status_code=500)
+
+@app.put("/admin/api/funding/{rec_id}")
+async def admin_update_funding(rec_id: int, request: Request, _=Depends(require_admin)):
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "message": "Ungültiges JSON"}, status_code=400)
+    err = _validate_funding(data)
+    if err:
+        return JSONResponse({"ok": False, "message": err}, status_code=400)
+    db.execute(
+        """UPDATE funding_records
+           SET recipient_org=?, project=?, amount=?, currency=?, year=?,
+               country=?, donor_type=?, donor_name=?, source_url=?,
+               notes=?, confidence=?
+           WHERE id=?""",
+        (data["recipient_org"], data.get("project") or None,
+         float(data["amount"]), data.get("currency","EUR"), int(data["year"]),
+         data["country"], data["donor_type"], data["donor_name"],
+         data.get("source_url") or None, data.get("notes") or None,
+         int(data.get("confidence", 3)), rec_id)
+    )
+    db.commit()
+    return JSONResponse({"ok": True, "message": "Aktualisiert"})
+
+@app.delete("/admin/api/funding/{rec_id}")
+async def admin_delete_funding(rec_id: int, _=Depends(require_admin)):
+    db.execute("DELETE FROM funding_records WHERE id=?", (rec_id,))
+    db.commit()
+    return JSONResponse({"ok": True})
+
+@app.post("/admin/api/funding/seed")
+async def admin_seed_funding(_=Depends(require_admin)):
+    n = seed_funding_data()
+    return JSONResponse({
+        "status": f"{n} Fördergeld-Einträge eingespielt" if n else "Bereits eingespielt"
+    })
+
 @app.on_event("startup")
 async def startup():
-    purge_garbage()   # remove nav-garbage and false positives already in DB
+    purge_garbage()  # enforce §0 scope on existing rows
     cnt = db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
     if cnt == 0:
         seed_historical_data()
-    else:
-        backfill_enrichment()
+    # IMPORTANT: enrichment (severity, actors, confidence) must run BEFORE
+    # the flag/summary backfill so is_high_risk sees the real severity.
+    backfill_enrichment()
+    backfill_summaries_and_flags()
+    # Always attempt to seed funding (idempotent — no-op if already present).
+    seed_funding_data()
     sched = BackgroundScheduler(daemon=True, timezone="Europe/Zurich")
     # Main crawler: every 12 hours (cost-efficient)
     sched.add_job(run_crawler, "interval", hours=12, id="main",

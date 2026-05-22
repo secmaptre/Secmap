@@ -380,6 +380,117 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;bac
 .chart-title{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:2px;color:var(--accent);margin-bottom:12px;}
 @media(max-width:700px){.charts-body{grid-template-columns:1fr;}.chart-card.wide{grid-column:1;}}
 
+/* ── MODULE SWITCHER (topbar) ── */
+.tb-mod{display:flex;gap:4px;margin-right:6px;flex-shrink:0;}
+.tb-mod .gbtn{font-size:9px;padding:6px 10px;letter-spacing:1.5px;}
+.tb-mod .gbtn.on{color:#fff;background:var(--ag);border-color:var(--accent);box-shadow:0 0 12px rgba(0,200,255,0.18);}
+/* When the funding module is active, hide incident-specific UI chrome. */
+body.mod-funding #map,
+body.mod-funding #left,
+body.mod-funding #right,
+body.mod-funding #detail,
+body.mod-funding .mod-inc-only{display:none !important;}
+body.mod-funding #mod-funding-view{display:grid !important;}
+
+/* ── HIGH-RISK & CONTEXT BADGES (incidents feed) ── */
+.hr-badge{display:inline-block;font-family:var(--mono);font-size:7px;font-weight:700;letter-spacing:1.5px;
+  padding:2px 6px;border-radius:2px;background:rgba(255,51,85,0.18);color:var(--red);
+  border:1px solid rgba(255,51,85,0.45);margin-right:5px;vertical-align:middle;
+  text-shadow:0 0 6px rgba(255,51,85,0.45);}
+.ctx-badge{display:inline-block;font-family:var(--mono);font-size:7px;font-weight:600;letter-spacing:1.5px;
+  padding:2px 6px;border-radius:2px;background:rgba(160,188,212,0.08);color:var(--t2);
+  border:1px solid rgba(160,188,212,0.18);margin-right:5px;vertical-align:middle;}
+.icard.is-context{opacity:.55;}
+.icard.is-context:hover{opacity:.92;}
+
+/* ── FUNDING VIEW ── */
+#mod-funding-view{
+  display:none;position:fixed;top:var(--tbh);left:0;right:0;bottom:var(--sbh);z-index:5;
+  background:var(--bg);
+  grid-template-columns:var(--lw) 1fr;
+  overflow:hidden;
+}
+.fnd-aside{
+  border-right:1px solid var(--pb);background:var(--panel);
+  overflow-y:auto;padding:12px 14px;
+  scrollbar-width:thin;scrollbar-color:var(--pb) transparent;
+}
+.fnd-aside::-webkit-scrollbar{width:3px;}
+.fnd-aside::-webkit-scrollbar-thumb{background:var(--pb);}
+.fnd-main{display:flex;flex-direction:column;overflow:hidden;}
+.fnd-mhdr{display:flex;align-items:center;gap:18px;padding:11px 18px;border-bottom:1px solid var(--pb);
+  background:rgba(5,11,22,0.55);flex-shrink:0;flex-wrap:wrap;}
+.fnd-stat{font-family:var(--mono);font-size:9px;letter-spacing:1.5px;color:var(--t2);white-space:nowrap;}
+.fnd-stat b{font-size:14px;color:var(--accent);font-weight:600;letter-spacing:0;margin-right:5px;}
+.fnd-stat.red b{color:var(--red);}
+.fnd-stat.amber b{color:var(--amber);}
+.fnd-stat.green b{color:var(--green);}
+.fnd-body{flex:1;overflow-y:auto;padding:14px 18px 30px;scrollbar-width:thin;}
+.fnd-body::-webkit-scrollbar{width:5px;}
+.fnd-body::-webkit-scrollbar-thumb{background:var(--pb);}
+.fnd-tablewrap{border:1px solid var(--pb);background:rgba(5,11,22,0.55);}
+.fnd-table{width:100%;border-collapse:collapse;font-size:11px;color:var(--t1);font-family:var(--sans);}
+.fnd-table thead th{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:1.5px;color:var(--t2);
+  text-align:left;padding:9px 10px;border-bottom:1px solid var(--pb);background:rgba(0,0,0,0.25);
+  position:sticky;top:0;cursor:pointer;user-select:none;}
+.fnd-table thead th:hover{color:var(--accent);}
+.fnd-table tbody td{padding:8px 10px;border-bottom:1px solid rgba(0,180,255,0.06);vertical-align:top;}
+.fnd-table tbody tr{transition:background .12s;}
+.fnd-table tbody tr:hover{background:rgba(0,200,255,0.04);}
+.fnd-org{color:var(--t0);font-weight:500;}
+.fnd-proj{color:var(--t2);font-size:10px;display:block;margin-top:2px;}
+.fnd-amt{font-family:var(--mono);font-weight:600;color:var(--accent);white-space:nowrap;}
+.fnd-yr{font-family:var(--mono);color:var(--t1);}
+.fnd-don-type{display:inline-block;font-family:var(--mono);font-size:8px;letter-spacing:1px;
+  padding:2px 6px;border-radius:2px;background:var(--ag);color:var(--accent);
+  border:1px solid var(--pb2);text-transform:uppercase;}
+.fnd-conf-dots{font-family:var(--mono);letter-spacing:1px;color:var(--amber);font-size:10px;}
+.fnd-srclink{color:var(--accent);text-decoration:none;font-size:11px;}
+.fnd-srclink:hover{text-decoration:underline;}
+.fnd-empty{text-align:center;padding:36px 16px;font-family:var(--mono);font-size:10px;color:var(--t2);letter-spacing:2px;}
+.fnd-loadmore{display:block;margin:16px auto 0;font-family:var(--mono);font-size:9px;letter-spacing:1.5px;
+  padding:7px 18px;background:transparent;border:1px solid var(--pb2);border-radius:2px;color:var(--accent);
+  cursor:pointer;transition:background .15s;}
+.fnd-loadmore:hover{background:var(--ag);}
+.fnd-charts{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px;}
+.fnd-charts .chart-card{min-height:240px;}
+.fnd-charts .chart-card.wide{grid-column:1/-1;}
+.fnd-chip-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;}
+.fnd-chip{font-family:var(--mono);font-size:9px;letter-spacing:1px;padding:5px 8px;border:1px solid var(--pb);
+  border-radius:2px;background:transparent;color:var(--t1);cursor:pointer;transition:all .12s;}
+.fnd-chip.on,.fnd-chip:hover{border-color:var(--accent);color:var(--accent);background:var(--ag);}
+@media(max-width:900px){.fnd-charts{grid-template-columns:1fr;}}
+@media(max-width:800px){
+  #mod-funding-view{grid-template-columns:1fr;}
+  .fnd-aside{position:fixed;top:var(--tbh);left:0;right:0;bottom:var(--mobnavh);
+    width:100%;z-index:11;transform:translateY(102%);transition:transform .25s ease;}
+  .fnd-aside.mob-open{transform:translateY(0);}
+}
+
+/* ── SUPPORT MODAL ── */
+#support-modal{display:none;position:fixed;inset:0;z-index:900;background:rgba(4,8,18,0.92);backdrop-filter:blur(12px);}
+#support-modal.open{display:flex;align-items:center;justify-content:center;padding:20px;}
+.sup-card{max-width:520px;width:100%;background:rgba(5,11,22,0.98);border:1px solid var(--pb2);padding:28px 30px;
+  box-shadow:0 0 50px rgba(0,200,255,0.12);font-family:var(--sans);}
+.sup-hd{display:flex;align-items:center;gap:10px;margin-bottom:18px;}
+.sup-hd-t{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:3px;color:var(--accent);}
+.sup-close{margin-left:auto;font-family:var(--mono);font-size:9px;padding:4px 12px;border:1px solid var(--pb2);
+  border-radius:2px;background:transparent;color:var(--t2);cursor:pointer;transition:all .15s;}
+.sup-close:hover{border-color:var(--red);color:var(--red);}
+.sup-intro{font-size:11px;line-height:1.55;color:var(--t1);margin-bottom:18px;}
+.sup-block{border:1px solid var(--pb);padding:14px;margin-bottom:12px;background:rgba(0,0,0,0.25);}
+.sup-block-lbl{font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--accent);margin-bottom:6px;}
+.sup-addr{font-family:var(--mono);font-size:11px;color:var(--t0);word-break:break-all;line-height:1.45;
+  background:rgba(0,200,255,0.05);padding:8px 10px;border-radius:2px;border:1px solid var(--pb);}
+.sup-addr.placeholder{color:var(--t2);font-style:italic;background:transparent;}
+.sup-copy{margin-top:8px;font-family:var(--mono);font-size:9px;letter-spacing:1.5px;
+  padding:5px 12px;border:1px solid var(--pb2);border-radius:2px;background:transparent;color:var(--accent);
+  cursor:pointer;transition:background .15s;}
+.sup-copy:hover{background:var(--ag);}
+.sup-copy.done{color:var(--green);border-color:var(--green);}
+.sup-disclaimer{font-family:var(--mono);font-size:8px;letter-spacing:1.5px;color:var(--t3);
+  margin-top:14px;line-height:1.6;text-transform:uppercase;}
+
 /* ── DETAIL EXTRAS ── */
 .det-sev-bar{display:flex;gap:3px;margin:8px 0;}
 .det-sev-seg{flex:1;height:4px;border-radius:1px;background:rgba(255,255,255,0.07);}
@@ -451,6 +562,11 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;bac
       <div class="brand-sub">GEWALTBEREITER LINKSEXTREMISMUS</div>
     </div>
   </a>
+  <!-- MODULE SWITCHER: Incidents (map) ↔ Funding (tracker) -->
+  <div class="tb-mod">
+    <button class="gbtn on" id="mod-incidents" onclick="switchModule('incidents')" title="Vorfälle-Karte">⚠ INCIDENTS</button>
+    <button class="gbtn"    id="mod-funding"   onclick="switchModule('funding')"   title="Fördergeld-Tracker">€ FUNDING</button>
+  </div>
   <div class="tb-div hide-mob"></div>
   <div class="chip"><span class="live-dot"></span> LIVE</div>
   <div class="chip hide-sm">EIN <b id="tc">—</b></div>
@@ -459,14 +575,15 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;bac
   <div class="tb-sp"></div>
   <span class="cls-tag">OSINT // RESTRICTED // LEX-EU</span>
   <div class="tb-acts">
-    <button class="gbtn hide-mob" onclick="cmdOpen()" title="Befehlspalette (Ctrl+K)">⌘ SEARCH</button>
-    <button class="gbtn hide-mob" id="btn-layer" onclick="toggleLayer()" title="Kartenebene">⬡ LAYER</button>
-    <button class="gbtn" id="btn-heat" onclick="toggleHeat()" title="Heatmap">⊞ HEAT</button>
-    <button class="gbtn hide-mob" id="btn-charts" onclick="openCharts()" title="Statistik-Charts">⬛ CHARTS</button>
-    <button class="gbtn hide-mob" onclick="exportJson()" title="JSON-Export">↓ EXPORT</button>
-    <button class="gbtn hide-mob" onclick="openReport()" title="Intelligence-Bericht">⎗ BERICHT</button>
+    <button class="gbtn hide-mob mod-inc-only" onclick="cmdOpen()" title="Befehlspalette (Ctrl+K)">⌘ SEARCH</button>
+    <button class="gbtn hide-mob mod-inc-only" id="btn-layer" onclick="toggleLayer()" title="Kartenebene">⬡ LAYER</button>
+    <button class="gbtn mod-inc-only" id="btn-heat" onclick="toggleHeat()" title="Heatmap">⊞ HEAT</button>
+    <button class="gbtn hide-mob mod-inc-only" id="btn-charts" onclick="openCharts()" title="Statistik-Charts">⬛ CHARTS</button>
+    <button class="gbtn hide-mob" onclick="exportJson()" title="Daten-Export">↓ EXPORT</button>
+    <button class="gbtn hide-mob mod-inc-only" onclick="openReport()" title="Intelligence-Bericht">⎗ BERICHT</button>
     <button class="gbtn hide-mob" onclick="copyLink()" title="Link kopieren">⎘ TEILEN</button>
-    <button class="gbtn hide-mob" onclick="kbdOpen()" title="Tastatur">? HILFE</button>
+    <button class="gbtn hide-mob mod-inc-only" onclick="kbdOpen()" title="Tastatur">? HILFE</button>
+    <button class="gbtn" onclick="supportOpen()" title="Unterstützen / Spenden">♥ SUPPORT</button>
     <a class="gbtn" href="/admin" target="_blank">⚙</a>
   </div>
 </header>
@@ -609,6 +726,7 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;bac
     <div class="sort-toggle" style="margin-left:auto" id="feed-sort-ctrl">
       <button class="sort-btn on" id="sort-date" onclick="sortFeed('date')" title="Nach Datum">DATUM ↓</button>
       <button class="sort-btn" id="sort-sev" onclick="sortFeed('severity')" title="Nach Schwere">SCHWERE ↓</button>
+      <button class="sort-btn" id="toggle-context" onclick="toggleContext()" title="Kontext-Vorfälle (Demos, Verhaftungen) einblenden">+ KONTEXT</button>
     </div>
   </div>
   <div class="tab-nav">
@@ -665,6 +783,180 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;bac
     <div class="chart-card">
       <div class="chart-title">NACH KATEGORIE</div>
       <canvas id="chart-category" height="180"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- FUNDING TRACKER VIEW                                                -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+<section id="mod-funding-view" aria-hidden="true">
+  <!-- LEFT SIDEBAR: filters -->
+  <aside class="fnd-aside" id="fnd-aside">
+    <div class="phdr"><span class="phdr-t">FILTER // FÖRDERGELDER</span><span class="phdr-n" id="fnd-count"></span></div>
+
+    <div class="fsec" style="margin-top:14px">
+      <span class="flbl">⌕ SUCHE</span>
+      <input class="finput" id="fnd-search" type="search" placeholder="Empfänger, Geber, Projekt…" oninput="fndDebounce()">
+    </div>
+
+    <div class="fsec">
+      <span class="flbl">LAND</span>
+      <div class="fnd-chip-row" id="fnd-country-chips">
+        <button class="fnd-chip on" data-val="" onclick="fndToggleChip(this,'country')">ALLE</button>
+        <button class="fnd-chip" data-val="DE" onclick="fndToggleChip(this,'country')">🇩🇪 DE</button>
+        <button class="fnd-chip" data-val="AT" onclick="fndToggleChip(this,'country')">🇦🇹 AT</button>
+        <button class="fnd-chip" data-val="CH" onclick="fndToggleChip(this,'country')">🇨🇭 CH</button>
+        <button class="fnd-chip" data-val="EU" onclick="fndToggleChip(this,'country')">🇪🇺 EU</button>
+      </div>
+    </div>
+
+    <div class="fsec">
+      <span class="flbl">GEBER-TYP</span>
+      <div class="fnd-chip-row" id="fnd-donor-chips">
+        <button class="fnd-chip on" data-val="" onclick="fndToggleChip(this,'donor_type')">ALLE</button>
+        <button class="fnd-chip" data-val="Bund" onclick="fndToggleChip(this,'donor_type')">BUND</button>
+        <button class="fnd-chip" data-val="Kanton" onclick="fndToggleChip(this,'donor_type')">KANTON</button>
+        <button class="fnd-chip" data-val="Stadt" onclick="fndToggleChip(this,'donor_type')">STADT</button>
+        <button class="fnd-chip" data-val="Stiftung" onclick="fndToggleChip(this,'donor_type')">STIFTUNG</button>
+        <button class="fnd-chip" data-val="EU" onclick="fndToggleChip(this,'donor_type')">EU</button>
+      </div>
+    </div>
+
+    <div class="fsec">
+      <span class="flbl">JAHR</span>
+      <div class="frow2">
+        <input class="finput" id="fnd-yr-min" type="number" placeholder="Von" min="1990" max="2099" oninput="fndDebounce()">
+        <input class="finput" id="fnd-yr-max" type="number" placeholder="Bis" min="1990" max="2099" oninput="fndDebounce()">
+      </div>
+    </div>
+
+    <div class="fsec">
+      <span class="flbl">MIN. BETRAG (€/CHF)</span>
+      <input class="finput" id="fnd-amt-min" type="number" placeholder="z.B. 10000" min="0" step="1000" oninput="fndDebounce()">
+    </div>
+
+    <div class="fsec">
+      <span class="flbl">SORTIERUNG</span>
+      <select class="fsel" id="fnd-sort" onchange="loadFunding()">
+        <option value="year_desc">Jahr ↓</option>
+        <option value="year_asc">Jahr ↑</option>
+        <option value="amount_desc">Betrag ↓</option>
+        <option value="amount_asc">Betrag ↑</option>
+        <option value="org_asc">Empfänger A→Z</option>
+      </select>
+    </div>
+
+    <div class="fsec" style="margin-top:18px">
+      <button class="gbtn" style="width:100%" onclick="fndReset()">⟲ FILTER ZURÜCKSETZEN</button>
+    </div>
+
+    <div class="fsec" style="margin-top:8px">
+      <button class="gbtn" style="width:100%" onclick="fndExportCsv()">↓ CSV-EXPORT</button>
+    </div>
+
+    <div class="fsec" style="margin-top:18px">
+      <span class="flbl">TOP GEBER (SUMMEN)</span>
+      <div id="fnd-top-donors" class="clist" style="margin-top:6px;font-family:var(--mono);font-size:9px"></div>
+    </div>
+  </aside>
+
+  <!-- MAIN: header + table + charts -->
+  <div class="fnd-main">
+    <div class="fnd-mhdr">
+      <div class="fnd-stat"><b id="fnd-h-records">—</b>EINTRÄGE</div>
+      <div class="fnd-stat green"><b id="fnd-h-total">—</b>SUMME</div>
+      <div class="fnd-stat"><b id="fnd-h-orgs">—</b>ORGANISATIONEN</div>
+      <div class="fnd-stat"><b id="fnd-h-donors">—</b>GEBER</div>
+      <div class="fnd-stat amber"><b id="fnd-h-years">—</b>JAHRE</div>
+    </div>
+
+    <div class="fnd-body">
+      <div class="fnd-tablewrap">
+        <table class="fnd-table" id="fnd-table">
+          <thead>
+            <tr>
+              <th data-sort="year_desc"   onclick="fndSortClick('year')">JAHR ↕</th>
+              <th data-sort="org_asc"     onclick="fndSortClick('org')">EMPFÄNGER / PROJEKT</th>
+              <th>GEBER</th>
+              <th>TYP</th>
+              <th data-sort="amount_desc" onclick="fndSortClick('amount')" style="text-align:right">BETRAG ↕</th>
+              <th>LAND</th>
+              <th>KONFIDENZ</th>
+              <th>QUELLE</th>
+            </tr>
+          </thead>
+          <tbody id="fnd-tbody">
+            <tr><td colspan="8" class="fnd-empty">LADE FÖRDERGELDER…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <button class="fnd-loadmore" id="fnd-loadmore" onclick="fndLoadMore()" style="display:none">MEHR ANZEIGEN</button>
+
+      <div class="fnd-charts">
+        <div class="chart-card">
+          <div class="chart-title">TOP 10 EMPFÄNGER NACH SUMME</div>
+          <canvas id="fnd-chart-orgs" height="220"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">VERTEILUNG NACH GEBER-TYP</div>
+          <canvas id="fnd-chart-donor-type" height="220"></canvas>
+        </div>
+        <div class="chart-card wide">
+          <div class="chart-title">JÄHRLICHE FÖRDERSUMMEN</div>
+          <canvas id="fnd-chart-year" height="120"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- SUPPORT / DONATIONS MODAL                                            -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div id="support-modal" onclick="supportClose()">
+  <div class="sup-card" onclick="event.stopPropagation()">
+    <div class="sup-hd">
+      <span style="font-size:18px;color:var(--accent)">♥</span>
+      <span class="sup-hd-t">UNTERSTÜTZEN // SPENDEN</span>
+      <button class="sup-close" onclick="supportClose()">✕</button>
+    </div>
+    <div class="sup-intro">
+      LEX EUROPE ist ein unabhängiges OSINT-Forschungsprojekt. Spenden helfen,
+      die Datenqualität zu sichern, Hosting zu finanzieren und die Recherche
+      auszubauen. Keine Werbung, kein Tracking.
+    </div>
+
+    <div class="sup-block">
+      <div class="sup-block-lbl">BITCOIN (BTC)</div>
+      {% if btc_address %}
+        <div class="sup-addr" id="sup-btc">{{ btc_address }}</div>
+        <button class="sup-copy" onclick="supCopy('sup-btc',this)">⎘ ADRESSE KOPIEREN</button>
+      {% else %}
+        <div class="sup-addr placeholder">Adresse wird in Kürze veröffentlicht.</div>
+      {% endif %}
+    </div>
+
+    <div class="sup-block">
+      <div class="sup-block-lbl">MONERO (XMR)</div>
+      {% if xmr_address %}
+        <div class="sup-addr" id="sup-xmr">{{ xmr_address }}</div>
+        <button class="sup-copy" onclick="supCopy('sup-xmr',this)">⎘ ADRESSE KOPIEREN</button>
+      {% else %}
+        <div class="sup-addr placeholder">Adresse wird in Kürze veröffentlicht.</div>
+      {% endif %}
+    </div>
+
+    {% if fiat_info %}
+    <div class="sup-block">
+      <div class="sup-block-lbl">BANKÜBERWEISUNG / FIAT</div>
+      <div class="sup-addr">{{ fiat_info }}</div>
+    </div>
+    {% endif %}
+
+    <div class="sup-disclaimer">
+      Unabhängige Recherche · Keine Werbung · Kein Tracking · Open-Source-Daten
     </div>
   </div>
 </div>
@@ -754,6 +1046,12 @@ let all=[],vis=[],map,cg,heatL=null,heatMode=false,darkLayer=true,dTimer=null,ac
 let feedSort='date',sevMin=0,activeRTab='feed';
 let detailItem=null;
 let chartInstances={};
+// Active module ("incidents" or "funding") and feed-context toggle.
+let activeModule='incidents';
+let showContext=false;
+// Funding-tracker state.
+let fndAll=[], fndVis=[], fndFilters={search:'', country:'', donor_type:'', year_min:'', year_max:'', amount_min:'', sort:'year_desc'};
+let fndShown=50, fndDebounceTimer=null, fndLoaded=false;
 const SEV_COL={1:'#3a5570',2:'#5a7a92',3:'#f0a500',4:'#ff6644',5:'#ff3355'};
 const SEV_BG={1:'rgba(58,85,112,0.18)',2:'rgba(90,122,146,0.18)',3:'rgba(240,165,0,0.18)',4:'rgba(255,102,68,0.18)',5:'rgba(255,51,85,0.18)'};
 
@@ -889,7 +1187,20 @@ function openDetail(i){
     actRow.innerHTML=`<div class="det-section-lbl">AKTEURE / GRUPPEN</div><div>${chips}</div>`;
   } else actRow.innerHTML='';
 
-  document.getElementById('det-desc').textContent=cleanDesc(i.description)||'Keine Beschreibung verfügbar.';
+  // Detail body: lead with the short AI summary, then full description.
+  const descEl=document.getElementById('det-desc');
+  const summ=(i.summary||'').trim();
+  const full=cleanDesc(i.description)||'Keine Beschreibung verfügbar.';
+  descEl.innerHTML='';
+  if(summ){
+    const sm=document.createElement('div');
+    sm.style.cssText='font-size:12px;line-height:1.55;color:var(--t0);margin-bottom:10px;padding:10px 12px;background:rgba(0,200,255,0.06);border-left:2px solid var(--accent)';
+    sm.textContent=summ;
+    descEl.appendChild(sm);
+  }
+  const body=document.createElement('div');
+  body.textContent=full;
+  descEl.appendChild(body);
 
   // Confidence dots
   const confRow=document.getElementById('det-conf-row');
@@ -952,28 +1263,42 @@ function sortFeed(mode){
 function renderFeed(list){
   const el=document.getElementById('feed');
   const rcEl=document.getElementById('rcount');
-  animCount(rcEl,list.length);
-  if(!list.length){el.innerHTML='<div class="ifempty">KEINE VORFÄLLE GEFUNDEN</div>';return;}
-  const sorted=sortedFeed(list);
+  // Show CONTEXT (non-primary) incidents only when the toggle is on.
+  let view=list;
+  if(!showContext){
+    const prim=list.filter(i=>i.is_primary===1||i.is_primary===true);
+    view = prim.length ? prim : list;  // graceful fallback if no flags yet
+  }
+  animCount(rcEl,view.length);
+  if(!view.length){el.innerHTML='<div class="ifempty">KEINE VORFÄLLE GEFUNDEN</div>';return;}
+  const sorted=sortedFeed(view);
   const now=new Date();
   el.innerHTML=sorted.slice(0,300).map(i=>{
     const c=col(i.category),s=sev(i.category);
-    const raw=cleanDesc(i.description||'');
-    const d=raw.substring(0,130);
+    // Prefer the AI summary (2-3 short German sentences). Fall back to a
+    // truncated description only if no summary is available.
+    const summ=(i.summary||'').trim();
+    const raw=summ || cleanDesc(i.description||'');
+    const d=raw.substring(0,200);
     const isNew=i.date&&(now-new Date(i.date))<7*24*3600*1000;
     const noGeo=!(i.lat!=null&&i.lon!=null&&!isNaN(i.lat)&&!isNaN(i.lon));
     const newBadge=isNew?'<span class="neu-badge">NEU</span>':'';
     const geoBadge=noGeo?'<span class="nogeo-badge">? ORT</span>':'';
     const sc=i.severity_score||0;
     const scBadge=sc>0?`<span class="sev-score" style="background:${SEV_BG[sc]||'transparent'};color:${SEV_COL[sc]||'var(--t2)'};border:1px solid ${SEV_COL[sc]||'var(--t3)'}44">${sc}</span>`:'';
-    return `<div class="icard" id="ic-${i.id}" onclick="openDetailById(${i.id})" style="border-left-color:${c}">
+    const hr = (i.is_high_risk===1||i.is_high_risk===true);
+    const isCtx = !(i.is_primary===1||i.is_primary===true);
+    const hrBadge = hr ? '<span class="hr-badge">HIGH RISK</span>' : '';
+    const ctxBadge = isCtx ? '<span class="ctx-badge">KONTEXT</span>' : '';
+    return `<div class="icard${isCtx?' is-context':''}" id="ic-${i.id}" onclick="openDetailById(${i.id})" style="border-left-color:${c}">
       <div class="icard-hd">
+        ${hrBadge}${ctxBadge}
         <span class="ibadge s${s}">${i.category}</span>
         ${scBadge}${newBadge}${geoBadge}
         <span class="idate">${i.date||'—'}</span>
       </div>
       <div class="iloc">${noGeo?'<span style="color:var(--t3)">? STANDORT UNBEKANNT</span>':i.location+'&nbsp;·&nbsp;<span style="opacity:.6">'+i.country+'</span>'}</div>
-      <div class="idesc">${d}${d.length>=130?'…':''}</div>
+      <div class="idesc">${d}${d.length>=200?'…':''}</div>
     </div>`;
   }).join('');
 }
@@ -1584,6 +1909,12 @@ function renderChart(id,type,labels,data,bg,border){
 
 // ── EXPORT JSON ────────────────────────────────────────────────────
 function exportJson(){
+  // In funding mode, export the funding table as CSV instead of incidents JSON.
+  if(activeModule==='funding'){
+    fndExportCsv();
+    showToast('CSV-EXPORT (FUNDING) GESTARTET');
+    return;
+  }
   const co=document.getElementById('f-co').value;
   const ca=document.getElementById('f-ca').value;
   const von=document.getElementById('f-von').value;
@@ -1611,6 +1942,280 @@ function openReport(){
   showToast('BERICHT WIRD GENERIERT…');
 }
 
+// ══════════════════════════════════════════════════════════════════
+// MODULE SWITCHER — Incidents ↔ Funding
+// ══════════════════════════════════════════════════════════════════
+function switchModule(name){
+  if(name===activeModule) return;
+  activeModule=name;
+  document.body.classList.toggle('mod-funding', name==='funding');
+  document.getElementById('mod-incidents').classList.toggle('on', name==='incidents');
+  document.getElementById('mod-funding').classList.toggle('on', name==='funding');
+  document.getElementById('mod-funding-view').setAttribute('aria-hidden', name==='incidents');
+  if(name==='funding' && !fndLoaded){
+    fndLoaded=true;
+    loadFunding();
+    loadFundingStats();
+  }
+  if(name==='incidents' && map){
+    // Ensure leaflet recalculates after the funding view release.
+    setTimeout(()=>map.invalidateSize(), 80);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// FEED CONTEXT TOGGLE
+// ══════════════════════════════════════════════════════════════════
+function toggleContext(){
+  showContext=!showContext;
+  const btn=document.getElementById('toggle-context');
+  btn.classList.toggle('on', showContext);
+  btn.textContent = showContext ? '✓ KONTEXT' : '+ KONTEXT';
+  if(typeof vis !== 'undefined' && vis) renderFeed(vis);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SUPPORT MODAL
+// ══════════════════════════════════════════════════════════════════
+function supportOpen(){
+  document.getElementById('support-modal').classList.add('open');
+}
+function supportClose(){
+  document.getElementById('support-modal').classList.remove('open');
+}
+function supCopy(elId, btn){
+  const el=document.getElementById(elId);
+  if(!el) return;
+  const txt=el.textContent.trim();
+  try {
+    navigator.clipboard.writeText(txt);
+    const orig=btn.textContent;
+    btn.textContent='✓ KOPIERT';
+    btn.classList.add('done');
+    setTimeout(()=>{btn.textContent=orig;btn.classList.remove('done');}, 1600);
+  } catch(e){
+    // Older browsers: select the text so users can copy manually.
+    const range=document.createRange();
+    range.selectNodeContents(el);
+    const sel=window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// FUNDING TRACKER — fetch, filter, render
+// ══════════════════════════════════════════════════════════════════
+function fndDebounce(){
+  if(fndDebounceTimer) clearTimeout(fndDebounceTimer);
+  fndDebounceTimer=setTimeout(loadFunding, 220);
+}
+
+function fndCollectFilters(){
+  fndFilters.search     = document.getElementById('fnd-search').value.trim();
+  fndFilters.amount_min = document.getElementById('fnd-amt-min').value;
+  fndFilters.year_min   = document.getElementById('fnd-yr-min').value;
+  fndFilters.year_max   = document.getElementById('fnd-yr-max').value;
+  fndFilters.sort       = document.getElementById('fnd-sort').value;
+}
+
+function fndToggleChip(btn, group){
+  const groupSel = group==='country' ? '#fnd-country-chips' : '#fnd-donor-chips';
+  document.querySelectorAll(groupSel+' .fnd-chip').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  fndFilters[group] = btn.dataset.val || '';
+  loadFunding();
+}
+
+function fndSortClick(field){
+  const cur=fndFilters.sort;
+  const order = (cur===field+'_desc') ? 'asc' : 'desc';
+  fndFilters.sort = `${field}_${order}`;
+  document.getElementById('fnd-sort').value = fndFilters.sort;
+  loadFunding();
+}
+
+function fndReset(){
+  document.getElementById('fnd-search').value='';
+  document.getElementById('fnd-amt-min').value='';
+  document.getElementById('fnd-yr-min').value='';
+  document.getElementById('fnd-yr-max').value='';
+  document.getElementById('fnd-sort').value='year_desc';
+  document.querySelectorAll('#fnd-country-chips .fnd-chip').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('#fnd-donor-chips .fnd-chip').forEach(b=>b.classList.remove('on'));
+  document.querySelector('#fnd-country-chips .fnd-chip[data-val=""]').classList.add('on');
+  document.querySelector('#fnd-donor-chips .fnd-chip[data-val=""]').classList.add('on');
+  fndFilters={search:'', country:'', donor_type:'', year_min:'', year_max:'', amount_min:'', sort:'year_desc'};
+  loadFunding();
+}
+
+async function loadFunding(){
+  fndCollectFilters();
+  const qs=new URLSearchParams();
+  Object.entries(fndFilters).forEach(([k,v])=>{ if(v!==''&&v!=null) qs.append(k,v); });
+  qs.append('limit','500');
+  try{
+    const r=await fetch('/api/funding?'+qs.toString());
+    const data=await r.json();
+    fndAll=data; fndVis=data; fndShown=50;
+    renderFundingTable();
+    renderFundingHeader(data);
+  }catch(e){
+    document.getElementById('fnd-tbody').innerHTML =
+      '<tr><td colspan="8" class="fnd-empty">FEHLER BEIM LADEN</td></tr>';
+  }
+}
+
+async function loadFundingStats(){
+  try{
+    const s=await fetch('/api/funding/stats').then(r=>r.json());
+    renderFundingTopDonors(s.top_donors||[]);
+    renderFundingCharts(s);
+  }catch(e){/* charts will retry on next module switch */}
+}
+
+function fmtAmount(v, currency){
+  if(v==null) return '—';
+  const n=Number(v);
+  if(!isFinite(n)) return '—';
+  const cur=currency||'EUR';
+  if(n>=1e6) return (n/1e6).toFixed(2).replace(/\.?0+$/,'')+'M '+cur;
+  if(n>=1e3) return (n/1e3).toFixed(1).replace(/\.0$/,'')+'K '+cur;
+  return Math.round(n).toLocaleString('de-CH')+' '+cur;
+}
+
+function fndConfDots(c){
+  c=Math.max(1,Math.min(5,Number(c)||0));
+  return '<span class="fnd-conf-dots" title="Konfidenz '+c+'/5">'+
+         '●'.repeat(c)+'<span style="color:var(--t3)">'+'○'.repeat(5-c)+'</span></span>';
+}
+
+function renderFundingHeader(rows){
+  document.getElementById('fnd-h-records').textContent = rows.length;
+  document.getElementById('fnd-count').textContent     = rows.length;
+  // Sum only when currency is consistent enough; otherwise just sum the numbers.
+  const total = rows.reduce((s,r)=>s+(Number(r.amount)||0),0);
+  document.getElementById('fnd-h-total').textContent = fmtAmount(total,'EUR');
+  document.getElementById('fnd-h-orgs').textContent   = new Set(rows.map(r=>r.recipient_org)).size;
+  document.getElementById('fnd-h-donors').textContent = new Set(rows.map(r=>r.donor_name)).size;
+  document.getElementById('fnd-h-years').textContent  = new Set(rows.map(r=>r.year)).size;
+}
+
+function escapeHtml(s){
+  return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderFundingTable(){
+  const tbody=document.getElementById('fnd-tbody');
+  if(!fndVis.length){
+    tbody.innerHTML='<tr><td colspan="8" class="fnd-empty">KEINE EINTRÄGE GEFUNDEN</td></tr>';
+    document.getElementById('fnd-loadmore').style.display='none';
+    return;
+  }
+  const slice=fndVis.slice(0, fndShown);
+  tbody.innerHTML = slice.map(r=>{
+    const src = r.source_url ? `<a class="fnd-srclink" href="${escapeHtml(r.source_url)}" target="_blank" rel="noopener">↗</a>` : '<span style="color:var(--t3)">—</span>';
+    const proj = r.project ? `<span class="fnd-proj">${escapeHtml(r.project)}</span>` : '';
+    return `<tr>
+      <td class="fnd-yr">${escapeHtml(String(r.year||'—'))}</td>
+      <td><div class="fnd-org">${escapeHtml(r.recipient_org)}</div>${proj}</td>
+      <td>${escapeHtml(r.donor_name)}</td>
+      <td><span class="fnd-don-type">${escapeHtml(r.donor_type)}</span></td>
+      <td class="fnd-amt" style="text-align:right">${fmtAmount(r.amount, r.currency)}</td>
+      <td><span style="font-family:var(--mono);font-size:10px">${escapeHtml(r.country||'—')}</span></td>
+      <td>${fndConfDots(r.confidence)}</td>
+      <td style="text-align:center">${src}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('fnd-loadmore').style.display = fndVis.length>fndShown ? '' : 'none';
+}
+
+function fndLoadMore(){ fndShown+=50; renderFundingTable(); }
+
+function renderFundingTopDonors(list){
+  const el=document.getElementById('fnd-top-donors');
+  if(!list.length){ el.innerHTML='<div style="color:var(--t3)">—</div>'; return; }
+  const max = Math.max(...list.map(d=>d.sum), 1);
+  el.innerHTML = list.slice(0,8).map(d=>{
+    const w=Math.round(d.sum/max*100);
+    return `<div class="dbar" style="margin-bottom:5px">
+      <div class="dbar-lbl" style="font-size:9px">${escapeHtml(d.donor_name)}</div>
+      <div class="dbar-track"><div class="dbar-fill" style="width:${w}%"></div></div>
+      <div class="dbar-val">${fmtAmount(d.sum,'EUR')}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderFundingCharts(s){
+  // Top 10 recipients (horizontal bar via Chart.js)
+  const orgs = (s.by_org||[]).slice(0,10);
+  fndChart('fnd-chart-orgs', {
+    type:'bar',
+    data:{
+      labels: orgs.map(o=>o.recipient_org.length>34 ? o.recipient_org.substring(0,32)+'…' : o.recipient_org),
+      datasets:[{
+        label:'Summe (€)', data: orgs.map(o=>o.sum),
+        backgroundColor:'rgba(0,200,255,0.55)', borderColor:'#00c8ff', borderWidth:1
+      }]
+    },
+    options:{
+      indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{callbacks:{label:(c)=>fmtAmount(c.parsed.x,'EUR')}}},
+      scales:{
+        x:{ticks:{color:'#5a7a92',font:{size:9},callback:v=>fmtAmount(v,'')},grid:{color:'rgba(0,180,255,0.06)'}},
+        y:{ticks:{color:'#a0bcd4',font:{size:9}},grid:{display:false}}
+      }
+    }
+  });
+
+  // Donor-type doughnut
+  const dt = s.by_donor_type||[];
+  const palette=['#00c8ff','#f0a500','#ff3355','#00e87a','#c080ff','#5a7a92'];
+  fndChart('fnd-chart-donor-type', {
+    type:'doughnut',
+    data:{ labels: dt.map(x=>x.donor_type),
+           datasets:[{ data: dt.map(x=>x.sum),
+                       backgroundColor: dt.map((_,i)=>palette[i%palette.length]),
+                       borderColor:'#060c14', borderWidth:2 }] },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{position:'right',labels:{color:'#a0bcd4',font:{size:9}}},
+        tooltip:{callbacks:{label:(c)=>c.label+': '+fmtAmount(c.parsed,'EUR')}}
+      }
+    }
+  });
+
+  // Yearly total — line chart
+  const yr = (s.by_year||[]).filter(y=>y.year);
+  fndChart('fnd-chart-year', {
+    type:'line',
+    data:{ labels: yr.map(y=>y.year),
+           datasets:[{ label:'Jahressumme', data: yr.map(y=>y.sum),
+                       borderColor:'#00c8ff', backgroundColor:'rgba(0,200,255,0.12)',
+                       fill:true, tension:0.25, pointRadius:3, pointBackgroundColor:'#00c8ff' }] },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:(c)=>fmtAmount(c.parsed.y,'EUR')}}},
+      scales:{
+        x:{ticks:{color:'#5a7a92',font:{size:9}},grid:{color:'rgba(0,180,255,0.06)'}},
+        y:{ticks:{color:'#5a7a92',font:{size:9},callback:v=>fmtAmount(v,'')},grid:{color:'rgba(0,180,255,0.06)'}}
+      }
+    }
+  });
+}
+
+function fndChart(id, cfg){
+  if(chartInstances[id]){ chartInstances[id].destroy(); delete chartInstances[id]; }
+  const ctx=document.getElementById(id);
+  if(!ctx || typeof Chart === 'undefined') return;
+  chartInstances[id] = new Chart(ctx, cfg);
+}
+
+function fndExportCsv(){
+  window.location.href='/api/funding/export-csv';
+}
+
 // ── INIT ───────────────────────────────────────────────────────────
 decodeURL();
 initYearBtns();
@@ -1618,6 +2223,12 @@ setDefaultYear();
 loadTimeline();
 setInterval(loadData,5*60*1000);
 runBoot();
+// ESC closes the support modal.
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape' && document.getElementById('support-modal').classList.contains('open')){
+    supportClose();
+  }
+});
 </script>
 </body>
 </html>

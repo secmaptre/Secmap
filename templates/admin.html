@@ -363,6 +363,114 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
     </div>
   </div>
 
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <!-- FÖRDERGELDER — Funding Tracker CRUD                                  -->
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <div class="card full">
+    <div class="c-br"></div><div class="c-bl"></div>
+    <div class="ctitle">
+      FÖRDERGELDER · NEUER EINTRAG
+      <span style="font-family:var(--mono);font-size:8px;color:var(--t2);letter-spacing:1px">PUBLIC FUNDING TRACKER</span>
+    </div>
+
+    <div class="fgrid">
+      <div class="field">
+        <label>JAHR *</label>
+        <input type="number" id="fnd-f-year" min="1990" max="2099" placeholder="2024">
+      </div>
+      <div class="field">
+        <label>LAND *</label>
+        <select id="fnd-f-country">
+          <option value="DE">Deutschland</option>
+          <option value="AT">Österreich</option>
+          <option value="CH">Schweiz</option>
+          <option value="EU">EU</option>
+          <option value="Andere">Andere</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>EMPFÄNGER-ORG *</label>
+        <input type="text" id="fnd-f-org" placeholder="z.B. Rote Hilfe e.V.">
+      </div>
+      <div class="field">
+        <label>PROJEKT (OPTIONAL)</label>
+        <input type="text" id="fnd-f-project" placeholder="Politische Bildung 2024">
+      </div>
+      <div class="field">
+        <label>GEBER-TYP *</label>
+        <select id="fnd-f-donor-type">
+          <option value="Bund">Bund</option>
+          <option value="Kanton">Kanton</option>
+          <option value="Stadt">Stadt</option>
+          <option value="Stiftung">Stiftung</option>
+          <option value="EU">EU</option>
+          <option value="Anderes">Anderes</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>GEBER-NAME *</label>
+        <input type="text" id="fnd-f-donor" placeholder="z.B. BMFSFJ — Demokratie leben!">
+      </div>
+      <div class="field">
+        <label>BETRAG *</label>
+        <input type="number" id="fnd-f-amount" min="0" step="100" placeholder="50000">
+      </div>
+      <div class="field">
+        <label>WÄHRUNG</label>
+        <select id="fnd-f-currency">
+          <option value="EUR">EUR</option>
+          <option value="CHF">CHF</option>
+          <option value="USD">USD</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>KONFIDENZ (1–5)</label>
+        <select id="fnd-f-confidence">
+          <option value="5">5 — Offizielles Budget</option>
+          <option value="4">4 — Pressemitteilung</option>
+          <option value="3" selected>3 — Förderbericht</option>
+          <option value="2">2 — Presse</option>
+          <option value="1">1 — Indirekt</option>
+        </select>
+      </div>
+      <div class="field full">
+        <label>QUELLE (URL)</label>
+        <input type="url" id="fnd-f-source-url" placeholder="https://… (Bundesanzeiger, Transparenzportal, Förderübersicht)">
+      </div>
+      <div class="field full">
+        <label>NOTIZEN (OPTIONAL)</label>
+        <textarea id="fnd-f-notes" placeholder="Kontext, Herkunft der Schätzung, Verwendung der Mittel…"></textarea>
+      </div>
+    </div>
+    <div class="brow" style="margin-top:12px">
+      <button class="btn btn-green" onclick="submitFunding()">✓ SPEICHERN</button>
+      <button class="btn" onclick="resetFundingForm()">⟲ ZURÜCKSETZEN</button>
+      <button class="btn" onclick="seedFunding()">★ SEED-DATEN EINSPIELEN</button>
+    </div>
+  </div>
+
+  <!-- FÖRDERGELDER — recent list -->
+  <div class="card full">
+    <div class="c-br"></div><div class="c-bl"></div>
+    <div class="ctitle">
+      FÖRDERGELDER · LETZTE EINTRÄGE
+      <span id="fnd-recent-count" style="font-family:var(--mono);font-size:8px;color:var(--t2);letter-spacing:1px"></span>
+    </div>
+    <div style="overflow-x:auto">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>JAHR</th><th>EMPFÄNGER</th><th>GEBER</th><th>TYP</th>
+          <th style="text-align:right">BETRAG</th><th>LAND</th><th>QUELLE</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="fnd-recent-tbody">
+        <tr><td colspan="8" style="text-align:center;color:var(--t2);padding:18px">LADE FÖRDERGELDER…</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
 </div><!-- wrap -->
 
 <div id="toast"></div>
@@ -551,11 +659,107 @@ async function refreshHistStatus(){
   }catch(e){console.error(e);}
 }
 
+// ══════════════════════════════════════════════════════════════════
+// FUNDING TRACKER — admin CRUD
+// ══════════════════════════════════════════════════════════════════
+function resetFundingForm(){
+  ['fnd-f-year','fnd-f-org','fnd-f-project','fnd-f-donor','fnd-f-amount',
+   'fnd-f-source-url','fnd-f-notes'].forEach(id=>{ const el=$(id); if(el) el.value=''; });
+  $('fnd-f-country').value='DE';
+  $('fnd-f-donor-type').value='Bund';
+  $('fnd-f-currency').value='EUR';
+  $('fnd-f-confidence').value='3';
+  $('fnd-f-year').value=new Date().getFullYear();
+}
+
+async function submitFunding(){
+  const data={
+    year:         parseInt($('fnd-f-year').value, 10),
+    country:      $('fnd-f-country').value,
+    recipient_org:$('fnd-f-org').value.trim(),
+    project:      $('fnd-f-project').value.trim(),
+    donor_type:   $('fnd-f-donor-type').value,
+    donor_name:   $('fnd-f-donor').value.trim(),
+    amount:       parseFloat($('fnd-f-amount').value),
+    currency:     $('fnd-f-currency').value,
+    confidence:   parseInt($('fnd-f-confidence').value, 10),
+    source_url:   $('fnd-f-source-url').value.trim(),
+    notes:        $('fnd-f-notes').value.trim(),
+  };
+  if(!data.recipient_org||!data.donor_name||isNaN(data.amount)||isNaN(data.year)){
+    toast('PFLICHTFELDER FEHLEN');
+    return;
+  }
+  try{
+    const res=await apiFetch('/admin/api/funding',{
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)
+    });
+    toast(res.message || (res.ok ? 'GESPEICHERT' : 'FEHLER'));
+    log(res.ok ? `Fördergeld gespeichert: ${data.recipient_org} (${data.year})` : 'Fördergeld: ' + (res.message||'Fehler'));
+    if(res.ok){ resetFundingForm(); loadRecentFunding(); }
+  }catch(e){
+    toast('FEHLER: ' + e.message.substring(0,50));
+    log('Fördergeld-Fehler: '+e.message);
+  }
+}
+
+async function seedFunding(){
+  try{
+    const res=await apiFetch('/admin/api/funding/seed',{method:'POST'});
+    toast(res.status||'OK');
+    log('Funding-Seed: '+(res.status||'OK'));
+    loadRecentFunding();
+  }catch(e){ toast('SEED FEHLER'); log('Funding-Seed-Fehler: '+e.message); }
+}
+
+async function loadRecentFunding(){
+  try{
+    const rows=await fetch('/api/funding?sort=year_desc&limit=20').then(r=>r.json());
+    const tbody=$('fnd-recent-tbody');
+    $('fnd-recent-count').textContent = rows.length + ' / 20 ANZEIGEN';
+    if(!rows.length){
+      tbody.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--t2);padding:18px">KEINE EINTRÄGE</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(r=>{
+      const amt = (Number(r.amount)||0);
+      const fmt = amt>=1e6 ? (amt/1e6).toFixed(2)+'M' : amt>=1e3 ? Math.round(amt/1e3)+'K' : amt.toFixed(0);
+      const src = r.source_url ? `<a href="${(r.source_url||'').replace(/"/g,'&quot;')}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">↗</a>` : '<span style="color:var(--t3)">—</span>';
+      const esc = s => (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      return `<tr id="fnd-row-${r.id}">
+        <td>${r.year||'—'}</td>
+        <td><b style="color:var(--t0)">${esc(r.recipient_org)}</b>${r.project?`<div style="color:var(--t2);font-size:10px;margin-top:2px">${esc(r.project)}</div>`:''}</td>
+        <td>${esc(r.donor_name)}</td>
+        <td><span style="font-family:var(--mono);font-size:8px;letter-spacing:1px;padding:2px 6px;border:1px solid var(--pb);color:var(--accent)">${esc(r.donor_type)}</span></td>
+        <td style="text-align:right;font-family:var(--mono);color:var(--accent)">${fmt} ${esc(r.currency)}</td>
+        <td>${esc(r.country)}</td>
+        <td style="text-align:center">${src}</td>
+        <td><button class="del-btn" onclick="delFunding(${r.id})">✕</button></td>
+      </tr>`;
+    }).join('');
+  }catch(e){
+    $('fnd-recent-tbody').innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--red);padding:18px">FEHLER BEIM LADEN</td></tr>';
+  }
+}
+
+async function delFunding(id){
+  if(!confirm('Diesen Fördergeld-Eintrag wirklich löschen?')) return;
+  try{
+    await fetch('/admin/api/funding/'+id, {method:'DELETE'});
+    const row=$('fnd-row-'+id);
+    if(row) row.remove();
+    toast('GELÖSCHT');
+    log('Fördergeld #'+id+' gelöscht');
+  }catch(e){ toast('FEHLER'); }
+}
+
 // ── INIT ─────────────────────────────────────────────────────────
 $('f-date').value=new Date().toISOString().split('T')[0];
+$('fnd-f-year').value=new Date().getFullYear();
 refreshStatus();
 refreshHistStatus();
 loadAdminTimeline();
+loadRecentFunding();
 </script>
 </body>
 </html>
