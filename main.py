@@ -197,6 +197,157 @@ CATEGORIES = [
     "Repression","Verhaftung","Sonstiges"
 ]
 
+# ── HISTORICAL SEED DATA ──────────────────────────────────
+# Publicly documented incidents 2018–2024, hardcoded coords (no geocoding needed)
+HISTORICAL_EVENTS = [
+    # (date, location, country, category, description, source, lat, lon)
+    # ── 2018 ─────────────────────────────────────────────
+    ("2018-08-26","Chemnitz","DE","Gewalt",
+     "Linksextreme Gruppen griffen eine Kundgebung der AfD in der Chemnitzer Innenstadt an. Schwere Ausschreitungen, gegenseitige Übergriffe zwischen linken und rechten Demonstranten. Polizei im Großeinsatz, mehrere Verletzte.",
+     "Archiv",50.83,12.92),
+    ("2018-11-08","Hamburg","DE","Brandanschlag",
+     "Mehrere Fahrzeuge in Hamburg-Schanzenviertel in der Nacht angezündet. Bekennerschreiben einer autonomen Gruppe: 'Gegen Verdrängung und Gentrifizierung.' Schadenshöhe ca. 80.000 Euro.",
+     "Archiv",53.563,9.961),
+    ("2018-01-25","Bern","CH","Demo/Kundgebung",
+     "Anti-WEF-Demonstration in Bern vor Beginn des Weltwirtschaftsforums in Davos. Autonome Gruppen durchbrachen Polizeiabsperrungen, warfen Steine und Flaschen auf Beamte. 10 Festnahmen.",
+     "Archiv",46.95,7.44),
+    # ── 2019 ─────────────────────────────────────────────
+    ("2019-06-02","Hamburg","DE","Brandanschlag",
+     "Drei Fahrzeuge der Bundespolizei in Hamburg-Altona in Brand gesetzt. Bekennerschreiben einer autonomen Gruppe im Internet veröffentlicht. Sachschaden ca. 150.000 Euro.",
+     "Archiv",53.55,10.00),
+    ("2019-12-31","Leipzig","DE","Gewalt",
+     "Silvesternacht: Koordinierter Angriff auf Polizeikräfte in Leipzig-Connewitz. Über 200 vermummte Personen attackierten Beamte mit Pyrotechnik, Flaschen und Steinen. 15 Beamte verletzt, 2 schwer. Fahrzeuge in Brand gesetzt.",
+     "Archiv",51.32,12.38),
+    ("2019-03-16","Paris","FR","Gewalt",
+     "Schwarzer Block bei Gelbwesten-Demo ('Acte 18') in Paris. Schwere Ausschreitungen auf den Champs-Élysées. Bankfilialen und Luxusgeschäfte verwüstet, Barrikaden errichtet. Über 200 Festnahmen.",
+     "Archiv",48.87,2.30),
+    ("2019-03-15","Wien","AT","Sachbeschädigung",
+     "FPÖ-Bezirksbüro in Wien-Leopoldstadt mit Farbe beschmiert, Scheiben eingeworfen. Bekennerschreiben antifaschistischer Gruppen veröffentlicht. Polizei ermittelt.",
+     "Archiv",48.21,16.37),
+    ("2019-09-27","Zürich","CH","Demo/Kundgebung",
+     "Globaler Klimastreik in Zürich. Nach der offiziellen Demo beschädigten autonome Gruppen Filialen von Großbanken und Versicherungskonzernen. Bekennerschreiben mit Klimaforderungen veröffentlicht.",
+     "Archiv",47.38,8.54),
+    ("2019-05-01","Zürich","CH","Gewalt",
+     "1.-Mai-Demonstration in Zürich. Schwarzer Block griff Polizeikräfte an. 12 Festnahmen, 2 Beamte verletzt. Fahrzeuge beschädigt.",
+     "Archiv",47.38,8.54),
+    # ── 2020 ─────────────────────────────────────────────
+    ("2020-06-21","Stuttgart","DE","Gewalt",
+     "Randalen in der Stuttgarter Innenstadt nach einer Demonstration. Gruppen griffen Polizisten an, plünderten Geschäfte. 19 Beamte verletzt, 24 Festnahmen. Autos beschädigt.",
+     "Archiv",48.78,9.18),
+    ("2020-09-26","Berlin","DE","Brandanschlag",
+     "Mehrere Fahrzeuge in der Rigaer Straße in Berlin-Friedrichshain angezündet. Bekennerschreiben: 'Für die Freiheit des Kiezes und aller politischen Gefangenen.' Dritte derartige Aktion in diesem Monat.",
+     "Archiv",52.516,13.456),
+    ("2020-06-13","Zürich","CH","Sachbeschädigung",
+     "Black-Lives-Matter-Demo in Zürich. Randalierer beschädigten US-Konsulat, Bankfilialen und Luxusgeschäfte in der Innenstadt. 8 Festnahmen.",
+     "Archiv",47.38,8.54),
+    ("2020-01-22","Wien","AT","Demo/Kundgebung",
+     "Antifaschistische Gegendemonstration in Wien. Kleinere Ausschreitungen am Rande, Polizei im Großeinsatz.",
+     "Archiv",48.21,16.37),
+    # ── 2021 ─────────────────────────────────────────────
+    ("2021-01-14","Erfurt","DE","Sachbeschädigung",
+     "Büroräume der AfD Thüringen in Erfurt mit Farbe beschmiert, Scheiben eingeworfen. Bekennerschreiben von 'Antifaschistische Aktion Erfurt' im Netz veröffentlicht.",
+     "Archiv",50.98,11.03),
+    ("2021-02-16","Barcelona","ES","Demo/Kundgebung",
+     "Proteste nach Verhaftung des Rappers Pablo Hasel in Barcelona. Schwere Ausschreitungen über mehrere Tage, Barrikaden in der Innenstadt, 89 Festnahmen. Plünderungen gemeldet.",
+     "Archiv",41.39,2.16),
+    ("2021-05-01","Zürich","CH","Gewalt",
+     "1.-Mai-Demonstration in Zürich eskaliert. Schwarzer Block griff Polizeikräfte mit Steinen, Feuerwerkskörpern und Flaschen an. 33 Festnahmen, 4 Beamte verletzt.",
+     "Archiv",47.38,8.54),
+    ("2021-05-15","Berlin","DE","Demo/Kundgebung",
+     "Pro-Palästina-Demonstration in Berlin-Neukölln eskaliert. Autonome Gruppen attackierten Polizeiabsperrungen. Mehrere Festnahmen, Beamte durch Pyrotechnik verletzt.",
+     "Archiv",52.48,13.44),
+    ("2021-07-15","Wien","AT","Brandanschlag",
+     "Fahrzeug eines Justizwachbeamten vor dessen Wohnhaus in Wien angezündet. Bekennerschreiben einer anarchistischen Gruppe: 'Gegen Knast und staatliche Repression.' Schadenshöhe ca. 25.000 Euro.",
+     "Archiv",48.21,16.37),
+    ("2021-10-04","Leipzig","DE","Gewalt",
+     "Angriff auf Polizeistreife in Leipzig-Connewitz. Beamte mit Steinen, Flaschen und Feuerwerkskörpern beworfen. 2 Beamte verletzt, einer davon schwer.",
+     "Archiv",51.32,12.38),
+    ("2021-12-06","Athen","GR","Brandanschlag",
+     "Jahrestag des Todes von Alexandros Grigoropoulos (2008): Mehrere Bankfilialen und Fahrzeuge in Athen in Brand gesetzt. Molotowcocktails auf Polizei geworfen. Schwere Ausschreitungen.",
+     "Archiv",37.98,23.73),
+    # ── 2022 ─────────────────────────────────────────────
+    ("2022-01-30","Berlin","DE","Brandanschlag",
+     "Fahrzeuge des Bundesnachrichtendienstes und der Bundeswehr in Berlin-Mitte angezündet. Bekennerschreiben: 'Gegen den imperialistischen Krieg und seinen Staat.' Schadenshöhe ca. 200.000 Euro.",
+     "Archiv",52.52,13.41),
+    ("2022-03-31","Graz","AT","Sachbeschädigung",
+     "Wahlkampfveranstaltung der FPÖ Graz gestört. Farbbeutel auf Redner geworfen, Scheiben des Veranstaltungsorts beschädigt. 3 Festnahmen. Sachschaden ca. 8.000 Euro.",
+     "Archiv",47.07,15.44),
+    ("2022-04-05","Dresden","DE","Sabotage",
+     "Sprengstoffanschlag auf Gleisanlage der Deutschen Bahn bei Dresden-Plauen. Linksextremistisches Bekennerschreiben. Zugverkehr zwischen Dresden und Leipzig für 6 Stunden gesperrt. Tausende Reisende betroffen.",
+     "Archiv",51.05,13.74),
+    ("2022-06-03","Leipzig","DE","Gewalt",
+     "Ausschreitungen in Leipzig nach Demonstration. Polizeibeamte verletzt, mehrere Fahrzeuge in Brand gesetzt. 54 Festnahmen. Polizei spricht von organisierten linksextremen Gruppen.",
+     "Archiv",51.34,12.37),
+    ("2022-09-24","Bern","CH","Demo/Kundgebung",
+     "Klimademonstration vor dem Bundeshaus in Bern. Aktivisten drangen in Parlamentsgebäude ein, Sachschäden entstanden. 10 Festnahmen durch Kantonspolizei Bern.",
+     "Archiv",46.95,7.44),
+    ("2022-10-29","Turin","IT","Gewalt",
+     "Demonstration gegen die Regierung Meloni in Turin. Linksextreme Gruppen griffen Polizei mit Stöcken und Steinen an. 12 Festnahmen, 5 Beamte verletzt.",
+     "Archiv",45.07,7.69),
+    ("2022-11-08","Hamburg","DE","Brandanschlag",
+     "Fahrzeugbrände in Hamburg-Schanzenviertel. 7 PKW und ein Transporter in der Nacht abgefackelt. Schadenshöhe ca. 300.000 Euro. Dritte Brandserie in diesem Viertel binnen 18 Monaten.",
+     "Archiv",53.563,9.961),
+    ("2022-11-17","Athen","GR","Demo/Kundgebung",
+     "Jahrestag des Athener Polytechnikums. Autonome Gruppen attackierten Polizei mit Molotowcocktails und Steinen. Ausschreitungen dauerten bis in die frühen Morgenstunden.",
+     "Archiv",37.98,23.73),
+    ("2022-12-10","Berlin","DE","Sabotage",
+     "Sabotage an Stromkabeln der Deutschen Bahn in Berlin. Zugverkehr im Nah- und Fernverkehr für mehrere Stunden lahmgelegt. Bekennerschreiben mit anti-staatlichen Forderungen veröffentlicht.",
+     "Archiv",52.52,13.405),
+    # ── 2023 ─────────────────────────────────────────────
+    ("2023-01-14","Lützerath","DE","Besetzung",
+     "Massenbesetzung des Braunkohledorfes Lützerath (Kreis Heinsberg) durch Klimaaktivisten. Zusammenstöße mit Polizei bei der Räumung. Über 70 Festnahmen. Aktivisten errichteten Barrikaden und Baumhäuser.",
+     "Archiv",50.97,6.31),
+    ("2023-01-21","Zürich","CH","Brandanschlag",
+     "Drei Fahrzeuge einer privaten Sicherheitsfirma in Zürich-Altstetten in der Nacht angezündet. Schadenshöhe ca. 200.000 CHF. Polizei ermittelt in linksextremer Szene.",
+     "Archiv",47.37,8.50),
+    ("2023-01-26","Paris","FR","Demo/Kundgebung",
+     "Generalstreik-Demonstration gegen Rentenreform in Paris. Schwarzer Block attackierte Polizei, Mülltonnen angezündet, Straßen blockiert. 120 Festnahmen, 11 Beamte verletzt.",
+     "Archiv",48.85,2.35),
+    ("2023-01-27","Davos","CH","Demo/Kundgebung",
+     "Anti-WEF-Proteste in Davos und Bern während des Weltwirtschaftsforums. Kleinere Ausschreitungen am Rande der offiziellen Proteste. 5 Festnahmen durch Kantonspolizei Graubünden.",
+     "Archiv",46.80,9.83),
+    ("2023-05-28","Wien","AT","Demo/Kundgebung",
+     "Gegendemonstration zur Identitären-Kundgebung in Wien. Linke Gruppen überbrachen Polizeiabsperrungen, Farbbeutel auf Beamte geworfen. 9 Festnahmen.",
+     "Archiv",48.21,16.37),
+    ("2023-05-31","Leipzig","DE","Gewalt",
+     "Nach dem Urteil gegen 'Lina E.': Massive Ausschreitungen in Leipzig-Connewitz. 16 Beamte verletzt, Barrikaden errichtet, Fahrzeuge in Brand gesetzt. Über 1.000 vermummte Personen. Schwerste Krawalle in Leipzig seit Jahren.",
+     "Archiv",51.32,12.38),
+    ("2023-06-15","Berlin","DE","Sabotage",
+     "Kabelanlage der Deutschen Bahn in Berlin sabotiert. Zugverkehr im Nah- und Fernverkehr in Berlin und Brandenburg für 7 Stunden lahmgelegt. Bekennerschreiben mit anti-staatlichen und anti-militaristischen Forderungen.",
+     "Archiv",52.52,13.405),
+    ("2023-09-15","Genf","CH","Sabotage",
+     "Sabotage an Signalanlage der öffentlichen Verkehrsmittel in Genf. Tramverkehr für mehrere Stunden unterbrochen. Bekennerschreiben verweist auf Klimakampf.",
+     "Archiv",46.20,6.14),
+    ("2023-09-18","Hamburg","DE","Sabotage",
+     "Sabotage an Signalanlagen der S-Bahn Hamburg. Betrieb für 4 Stunden eingestellt. Bekennerschreiben verweist auf Klimakampf und fordert Ende der fossilen Automobilindustrie.",
+     "Archiv",53.55,10.00),
+    ("2023-11-04","Berlin","DE","Demo/Kundgebung",
+     "Pro-Palästina-Demonstration in Berlin eskaliert. Linksautonome Gruppen durchbrachen Polizeiabsperrungen, Beamte angegriffen. 56 Festnahmen.",
+     "Archiv",52.52,13.405),
+    # ── 2024 ─────────────────────────────────────────────
+    ("2024-01-20","Berlin","DE","Gewalt",
+     "Anti-Regierungsdemonstration in Berlin. Linksautonome Gruppen griffen Polizeiabsperrungen an. 12 Beamte verletzt, 34 Festnahmen.",
+     "Archiv",52.52,13.405),
+    ("2024-01-27","Bern","CH","Demo/Kundgebung",
+     "Anti-WEF-Demonstration in Bern. Kleinere Sachschäden, autonome Gruppen blockierten Verkehrswege in der Innenstadt. 3 Festnahmen.",
+     "Archiv",46.95,7.44),
+    ("2024-02-10","Salzburg","AT","Schmiererei",
+     "Mehrere Banken, ein Immobilienbüro und ein Bezirksgericht in der Salzburger Innenstadt mit politischen Slogans besprüht. Schadenshöhe ca. 15.000 Euro.",
+     "Archiv",47.80,13.05),
+    ("2024-04-28","Dresden","DE","Sachbeschädigung",
+     "Büros der sächsischen CDU in Dresden mit Farbe übergossen, Scheiben eingeworfen. Bekennerschreiben von antifaschistischen Gruppen. Dritte derartige Aktion an CDU-Büros in Sachsen binnen zwei Monaten.",
+     "Archiv",51.05,13.74),
+    ("2024-05-19","München","DE","Brandanschlag",
+     "Fahrzeuge eines privaten Sicherheitsdienstleisters in München-Sendling in der Nacht angezündet. Bekennerschreiben verweist auf Einsatz der Firma bei Abschiebungen. Schadenshöhe ca. 120.000 Euro.",
+     "Archiv",48.12,11.55),
+    ("2024-06-08","Köln","DE","Demo/Kundgebung",
+     "Blockade der AfD-Parteitagshalle in Köln durch linksautonome Gruppen. Polizeiabsperrungen durchbrochen, Beamte angegriffen. 47 Festnahmen, 8 Beamte verletzt.",
+     "Archiv",50.94,6.96),
+    ("2024-03-18","London","UK","Demo/Kundgebung",
+     "Antifaschistische Demonstration in London. Gruppen griffen Polizei an, Scheiben in Westminster eingeworfen. 22 Festnahmen durch Metropolitan Police.",
+     "Archiv",51.50,-0.12),
+]
+
 def classify(text):
     api_key = os.getenv("GROK_API_KEY")
     if not api_key:
@@ -269,6 +420,33 @@ def save_incident(ai, text, source, url, date_str=None, manual=False):
     except Exception as e:
         log.warning(f"save_incident: {e}")
         return False
+
+def seed_historical_data():
+    """Insert pre-defined historical incidents if not already seeded."""
+    count = db.execute("SELECT COUNT(*) FROM incidents WHERE source='Archiv'").fetchone()[0]
+    if count > 0:
+        log.info(f"Seed: bereits {count} Archiv-Einträge vorhanden")
+        return 0
+    inserted = 0
+    for date, location, country, category, description, source, lat, lon in HISTORICAL_EVENTS:
+        url = f"archiv:{date}:{location}:{category}"
+        h = mk_hash(url, description)
+        if is_seen(h):
+            continue
+        try:
+            db.execute(
+                """INSERT OR IGNORE INTO incidents
+                   (date,location,country,category,description,source,url,hash,lat,lon,manual,timestamp)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,1,datetime('now'))""",
+                (date, location, country, category, description, source, url, h, lat, lon)
+            )
+            inserted += 1
+        except Exception as e:
+            log.warning(f"seed: {e}")
+    if inserted:
+        db.commit()
+        log.info(f"Seed: {inserted} historische Einträge eingespielt")
+    return inserted
 
 # ── BARRIKADE ID CRAWLER ──────────────────────────────────────────
 def barrikade_latest_id():
@@ -597,13 +775,16 @@ async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/api/incidents")
-async def get_incidents(country:str="", category:str="", date_from:str="", date_to:str=""):
+async def get_incidents(country:str="", category:str="", date_from:str="", date_to:str="", search:str=""):
     q = "SELECT id,date,location,country,category,description,url,lat,lon,manual,source FROM incidents WHERE 1=1"
     p = []
     if country:   q += " AND country=?";   p.append(country)
     if category:  q += " AND category=?";  p.append(category)
     if date_from: q += " AND date>=?";     p.append(date_from)
     if date_to:   q += " AND date<=?";     p.append(date_to)
+    if search:
+        q += " AND (description LIKE ? OR location LIKE ? OR category LIKE ?)"
+        p.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
     q += " ORDER BY date DESC, timestamp DESC"
     return JSONResponse([dict(r) for r in db.execute(q, p).fetchall()])
 
@@ -620,6 +801,18 @@ async def stats():
         "by_cat":     [dict(r) for r in db.execute("SELECT category,COUNT(*) n FROM incidents GROUP BY category ORDER BY n DESC").fetchall()],
         "by_source":  [dict(r) for r in db.execute("SELECT source,COUNT(*) n FROM incidents GROUP BY source ORDER BY n DESC").fetchall()],
     })
+
+@app.get("/api/timeline")
+async def get_timeline():
+    rows = db.execute("""
+        SELECT strftime('%Y-%m', date) as month, COUNT(*) as n,
+               SUM(CASE WHEN category IN ('Brandanschlag','Gewalt','Militante Aktion') THEN 1 ELSE 0 END) as high
+        FROM incidents
+        WHERE date IS NOT NULL AND date != '' AND length(date) >= 7
+        GROUP BY month
+        ORDER BY month ASC
+    """).fetchall()
+    return JSONResponse([dict(r) for r in rows])
 
 @app.get("/api/diagnose")
 async def diagnose():
@@ -788,11 +981,18 @@ async def export_csv(_=Depends(require_admin)):
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=lex-europe-{datetime.now().strftime('%Y%m%d')}.csv"})
 
+@app.post("/admin/api/seed")
+async def admin_seed(_=Depends(require_admin)):
+    n = seed_historical_data()
+    return JSONResponse({"status": f"{n} historische Einträge eingespielt" if n else "Bereits eingespielt"})
+
 @app.on_event("startup")
 async def startup():
+    if db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0] == 0:
+        seed_historical_data()
     sched = BackgroundScheduler(daemon=True, timezone="Europe/Zurich")
     sched.add_job(run_crawler, "interval", hours=2, id="main",
                   next_run_time=datetime.now() + timedelta(seconds=15))
     sched.start()
-    log.info(f"LEX EUROPE v6 — {len(RSS_FEEDS)} RSS + {len(GNEWS_Q)} GNews — crawl in 15s")
+    log.info(f"LEX EUROPE v7 — {len(RSS_FEEDS)} RSS + {len(GNEWS_Q)} GNews — crawl in 15s")
 

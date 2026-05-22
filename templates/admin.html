@@ -2,167 +2,259 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEX EUROPE — Administration</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SECMAP // ADMINISTRATION</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0a0c0f;--surface:#111318;--surf2:#161a20;
-  --border:#1e2229;--border2:#252b34;
-  --red:#b91c1c;--red2:#dc2626;--amber:#d97706;--green:#16a34a;
-  --t1:#f1f3f5;--t2:#9ba3ae;--t3:#4b5563;
-  --sans:'Inter',sans-serif;--mono:'JetBrains Mono',monospace;
+  --bg:#060c14;--s0:#080e18;--s1:#0a1220;--s2:#0e1828;
+  --pb:rgba(0,180,255,0.15);--pb2:rgba(0,200,255,0.3);
+  --accent:#00c8ff;--ag:rgba(0,200,255,0.15);
+  --amber:#f0a500;--amg:rgba(240,165,0,0.14);
+  --red:#ff3355;--rdg:rgba(255,51,85,0.14);
+  --green:#00e87a;--gg:rgba(0,232,122,0.14);
+  --t0:#e8f4ff;--t1:#a0bcd4;--t2:#5a7a92;--t3:#2a4055;
+  --mono:'JetBrains Mono',monospace;--sans:'Inter',sans-serif;
 }
 html,body{min-height:100%;background:var(--bg);font-family:var(--sans);color:var(--t1);font-size:12px;line-height:1.5;-webkit-font-smoothing:antialiased;}
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.02) 2px,rgba(0,0,0,0.02) 4px);pointer-events:none;z-index:0;}
 
-/* TOPBAR */
-#topbar{height:44px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;position:sticky;top:0;z-index:100;}
-.tb-name{font-size:13px;font-weight:600;letter-spacing:.06em;}
-.tb-badge{font-family:var(--mono);font-size:9px;color:var(--red);border:1px solid rgba(185,28,28,.4);padding:2px 7px;margin-left:12px;background:rgba(185,28,28,.07);}
-.tb-right{margin-left:auto;display:flex;align-items:center;gap:16px;}
-.tb-link{font-size:11px;color:var(--t3);text-decoration:none;cursor:pointer;}
-.tb-link:hover{color:var(--t1);}
+/* ── TOPBAR ── */
+#topbar{
+  height:50px;background:rgba(5,11,22,0.97);border-bottom:1px solid var(--pb);
+  display:flex;align-items:center;padding:0 20px;position:sticky;top:0;z-index:100;
+  backdrop-filter:blur(16px);
+}
+.tb-brand{display:flex;align-items:center;gap:9px;}
+.tb-icon{font-size:18px;color:var(--accent);}
+.tb-name{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:3px;color:var(--accent);}
+.tb-sub{font-family:var(--mono);font-size:8px;letter-spacing:1.5px;color:var(--t2);}
+.tb-badge{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:1.5px;padding:3px 9px;border:1px solid rgba(255,51,85,0.35);color:var(--red);background:var(--rdg);margin-left:12px;}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:14px;}
+.tb-link{font-family:var(--mono);font-size:9px;letter-spacing:1px;color:var(--t2);text-decoration:none;cursor:pointer;transition:color .15s;}
+.tb-link:hover{color:var(--accent);}
 
-/* LAYOUT */
-.wrap{max-width:1200px;margin:0 auto;padding:28px 24px;display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+/* ── LAYOUT ── */
+.wrap{max-width:1300px;margin:0 auto;padding:24px 20px;display:grid;grid-template-columns:1fr 1fr;gap:18px;position:relative;z-index:1;}
 .full{grid-column:1/-1;}
 
-/* CARDS */
-.card{background:var(--surface);border:1px solid var(--border);padding:20px;}
-.card-title{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);}
+/* ── CARD ── */
+.card{background:rgba(8,14,24,0.95);border:1px solid var(--pb);padding:18px;position:relative;}
+.card::before,.card::after,.card .c-br,.card .c-bl{content:'';position:absolute;width:8px;height:8px;border-color:var(--pb2);border-style:solid;}
+.card::before{top:-1px;left:-1px;border-width:1px 0 0 1px;}
+.card::after{top:-1px;right:-1px;border-width:1px 1px 0 0;}
+.card .c-br{bottom:-1px;right:-1px;border-width:0 1px 1px 0;}
+.card .c-bl{bottom:-1px;left:-1px;border-width:0 0 1px 1px;}
+.ctitle{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:2px;color:var(--accent);margin-bottom:14px;padding-bottom:9px;border-bottom:1px solid var(--pb);display:flex;align-items:center;justify-content:space-between;}
 
-/* STATUS GRID */
-.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;}
-.stat-box{background:var(--bg);border:1px solid var(--border);padding:12px;}
-.stat-val{font-family:var(--mono);font-size:20px;font-weight:500;color:var(--t1);display:block;line-height:1;margin-bottom:3px;}
-.stat-lbl{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;}
-.status-row{font-family:var(--mono);font-size:10px;color:var(--t2);margin-bottom:6px;display:flex;gap:8px;}
-.status-key{color:var(--t3);min-width:130px;}
-.badge{font-family:var(--mono);font-size:9px;padding:2px 7px;border:1px solid;border-radius:2px;}
-.badge.ok{color:var(--green);border-color:rgba(22,163,74,.3);background:rgba(22,163,74,.07);}
-.badge.warn{color:var(--amber);border-color:rgba(217,119,6,.3);background:rgba(217,119,6,.07);}
-.badge.err{color:var(--red2);border-color:rgba(185,28,28,.3);background:rgba(185,28,28,.07);}
+/* ── METRICS ROW ── */
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px;}
+.metric{background:rgba(0,0,0,0.4);border:1px solid var(--pb);padding:12px;}
+.metric-val{font-family:var(--mono);font-size:22px;font-weight:500;color:var(--t0);display:block;line-height:1;margin-bottom:4px;}
+.metric-lbl{font-family:var(--mono);font-size:8px;letter-spacing:1.5px;color:var(--t2);}
 
-/* BUTTONS */
-.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
-.btn{padding:7px 16px;background:transparent;border:1px solid var(--border2);color:var(--t2);font-family:var(--sans);font-size:11px;font-weight:500;cursor:pointer;border-radius:3px;transition:all .15s;}
-.btn:hover{background:var(--surf2);border-color:var(--t3);color:var(--t1);}
-.btn.primary{border-color:rgba(22,163,74,.4);color:var(--green);}
-.btn.primary:hover{background:rgba(22,163,74,.08);}
-.btn.danger{border-color:rgba(185,28,28,.3);}
-.btn.danger:hover{border-color:var(--red);color:var(--red2);background:rgba(185,28,28,.07);}
-.btn:disabled{opacity:.4;cursor:not-allowed;}
+/* Status rows */
+.srow{font-family:var(--mono);font-size:10px;color:var(--t1);margin-bottom:5px;display:flex;gap:8px;align-items:center;}
+.sk{color:var(--t2);min-width:160px;}
+.badge{font-family:var(--mono);font-size:8px;padding:2px 7px;border:1px solid;border-radius:2px;}
+.badge-ok{color:var(--green);border-color:rgba(0,232,122,0.3);background:var(--gg);}
+.badge-warn{color:var(--amber);border-color:rgba(240,165,0,0.3);background:var(--amg);}
+.badge-err{color:var(--red);border-color:rgba(255,51,85,0.3);background:var(--rdg);}
 
-/* FORM */
-.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+/* ── BUTTONS ── */
+.brow{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px;}
+.btn{padding:6px 14px;background:transparent;border:1px solid var(--pb);color:var(--t1);font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:1px;cursor:pointer;border-radius:2px;transition:all .15s;}
+.btn:hover{background:rgba(255,255,255,0.05);border-color:var(--pb2);}
+.btn:disabled{opacity:.35;cursor:not-allowed;}
+.btn-green{border-color:rgba(0,232,122,0.35);color:var(--green);}
+.btn-green:hover{background:var(--gg);}
+.btn-amber{border-color:rgba(240,165,0,0.35);color:var(--amber);}
+.btn-amber:hover{background:var(--amg);}
+.btn-red{border-color:rgba(255,51,85,0.25);color:var(--t2);}
+.btn-red:hover{border-color:var(--red);color:var(--red);background:var(--rdg);}
+.btn-accent{border-color:rgba(0,200,255,0.4);color:var(--accent);}
+.btn-accent:hover{background:var(--ag);}
+
+/* ── FORM ── */
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .field{display:flex;flex-direction:column;gap:4px;}
 .field.full{grid-column:1/-1;}
-label{font-size:9px;font-weight:500;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;}
-input,select,textarea{background:var(--bg);border:1px solid var(--border2);color:var(--t1);padding:7px 10px;font-family:var(--sans);font-size:11px;outline:none;border-radius:3px;transition:border-color .15s;width:100%;}
-input:focus,select:focus,textarea:focus{border-color:var(--t3);}
-textarea{min-height:80px;resize:vertical;font-family:var(--sans);}
-select option{background:var(--surface);}
+.field label{font-family:var(--mono);font-size:8px;font-weight:600;letter-spacing:1.5px;color:var(--t2);}
+.field input,.field select,.field textarea{
+  background:rgba(0,0,0,0.45);border:1px solid var(--pb);border-radius:2px;
+  color:var(--t0);font-family:var(--mono);font-size:10px;padding:6px 9px;
+  outline:none;transition:border-color .15s;width:100%;
+}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);}
+.field select option{background:#080e18;}
+.field textarea{min-height:75px;resize:vertical;}
 
-/* FEED LIST */
-.feed-list{max-height:180px;overflow-y:auto;font-family:var(--mono);font-size:9px;color:var(--t2);line-height:2;}
-.feed-list::-webkit-scrollbar{width:2px;}
-.feed-list::-webkit-scrollbar-thumb{background:var(--border2);}
+/* ── HISTORICAL PROGRESS ── */
+.hprog{margin-bottom:10px;}
+.hprog-hd{display:flex;justify-content:space-between;margin-bottom:4px;font-family:var(--mono);font-size:9px;color:var(--t1);}
+.hprog-track{height:3px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;}
+.hprog-fill{height:100%;border-radius:2px;transition:width .5s ease;}
 
-/* INCIDENTS TABLE */
+/* ── CONSOLE ── */
+.console{
+  background:rgba(0,0,0,0.55);border:1px solid var(--pb);
+  padding:10px;font-family:var(--mono);font-size:9px;color:var(--t1);
+  min-height:60px;max-height:130px;overflow-y:auto;
+  white-space:pre-wrap;line-height:1.7;margin-top:10px;
+  scrollbar-width:thin;scrollbar-color:var(--pb) transparent;
+}
+.console::-webkit-scrollbar{width:3px;}
+.console::-webkit-scrollbar-thumb{background:var(--pb);}
+
+/* ── FEED LIST ── */
+.feed-list{
+  max-height:160px;overflow-y:auto;font-family:var(--mono);font-size:9px;
+  color:var(--t1);line-height:2;scrollbar-width:thin;scrollbar-color:var(--pb) transparent;
+}
+.feed-list::-webkit-scrollbar{width:3px;}
+.feed-list::-webkit-scrollbar-thumb{background:var(--pb);}
+
+/* ── TABLE ── */
 .tbl{width:100%;border-collapse:collapse;}
-.tbl th{font-size:9px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);}
-.tbl td{padding:8px 10px;border-bottom:1px solid var(--border);font-size:11px;color:var(--t2);vertical-align:top;}
-.tbl tr:hover td{background:var(--surf2);}
-.cat-badge{font-family:var(--mono);font-size:8px;padding:1px 5px;border:1px solid;white-space:nowrap;}
-.cat-badge.h{color:var(--red2);border-color:rgba(220,38,38,.3);background:rgba(185,28,28,.07);}
-.cat-badge.m{color:var(--amber);border-color:rgba(217,119,6,.3);background:rgba(217,119,6,.07);}
-.cat-badge.l{color:var(--t3);border-color:var(--border2);}
-.del-btn{font-size:10px;color:var(--t3);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:2px;}
-.del-btn:hover{color:var(--red2);background:rgba(185,28,28,.1);}
-.manual-dot{width:6px;height:6px;border-radius:50%;background:var(--amber);display:inline-block;margin-right:4px;}
+.tbl th{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:1.5px;color:var(--t2);padding:7px 10px;text-align:left;border-bottom:1px solid var(--pb);}
+.tbl td{padding:7px 10px;border-bottom:1px solid rgba(0,180,255,0.08);font-family:var(--mono);font-size:9px;color:var(--t1);vertical-align:top;}
+.tbl tr:hover td{background:rgba(0,200,255,0.04);}
+.cbadge{font-family:var(--mono);font-size:8px;padding:1px 6px;border:1px solid;border-radius:2px;white-space:nowrap;}
+.cbadge-h{color:var(--red);border-color:rgba(255,51,85,0.3);background:var(--rdg);}
+.cbadge-m{color:var(--amber);border-color:rgba(240,165,0,0.3);background:var(--amg);}
+.cbadge-l{color:var(--t2);border-color:var(--pb);}
+.del-btn{font-family:var(--mono);font-size:9px;color:var(--t2);background:none;border:none;cursor:pointer;padding:2px 6px;transition:color .15s;}
+.del-btn:hover{color:var(--red);}
 
-/* CONSOLE */
-.console{background:var(--bg);border:1px solid var(--border);padding:10px;font-family:var(--mono);font-size:9px;color:var(--t2);min-height:60px;max-height:140px;overflow-y:auto;white-space:pre-wrap;line-height:1.7;margin-top:10px;}
-.console::-webkit-scrollbar{width:2px;}
-.console::-webkit-scrollbar-thumb{background:var(--border2);}
-
-/* TOAST */
-#toast{position:fixed;bottom:20px;right:24px;background:var(--surf2);border:1px solid var(--border2);padding:8px 16px;font-size:11px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:200;border-radius:3px;}
+/* ── TOAST ── */
+#toast{position:fixed;bottom:20px;right:20px;background:rgba(8,14,24,0.97);border:1px solid var(--pb2);padding:8px 14px;font-family:var(--mono);font-size:10px;color:var(--accent);opacity:0;transition:opacity .25s;pointer-events:none;z-index:200;border-radius:2px;}
 #toast.show{opacity:1;}
+
+/* ── MOBILE RESPONSIVE ── */
+@media(max-width:768px){
+  .wrap{grid-template-columns:1fr;padding:16px 12px;gap:14px;}
+  .full{grid-column:1;}
+  .metrics{grid-template-columns:1fr 1fr;}
+  .fgrid{grid-template-columns:1fr;}
+  .field.full{grid-column:1;}
+  .brow{gap:6px;}
+  .btn{font-size:8px;padding:5px 10px;letter-spacing:.5px;}
+  #topbar{padding:0 12px;height:44px;}
+  .tb-name{font-size:11px;letter-spacing:2px;}
+  .tbl th,.tbl td{padding:6px 8px;font-size:8px;}
+  .card{padding:14px;}
+}
 </style>
 </head>
 <body>
 
 <div id="topbar">
-  <span class="tb-name">LEX EUROPE</span>
+  <div class="tb-brand">
+    <span class="tb-icon">◈</span>
+    <div>
+      <div class="tb-name">SECMAP</div>
+      <div class="tb-sub">LEX EUROPE</div>
+    </div>
+  </div>
   <span class="tb-badge">ADMINISTRATION</span>
   <div class="tb-right">
-    <a class="tb-link" href="/" target="_blank">→ Karte öffnen</a>
-    <a class="tb-link" href="/admin/logout">Abmelden</a>
+    <a class="tb-link" href="/" target="_blank">→ KARTE</a>
+    <a class="tb-link" href="/admin/api/export-csv">↓ CSV</a>
+    <a class="tb-link" href="/admin/logout">ABMELDEN</a>
   </div>
 </div>
 
 <div class="wrap">
 
-  <!-- STATUS -->
+  <!-- SYSTEMSTATUS -->
   <div class="card full">
-    <div class="card-title">Systemstatus</div>
-    <div class="stat-grid">
-      <div class="stat-box">
-        <span class="stat-val" id="s-total">{{ total }}</span>
-        <span class="stat-lbl">Gesamt Einträge</span>
+    <div class="c-br"></div><div class="c-bl"></div>
+    <div class="ctitle">SYSTEMSTATUS</div>
+
+    <div class="metrics">
+      <div class="metric">
+        <span class="metric-val" id="m-total">{{ total }}</span>
+        <span class="metric-lbl">EINTRÄGE GESAMT</span>
       </div>
-      <div class="stat-box">
-        <span class="stat-val" id="s-feeds">{{ loop.length if loop else '—' }}</span>
-        <span class="stat-lbl">RSS Feeds</span>
+      <div class="metric">
+        <span class="metric-val" id="m-feeds">{{ feed_count }}</span>
+        <span class="metric-lbl">RSS-FEEDS AKTIV</span>
       </div>
-      <div class="stat-box">
-        <span class="stat-val" id="s-run" style="color:{% if running %}var(--amber){% else %}var(--t3){% endif %}">
-          {% if running %}Läuft{% else %}Bereit{% endif %}
-        </span>
-        <span class="stat-lbl">Crawler</span>
+      <div class="metric">
+        <span class="metric-val" id="m-geo" style="color:var(--accent)">—</span>
+        <span class="metric-lbl">GEOCODIERT</span>
+      </div>
+      <div class="metric">
+        <span class="metric-val" id="m-src">—</span>
+        <span class="metric-lbl">DATENQUELLEN</span>
       </div>
     </div>
-    <div class="status-row"><span class="status-key">Letzter Crawl:</span><span id="s-last">{{ last_crawl }}</span></div>
-    <div class="status-row"><span class="status-key">Crawler-Status:</span><span class="badge {% if running %}warn{% else %}ok{% endif %}" id="s-badge">{% if running %}Aktiv{% else %}Bereit{% endif %}</span></div>
-    <div class="btn-row">
-      <button class="btn primary" onclick="startCrawl()" id="btn-crawl">{% if running %}Crawler läuft...{% else %}Crawler starten{% endif %}</button>
-      <button class="btn" onclick="stopCrawl()">Crawler stoppen</button>
-      <button class="btn" onclick="testGrok()">Grok testen</button>
-      <button class="btn" onclick="refreshStatus()">Status aktualisieren</button>
-      <button class="btn danger" onclick="clearDB()">Datenbank zurücksetzen</button>
+
+    <div class="srow"><span class="sk">LETZTER CRAWL</span><span id="s-last">{{ last_crawl }}</span></div>
+    <div class="srow"><span class="sk">CRAWLER-STATUS</span>
+      <span class="badge {% if running %}badge-warn{% else %}badge-ok{% endif %}" id="s-badge">
+        {% if running %}AKTIV{% else %}BEREIT{% endif %}
+      </span>
     </div>
-    <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
-      <div class="card-title" style="margin-bottom:10px;">Historische Daten (2010 – heute)</div>
-      <div class="stat-grid" style="margin-bottom:12px;">
-        <div class="stat-box"><span class="stat-val" id="h-b-pct">—</span><span class="stat-lbl">Barrikade.info</span></div>
-        <div class="stat-box"><span class="stat-val" id="h-im">—</span><span class="stat-lbl">Indymedia</span></div>
-        <div class="stat-box"><span class="stat-val" id="h-wb">—</span><span class="stat-lbl">Wayback Machine</span></div>
-      </div>
-      <div class="btn-row">
-        <button class="btn primary" onclick="startHistorical(false)" id="btn-hist">Historischen Crawl fortsetzen</button>
-        <button class="btn" onclick="startHistorical(true)">Von vorne beginnen (Reset)</button>
-        <button class="btn" onclick="refreshHistStatus()">Status aktualisieren</button>
-      </div>
-      <p style="font-size:9px;color:var(--t3);margin-top:8px;font-family:var(--mono);">
-        Barrikade iteriert alle Artikel-IDs zurück bis #1 · Indymedia paginiert offset-basiert ·
-        Wayback Machine CDX für archivierte Inhalte ab 2015 · Fortschritt wird gespeichert
-      </p>
+    <div class="srow"><span class="sk">HIST. CRAWLER</span>
+      <span class="badge {% if hist_running %}badge-warn{% else %}badge-ok{% endif %}" id="h-badge">
+        {% if hist_running %}AKTIV{% else %}BEREIT{% endif %}
+      </span>
+    </div>
+
+    <div class="brow">
+      <button class="btn btn-green" onclick="startCrawl()" id="btn-crawl">
+        {% if running %}⟳ CRAWLER LÄUFT…{% else %}▶ CRAWLER STARTEN{% endif %}
+      </button>
+      <button class="btn" onclick="stopCrawl()">■ STOPPEN</button>
+      <button class="btn btn-accent" onclick="seedData()" id="btn-seed">↓ HISTORISCHE DATEN</button>
+      <button class="btn" onclick="testGrok()">⚡ GROK TESTEN</button>
+      <button class="btn" onclick="reGeo()">⊕ GEOCODING WIEDERHOLEN</button>
+      <button class="btn" onclick="refreshStatus()">↺ STATUS</button>
+      <button class="btn btn-red" onclick="clearDB()">✕ DB LÖSCHEN</button>
     </div>
     <div class="console" id="console">Bereit.</div>
   </div>
 
-  <!-- ADD INCIDENT -->
+  <!-- HISTORISCHES CRAWLING -->
   <div class="card">
-    <div class="card-title">Ereignis manuell hinzufügen</div>
-    <div class="form-grid">
+    <div class="c-br"></div><div class="c-bl"></div>
+    <div class="ctitle">HISTORISCHES CRAWLING</div>
+
+    <div class="hprog">
+      <div class="hprog-hd"><span>🇩🇪 barrikade.info</span><span id="h-b-pct">{{ hist_b_pct }}</span></div>
+      <div class="hprog-track"><div class="hprog-fill" id="h-b-fill" style="width:0%;background:var(--accent)"></div></div>
+    </div>
+    <div class="hprog">
+      <div class="hprog-hd"><span>de.indymedia.org</span><span id="h-im">{% if hist_im_done %}✓ FERTIG{% else %}BEREIT{% endif %}</span></div>
+      <div class="hprog-track"><div class="hprog-fill" id="h-im-fill" style="width:0%;background:var(--amber)"></div></div>
+    </div>
+
+    <div class="brow" style="margin-top:14px">
+      <button class="btn btn-amber" onclick="startHist(false)" id="btn-hist">▶ FORTSETZEN</button>
+      <button class="btn" onclick="startHist(true)">↺ RESET + START</button>
+      <button class="btn" onclick="refreshHistStatus()">↺ STATUS</button>
+    </div>
+    <p style="font-family:var(--mono);font-size:8px;color:var(--t2);margin-top:9px;line-height:1.7;">
+      Barrikade iteriert alle Artikel-IDs · Indymedia offset-basiert ·<br>
+      Fortschritt wird gespeichert, bei Unterbrechung fortsetzbar
+    </p>
+  </div>
+
+  <!-- EREIGNIS MANUELL HINZUFÜGEN -->
+  <div class="card">
+    <div class="c-br"></div><div class="c-bl"></div>
+    <div class="ctitle">EREIGNIS MANUELL ERFASSEN</div>
+
+    <div class="fgrid">
       <div class="field">
-        <label>Datum</label>
+        <label>DATUM</label>
         <input type="date" id="f-date" required>
       </div>
       <div class="field">
-        <label>Land</label>
+        <label>LAND</label>
         <select id="f-country">
           <option value="DE">Deutschland</option>
           <option value="CH">Schweiz</option>
@@ -170,15 +262,17 @@ select option{background:var(--surface);}
           <option value="FR">Frankreich</option>
           <option value="IT">Italien</option>
           <option value="GR">Griechenland</option>
+          <option value="ES">Spanien</option>
+          <option value="UK">UK</option>
           <option value="Andere">Andere</option>
         </select>
       </div>
       <div class="field">
-        <label>Ort / Stadt</label>
+        <label>ORT / STADT</label>
         <input type="text" id="f-location" placeholder="z.B. Berlin-Kreuzberg">
       </div>
       <div class="field">
-        <label>Kategorie</label>
+        <label>KATEGORIE</label>
         <select id="f-category">
           {% for cat in categories %}
           <option value="{{ cat }}">{{ cat }}</option>
@@ -186,42 +280,39 @@ select option{background:var(--surface);}
         </select>
       </div>
       <div class="field">
-        <label>Quelle / Medium</label>
+        <label>QUELLE</label>
         <input type="text" id="f-source" placeholder="z.B. Tagesanzeiger">
       </div>
       <div class="field">
-        <label>URL (optional)</label>
-        <input type="url" id="f-url" placeholder="https://...">
+        <label>URL (OPTIONAL)</label>
+        <input type="url" id="f-url" placeholder="https://…">
       </div>
       <div class="field full">
-        <label>Beschreibung / Artikel-Text</label>
-        <textarea id="f-desc" placeholder="Volltext des Artikels oder Zusammenfassung..."></textarea>
+        <label>BESCHREIBUNG / ARTIKEL-TEXT</label>
+        <textarea id="f-desc" placeholder="Volltext oder Zusammenfassung des Vorfalls…"></textarea>
       </div>
     </div>
-    <div class="btn-row" style="margin-top:14px;">
-      <button class="btn primary" onclick="submitIncident()">Eintrag speichern</button>
-      <button class="btn" onclick="classifyAndFill()">Automatisch klassifizieren (Grok)</button>
+    <div class="brow" style="margin-top:12px">
+      <button class="btn btn-green" onclick="submitIncident()">✓ SPEICHERN</button>
     </div>
   </div>
 
-  <!-- FEEDS -->
+  <!-- AKTIVE QUELLEN -->
   <div class="card">
-    <div class="card-title">Aktive RSS-Feeds <span id="feed-count" style="color:var(--t3);font-weight:400;"></span></div>
-    <div class="feed-list" id="feed-list">Lade...</div>
+    <div class="c-br"></div><div class="c-bl"></div>
+    <div class="ctitle">AKTIVE QUELLEN <span id="feed-count" style="color:var(--t2);font-weight:400;letter-spacing:0"></span></div>
+    <div class="feed-list" id="feed-list">Lade…</div>
   </div>
 
-  <!-- RECENT INCIDENTS -->
+  <!-- LETZTE EINTRÄGE -->
   <div class="card full">
-    <div class="card-title">Letzte Einträge</div>
+    <div class="c-br"></div><div class="c-bl"></div>
+    <div class="ctitle">LETZTE EINTRÄGE</div>
+    <div style="overflow-x:auto">
     <table class="tbl">
       <thead>
         <tr>
-          <th>Datum</th>
-          <th>Ort</th>
-          <th>Land</th>
-          <th>Kategorie</th>
-          <th>Quelle</th>
-          <th></th>
+          <th>DATUM</th><th>ORT</th><th>LAND</th><th>KATEGORIE</th><th>QUELLE</th><th></th>
         </tr>
       </thead>
       <tbody id="recent-tbody">
@@ -229,182 +320,140 @@ select option{background:var(--surface);}
         <tr id="row-{{ r.id }}">
           <td>{{ r.date or '—' }}</td>
           <td>{{ r.location or '—' }}</td>
-          <td style="font-family:var(--mono);font-size:10px;">{{ r.country or '—' }}</td>
+          <td>{{ r.country or '—' }}</td>
           <td>
-            {% if r.category in ['Brandanschlag','Sabotage','Gewalt','Militante Aktion','Aufruf zu Gewalt'] %}
-            <span class="cat-badge h">{{ r.category }}</span>
-            {% elif r.category in ['Sachbeschädigung','Repression','Verhaftung','Besetzung'] %}
-            <span class="cat-badge m">{{ r.category }}</span>
+            {% if r.category in ['Brandanschlag','Gewalt','Militante Aktion','Aufruf zu Gewalt'] %}
+            <span class="cbadge cbadge-h">{{ r.category }}</span>
+            {% elif r.category in ['Sabotage','Sachbeschädigung','Besetzung','Demo/Kundgebung'] %}
+            <span class="cbadge cbadge-m">{{ r.category }}</span>
             {% else %}
-            <span class="cat-badge l">{{ r.category }}</span>
+            <span class="cbadge cbadge-l">{{ r.category }}</span>
             {% endif %}
           </td>
-          <td style="font-size:10px;color:var(--t3);">{{ r.source or '—' }}</td>
-          <td><button class="del-btn" onclick="deleteRow({{ r.id }})">✕</button></td>
+          <td style="color:var(--t2)">{{ r.source or '—' }}</td>
+          <td><button class="del-btn" onclick="delRow({{ r.id }})">✕</button></td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
 
-</div>
+</div><!-- wrap -->
 
 <div id="toast"></div>
 
 <script>
-const log = s => {
-  const c = document.getElementById('console');
-  c.textContent += '\n' + new Date().toLocaleTimeString('de-CH') + '  ' + s;
-  c.scrollTop = c.scrollHeight;
-};
+const $=id=>document.getElementById(id);
 
-const toast = msg => {
-  const t = document.getElementById('toast');
-  t.textContent = msg; t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2800);
-};
+const log=s=>{const c=$('console');c.textContent+='\n'+new Date().toLocaleTimeString('de-CH')+'  '+s;c.scrollTop=c.scrollHeight;};
+const toast=msg=>{const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);};
 
-async function startCrawl() {
-  document.getElementById('btn-crawl').disabled = true;
-  document.getElementById('btn-crawl').textContent = 'Crawler läuft...';
-  log('Crawler wird gestartet...');
-  try {
-    const r = await fetch('/admin/api/crawl', {method:'POST'});
-    const d = await r.json();
-    log(d.status);
-    toast('Crawler gestartet');
-    setTimeout(refreshStatus, 3000);
-  } catch(e) { log('Fehler: ' + e.message); }
+async function startCrawl(){
+  $('btn-crawl').disabled=true;$('btn-crawl').textContent='⟳ CRAWLER LÄUFT…';
+  log('Crawler wird gestartet…');
+  try{const d=await fetch('/admin/api/crawl',{method:'POST'}).then(r=>r.json());log(d.status);toast(d.status);setTimeout(refreshStatus,3000);}
+  catch(e){log('Fehler: '+e.message);}
 }
 
-async function stopCrawl() {
-  const r = await fetch('/admin/api/stop-crawl', {method:'POST'});
-  const d = await r.json();
-  log(d.status);
-  toast(d.status);
-  refreshStatus();
+async function stopCrawl(){
+  const d=await fetch('/admin/api/stop-crawl',{method:'POST'}).then(r=>r.json());
+  log(d.status);toast(d.status);refreshStatus();
 }
 
-async function refreshStatus() {
-  try {
-    const s = await fetch('/admin/api/status').then(r=>r.json());
-    document.getElementById('s-total').textContent = s.total;
-    document.getElementById('s-last').textContent  = s.last_crawl || '—';
-    document.getElementById('s-feeds').textContent = s.feed_count;
-    const badge = document.getElementById('s-badge');
-    const btn   = document.getElementById('btn-crawl');
-    if (s.crawl_running) {
-      badge.className='badge warn'; badge.textContent='Aktiv';
-      btn.disabled=true; btn.textContent='Crawler läuft...';
-    } else {
-      badge.className='badge ok'; badge.textContent='Bereit';
-      btn.disabled=false; btn.textContent='Crawler starten';
-    }
-    // Feed list
-    const fl = document.getElementById('feed-list');
-    fl.textContent = s.sources.map(x => `${(x.source||'').padEnd(28)} ${x.n}`).join('\n');
-    document.getElementById('feed-count').textContent = `(${s.feed_count} Feeds)`;
-  } catch(e) { log('Status-Fehler: ' + e.message); }
+async function seedData(){
+  $('btn-seed').disabled=true;$('btn-seed').textContent='↓ WIRD EINGESPIELT…';
+  log('Historische Archiv-Daten werden eingespielt…');
+  try{
+    const d=await fetch('/admin/api/seed',{method:'POST'}).then(r=>r.json());
+    log(d.status);toast(d.status);refreshStatus();
+  }catch(e){log('Fehler: '+e.message);}
+  finally{$('btn-seed').disabled=false;$('btn-seed').textContent='↓ HISTORISCHE DATEN';}
 }
 
-async function testGrok() {
-  log('Teste Grok API...');
-  try {
-    const r = await fetch('/admin/api/grok-test', {method:'POST'});
-    const d = await r.json();
-    log('Grok-Antwort: ' + JSON.stringify(d));
-    toast('Grok OK');
-  } catch(e) { log('Grok-Fehler: ' + e.message); }
+async function refreshStatus(){
+  try{
+    const s=await fetch('/admin/api/status').then(r=>r.json());
+    $('m-total').textContent=s.total;
+    $('m-feeds').textContent=s.feed_count;
+    $('m-geo').textContent=s.geocoded;
+    $('m-src').textContent=s.sources?.length||'—';
+    $('s-last').textContent=s.last_crawl||'—';
+    const b=$('s-badge'),btn=$('btn-crawl');
+    if(s.crawl_running){b.className='badge badge-warn';b.textContent='AKTIV';btn.disabled=true;btn.textContent='⟳ CRAWLER LÄUFT…';}
+    else{b.className='badge badge-ok';b.textContent='BEREIT';btn.disabled=false;btn.textContent='▶ CRAWLER STARTEN';}
+    const fl=$('feed-list');
+    fl.textContent=(s.sources||[]).map(x=>`${(x.source||'').substring(0,30).padEnd(30)} ${x.n}`).join('\n');
+    $('feed-count').textContent=`(${s.feed_count} Feeds)`;
+  }catch(e){log('Status-Fehler: '+e.message);}
 }
 
-async function clearDB() {
-  if (!confirm('Alle Daten unwiderruflich löschen?')) return;
-  const r = await fetch('/admin/api/clear', {method:'POST'});
-  const d = await r.json();
-  log(d.status);
-  toast(d.status);
-  refreshStatus();
+async function testGrok(){
+  log('Teste Grok API…');
+  try{const d=await fetch('/admin/api/grok-test',{method:'POST'}).then(r=>r.json());log('Grok → '+JSON.stringify(d));toast('Grok OK');}
+  catch(e){log('Fehler: '+e.message);}
 }
 
-async function deleteRow(id) {
-  await fetch(`/admin/api/incident/${id}`, {method:'DELETE'});
-  const row = document.getElementById(`row-${id}`);
-  if (row) row.remove();
+async function reGeo(){
+  log('Geocoding wird wiederholt…');
+  try{const d=await fetch('/admin/api/regeocode',{method:'POST'}).then(r=>r.json());log(d.status);toast(d.status);}
+  catch(e){log('Fehler: '+e.message);}
+}
+
+async function clearDB(){
+  if(!confirm('Alle Daten unwiderruflich löschen?\n\nDies kann nicht rückgängig gemacht werden.')) return;
+  const d=await fetch('/admin/api/clear',{method:'POST'}).then(r=>r.json());
+  log(d.status);toast(d.status);refreshStatus();
+}
+
+async function delRow(id){
+  await fetch(`/admin/api/incident/${id}`,{method:'DELETE'});
+  const row=$(`row-${id}`);if(row)row.remove();
   toast('Eintrag gelöscht');
 }
 
-async function classifyAndFill() {
-  const text = document.getElementById('f-desc').value;
-  if (!text.trim()) { toast('Bitte zuerst Beschreibung eingeben'); return; }
-  log('Klassifiziere mit Grok...');
-  try {
-    const r = await fetch('/admin/api/grok-test', {method:'POST'});
-    toast('Grok klassifiziert nur Testtext — Eingabe manuell ausfüllen');
-  } catch(e) { log('Fehler: ' + e.message); }
-}
-
-async function submitIncident() {
-  const data = {
-    date:        document.getElementById('f-date').value,
-    location:    document.getElementById('f-location').value,
-    country:     document.getElementById('f-country').value,
-    category:    document.getElementById('f-category').value,
-    description: document.getElementById('f-desc').value,
-    source:      document.getElementById('f-source').value,
-    url:         document.getElementById('f-url').value,
+async function submitIncident(){
+  const data={
+    date:$('f-date').value,location:$('f-location').value,
+    country:$('f-country').value,category:$('f-category').value,
+    description:$('f-desc').value,source:$('f-source').value,url:$('f-url').value
   };
-  if (!data.date || !data.location || !data.description) {
-    toast('Datum, Ort und Beschreibung sind Pflichtfelder');
-    return;
-  }
-  try {
-    const r = await fetch('/admin/api/add-incident', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(data)
-    });
-    const d = await r.json();
-    log(d.message);
-    toast(d.message);
-    if (d.ok) {
-      ['f-date','f-location','f-source','f-url','f-desc'].forEach(id => {
-        document.getElementById(id).value='';
-      });
-      refreshStatus();
-    }
-  } catch(e) { log('Fehler: ' + e.message); }
+  if(!data.date||!data.location||!data.description){toast('Datum, Ort und Beschreibung sind Pflichtfelder');return;}
+  try{
+    const d=await fetch('/admin/api/add-incident',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).then(r=>r.json());
+    log(d.message);toast(d.message);
+    if(d.ok){['f-date','f-location','f-source','f-url','f-desc'].forEach(id=>$(id).value='');refreshStatus();}
+  }catch(e){log('Fehler: '+e.message);}
 }
 
-async function startHistorical(reset) {
-  const btn = document.getElementById('btn-hist');
-  btn.disabled = true;
-  btn.textContent = reset ? 'Reset + Start...' : 'Wird gestartet...';
-  log(reset ? 'Historischen Crawl zurücksetzen und starten...' : 'Historischen Crawl fortsetzen...');
-  try {
-    const r = await fetch(`/admin/api/crawl-historical?reset=${reset}`, {method:'POST'});
-    const d = await r.json();
-    log(d.status);
-    setTimeout(refreshHistStatus, 2000);
-  } catch(e) { log('Fehler: ' + e.message); }
-  finally { btn.disabled=false; btn.textContent='Historischen Crawl fortsetzen'; }
+async function startHist(reset){
+  $('btn-hist').disabled=true;
+  log(reset?'Historischen Crawl zurücksetzen und starten…':'Historischen Crawl fortsetzen…');
+  try{
+    const d=await fetch(`/admin/api/crawl-historical?reset=${reset}`,{method:'POST'}).then(r=>r.json());
+    log(d.status);setTimeout(refreshHistStatus,2000);
+  }catch(e){log('Fehler: '+e.message);}
+  finally{$('btn-hist').disabled=false;}
 }
 
-async function refreshHistStatus() {
-  try {
-    const s = await fetch('/admin/api/hist-status').then(r=>r.json());
-    const b = s.barrikade;
-    const im = s.indymedia;
-    document.getElementById('h-b-pct').textContent = b.done ? '✓ Fertig' : (b.pct > 0 ? b.pct+'%' : 'Bereit');
-    document.getElementById('h-im').textContent    = im.done ? '✓ Fertig' : (im.offset > 0 ? 'Off '+im.offset : 'Bereit');
-    document.getElementById('h-wb').textContent    = s.wayback.done ? '✓ Fertig' : 'Bereit';
-    if (s.running) {
-      log('Historischer Crawl aktiv: Barrikade ID ' + b.current + ' (' + b.pct + '%)');
-    }
-  } catch(e) { console.error(e); }
+async function refreshHistStatus(){
+  try{
+    const s=await fetch('/admin/api/status').then(r=>r.json());
+    const h=s.hist||{};
+    const bpct=h.barrikade_pct||0;
+    $('h-b-pct').textContent=h.barrikade_done?'✓ FERTIG':(bpct>0?Math.round(bpct)+'%':'BEREIT');
+    $('h-b-fill').style.width=bpct+'%';
+    const ioff=h.indymedia_off||0;
+    $('h-im').textContent=h.indymedia_done?'✓ FERTIG':(ioff>0?'OFF '+ioff:'BEREIT');
+    $('h-im-fill').style.width=h.indymedia_done?'100%':(ioff>0?Math.min(ioff/200,100)+'%':'0%');
+    const hb=$('h-badge');
+    if(s.hist_running){hb.className='badge badge-warn';hb.textContent='AKTIV';}
+    else{hb.className='badge badge-ok';hb.textContent='BEREIT';}
+  }catch(e){console.error(e);}
 }
 
-// Pre-fill date with today
-document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
+// Pre-fill date
+$('f-date').value=new Date().toISOString().split('T')[0];
 refreshStatus();
 refreshHistStatus();
 </script>
