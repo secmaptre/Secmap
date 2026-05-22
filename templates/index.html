@@ -12,43 +12,40 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+/* ════════════════════════════════════════════════════════════════
+   DESIGN TOKENS — sober, analytical, restrained.
+   Reference points: financial terminals, government briefings,
+   serious investigative journalism. NOT cyberpunk, NOT hacker movie.
+   ════════════════════════════════════════════════════════════════ */
 :root{
-  --bg:#060c14;--panel:rgba(5,11,22,0.95);
-  --pb:rgba(0,180,255,0.15);--pb2:rgba(0,200,255,0.32);
-  --accent:#00c8ff;--ag:rgba(0,200,255,0.16);
-  --amber:#f0a500;--amg:rgba(240,165,0,0.16);
-  --red:#ff3355;--rdg:rgba(255,51,85,0.14);
-  --green:#00e87a;
-  --t0:#e8f4ff;--t1:#a0bcd4;--t2:#5a7a92;--t3:#2a4055;
-  --mono:'JetBrains Mono',monospace;--sans:'Inter',sans-serif;
+  /* surfaces */
+  --bg:#0b1117;                  /* near-black, very slightly desaturated */
+  --bg2:#10171f;                 /* card/secondary surface */
+  --panel:rgba(11,17,23,0.96);
+  --pb:rgba(255,255,255,0.07);   /* hairline borders, neutral not blue */
+  --pb2:rgba(255,255,255,0.12);
+  --pbs:rgba(255,255,255,0.18);  /* stronger border on hover/focus */
+  /* one restrained accent — steel-blue, not neon */
+  --accent:#6aa9c9;
+  --accent2:#4a8cae;
+  --ag:rgba(106,169,201,0.10);
+  /* signal colours, slightly desaturated vs. the old neon set */
+  --amber:#d99a2b;--amg:rgba(217,154,43,0.12);
+  --red:#d4495d;  --rdg:rgba(212,73,93,0.12);
+  --green:#5fb583;
+  /* text scale — high-contrast on dark background */
+  --t0:#e8edf2;                  /* headings, key data */
+  --t1:#b6c1cc;                  /* body */
+  --t2:#7a8a99;                  /* meta */
+  --t3:#3d4a57;                  /* placeholders, dividers */
+  /* type */
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  --sans:'Inter',-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;
+  /* dimensions */
   --lw:288px;--rw:308px;--tbh:50px;--sbh:28px;--mobnavh:56px;
 }
 html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--t1);font-family:var(--sans);-webkit-font-smoothing:antialiased;}
-body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.022) 2px,rgba(0,0,0,0.022) 4px);pointer-events:none;z-index:1;}
-
-/* ── BOOT SCREEN ── */
-#boot{
-  position:fixed;inset:0;z-index:9000;background:var(--bg);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  transition:opacity .5s ease;
-}
-#boot.fade{opacity:0;pointer-events:none;}
-#boot-logo{
-  font-family:var(--mono);font-size:32px;font-weight:700;letter-spacing:10px;
-  color:var(--accent);text-shadow:0 0 40px rgba(0,200,255,.5);
-  margin-bottom:12px;opacity:0;animation:bfadein .6s .1s ease forwards;
-}
-#boot-sub{
-  font-family:var(--mono);font-size:9px;letter-spacing:3px;color:var(--t2);
-  margin-bottom:44px;opacity:0;animation:bfadein .6s .4s ease forwards;
-}
-#boot-status{
-  font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--t2);
-  margin-bottom:16px;height:14px;opacity:0;animation:bfadein .4s .7s ease forwards;
-}
-#boot-bar{width:280px;height:2px;background:rgba(0,200,255,0.1);border-radius:1px;overflow:hidden;opacity:0;animation:bfadein .4s .7s ease forwards;}
-#boot-prog{height:100%;width:0%;background:var(--accent);border-radius:1px;transition:width .12s linear;}
-@keyframes bfadein{to{opacity:1}}
+/* no scanline overlay — that was movie-prop styling, not professional */
 
 /* ── MAP ── */
 #map{position:fixed;inset:0;z-index:0;}
@@ -61,21 +58,20 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
   display:flex;align-items:center;padding:0 14px;gap:14px;
   backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
 }
-.brand{display:flex;align-items:center;gap:8px;flex-shrink:0;text-decoration:none;}
-.brand-icon{font-size:20px;color:var(--accent);}
-.brand-name{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:3px;color:var(--accent);}
-.brand-sub{font-family:var(--mono);font-size:7px;letter-spacing:1.5px;color:var(--t2);}
+.brand{display:flex;align-items:center;gap:10px;flex-shrink:0;text-decoration:none;}
+.brand-icon{font-size:18px;color:var(--accent);}
+.brand-name{font-family:var(--sans);font-size:14px;font-weight:600;letter-spacing:0.5px;color:var(--t0);}
+.brand-sub{font-family:var(--sans);font-size:9px;font-weight:400;letter-spacing:0.4px;color:var(--t2);text-transform:none;}
 .tb-div{width:1px;height:20px;background:var(--pb);flex-shrink:0;}
 .chip{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;color:var(--t2);white-space:nowrap;flex-shrink:0;}
 .chip b{color:var(--t0);font-weight:500;}
-.live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:lpulse 2.4s ease-in-out infinite;flex-shrink:0;}
-@keyframes lpulse{0%,100%{opacity:1;box-shadow:0 0 6px var(--green);}50%{opacity:.3;box-shadow:none;}}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;}
 .tb-sp{flex:1;}
-.cls-tag{font-family:var(--mono);font-size:8px;letter-spacing:2px;color:rgba(255,255,255,0.06);white-space:nowrap;}
+.tb-version{font-family:var(--mono);font-size:9px;color:var(--t3);white-space:nowrap;letter-spacing:0.3px;}
 .tb-acts{display:flex;gap:6px;align-items:center;}
-.gbtn{font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:1px;padding:5px 10px;border:1px solid var(--pb2);border-radius:2px;background:transparent;color:var(--accent);cursor:pointer;transition:background .15s;text-decoration:none;white-space:nowrap;-webkit-tap-highlight-color:transparent;}
-.gbtn:hover,.gbtn:active{background:var(--ag);}
-.gbtn.on{background:var(--ag);border-color:var(--accent);}
+.gbtn{font-family:var(--sans);font-size:10px;font-weight:500;letter-spacing:0.3px;padding:6px 11px;border:1px solid var(--pb2);border-radius:3px;background:transparent;color:var(--t1);cursor:pointer;transition:background .12s,border-color .12s,color .12s;text-decoration:none;white-space:nowrap;-webkit-tap-highlight-color:transparent;}
+.gbtn:hover,.gbtn:active{background:var(--ag);color:var(--t0);border-color:var(--pbs);}
+.gbtn.on{background:var(--ag);border-color:var(--accent);color:var(--accent);}
 
 /* ── PANELS ── */
 #left{
@@ -245,10 +241,7 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 #coord-lbl{font-family:var(--mono);font-size:8px;color:var(--t3);}
 #thr-lvl{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:1.5px;padding:2px 8px;border-radius:2px;flex-shrink:0;}
 
-/* Map corner labels */
-.mc{position:fixed;z-index:5;font-family:var(--mono);font-size:8px;pointer-events:none;letter-spacing:.5px;}
-#mc-tl{top:58px;left:calc(var(--lw) + 10px);color:rgba(0,200,255,0.15);}
-#mc-br{bottom:36px;right:calc(var(--rw) + 10px);text-align:right;color:rgba(0,200,255,0.1);}
+/* Map corner labels removed — they added decoration, not information. */
 
 /* ── COMMAND PALETTE ── */
 #cmdpal{
@@ -383,7 +376,7 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;bac
 /* ── MODULE SWITCHER (topbar) ── */
 .tb-mod{display:flex;gap:4px;margin-right:6px;flex-shrink:0;}
 .tb-mod .gbtn{font-size:9px;padding:6px 10px;letter-spacing:1.5px;}
-.tb-mod .gbtn.on{color:#fff;background:var(--ag);border-color:var(--accent);box-shadow:0 0 12px rgba(0,200,255,0.18);}
+.tb-mod .gbtn.on{color:var(--t0);background:var(--ag);border-color:var(--accent);}
 /* When the funding module is active, hide incident-specific UI chrome. */
 body.mod-funding #map,
 body.mod-funding #left,
@@ -456,6 +449,34 @@ body.mod-funding #mod-funding-view{display:grid !important;}
 .fnd-charts .chart-card{min-height:240px;}
 .fnd-charts .chart-card.wide{grid-column:1/-1;}
 .fnd-chip-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;}
+/* Methodology disclaimer banner — prominently above the funding table.
+   The funding domain is legally sensitive: every reader must immediately see
+   the inclusion criteria and the absence of a Vorverurteilung claim. */
+.fnd-disclaimer{
+  display:flex;align-items:flex-start;gap:14px;padding:13px 18px;
+  background:rgba(217,154,43,0.07);border-bottom:1px solid rgba(217,154,43,0.30);
+  font-family:var(--sans);font-size:11.5px;line-height:1.55;color:var(--t1);
+  flex-shrink:0;
+}
+.fnd-disclaimer .fdc-icon{
+  font-size:14px;color:var(--amber);flex-shrink:0;line-height:1.3;
+}
+.fnd-disclaimer .fdc-body{flex:1;}
+.fnd-disclaimer b{color:var(--t0);font-weight:600;}
+.fnd-disclaimer a.fdc-link{color:var(--accent);text-decoration:underline;cursor:pointer;}
+.fnd-disclaimer a.fdc-link:hover{color:var(--t0);}
+/* Expandable detail row — shows the Verbindungsnachweis (notes) when a row is clicked.
+   This is the legally critical field: explains WHY the recipient is in this DB. */
+.fnd-table tbody tr.fnd-row{cursor:pointer;}
+.fnd-table tbody tr.fnd-row.open td{background:rgba(106,169,201,0.06);border-bottom-color:transparent;}
+.fnd-detail{background:rgba(11,17,23,0.85);}
+.fnd-detail td{padding:12px 16px !important;border-bottom:1px solid var(--pb) !important;}
+.fnd-detail-grid{display:grid;grid-template-columns:120px 1fr;gap:8px 14px;font-size:11.5px;line-height:1.55;}
+.fnd-detail-grid dt{color:var(--t2);font-family:var(--mono);font-size:9px;letter-spacing:1px;
+  text-transform:uppercase;padding-top:3px;}
+.fnd-detail-grid dd{color:var(--t0);}
+.fnd-detail-grid dd.note{color:var(--t1);}
+.fnd-detail-grid dd a{color:var(--accent);}
 .fnd-chip{font-family:var(--mono);font-size:9px;letter-spacing:1px;padding:5px 8px;border:1px solid var(--pb);
   border-radius:2px;background:transparent;color:var(--t1);cursor:pointer;transition:all .12s;}
 .fnd-chip.on,.fnd-chip:hover{border-color:var(--accent);color:var(--accent);background:var(--ag);}
@@ -468,8 +489,10 @@ body.mod-funding #mod-funding-view{display:grid !important;}
 }
 
 /* ── SUPPORT MODAL ── */
-#support-modal{display:none;position:fixed;inset:0;z-index:900;background:rgba(4,8,18,0.92);backdrop-filter:blur(12px);}
-#support-modal.open{display:flex;align-items:center;justify-content:center;padding:20px;}
+#support-modal,#methodology-modal{display:none;position:fixed;inset:0;z-index:900;background:rgba(4,8,18,0.92);backdrop-filter:blur(12px);}
+#support-modal.open,#methodology-modal.open{display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto;}
+#methodology-modal .sup-card{max-height:90vh;overflow-y:auto;}
+#methodology-modal .sup-hd-t{font-family:var(--sans);font-weight:600;letter-spacing:0.3px;text-transform:none;color:var(--t0);font-size:14px;}
 .sup-card{max-width:520px;width:100%;background:rgba(5,11,22,0.98);border:1px solid var(--pb2);padding:28px 30px;
   box-shadow:0 0 50px rgba(0,200,255,0.12);font-family:var(--sans);}
 .sup-hd{display:flex;align-items:center;gap:10px;margin-bottom:18px;}
@@ -527,10 +550,7 @@ body.mod-funding #mod-funding-view{display:grid !important;}
   .brand-sub{display:none;}
   .gbtn.hide-mob{display:none;}
   #map{top:var(--tbh);}
-  #boot-logo{font-size:20px;letter-spacing:5px;}
-  #boot-sub{font-size:7px;letter-spacing:2px;}
-  #boot-lines{width:280px;}
-  #boot-bar{width:280px;}
+  /* boot-screen mobile rules removed — no boot screen any more */
   .cmd-box{max-width:100vw;margin:0 8px;}
 }
 @media (max-width: 480px) {
@@ -541,17 +561,7 @@ body.mod-funding #mod-funding-view{display:grid !important;}
 </head>
 <body>
 
-<!-- BOOT SCREEN -->
-<div id="boot">
-  <div id="boot-logo">◈ &nbsp;LEX EUROPE</div>
-  <div id="boot-sub">GEWALTBEREITER LINKSEXTREMISMUS // OSINT INTELLIGENCE</div>
-  <div id="boot-status">INITIALISIERUNG...</div>
-  <div id="boot-bar"><div id="boot-prog"></div></div>
-</div>
-
 <div id="map"></div>
-<div class="mc" id="mc-tl">PROJ: WGS84 · EPSG:3857</div>
-<div class="mc" id="mc-br">TILES: CARTO DARK MATTER</div>
 
 <!-- TOPBAR -->
 <header id="topbar">
@@ -559,7 +569,7 @@ body.mod-funding #mod-funding-view{display:grid !important;}
     <span class="brand-icon">◈</span>
     <div>
       <div class="brand-name">LEX EUROPE</div>
-      <div class="brand-sub">GEWALTBEREITER LINKSEXTREMISMUS</div>
+      <div class="brand-sub">Politische Gewalt &amp; Förderfluss — OSINT-Recherche</div>
     </div>
   </a>
   <!-- MODULE SWITCHER: Incidents (map) ↔ Funding (tracker) -->
@@ -573,7 +583,7 @@ body.mod-funding #mod-funding-view{display:grid !important;}
   <div class="chip hide-mob hide-sm">GEO <b id="tg">—</b></div>
   <div class="chip hide-mob">SYNC <b id="ts">—</b></div>
   <div class="tb-sp"></div>
-  <span class="cls-tag">OSINT // RESTRICTED // LEX-EU</span>
+  <span class="tb-version hide-mob">v2025.5 — Open Research</span>
   <div class="tb-acts">
     <button class="gbtn hide-mob mod-inc-only" onclick="cmdOpen()" title="Befehlspalette (Ctrl+K)">⌘ SEARCH</button>
     <button class="gbtn hide-mob mod-inc-only" id="btn-layer" onclick="toggleLayer()" title="Kartenebene">⬡ LAYER</button>
@@ -863,6 +873,26 @@ body.mod-funding #mod-funding-view{display:grid !important;}
 
   <!-- MAIN: header + table + charts -->
   <div class="fnd-main">
+
+    <!-- LEGAL DISCLAIMER — must appear above any funding data -->
+    <div class="fnd-disclaimer" role="note">
+      <span class="fdc-icon">⚠</span>
+      <div class="fdc-body">
+        <b>Methodik &amp; Haftungsausschluss.</b>
+        Aufgenommen werden ausschließlich Organisationen, die in offiziellen
+        Verfassungsschutzberichten (BfV, LfV, DSN, NDB) namentlich genannt
+        sind oder gegen deren Strukturen laufende Ermittlungsverfahren nach
+        §§ 129 / 129a StGB bzw. analogen Normen geführt werden.
+        Jeder Eintrag verlinkt die Primärquelle und nennt die
+        Verbindungsbegründung (Zeile aufklappen). Beträge sind, soweit nicht
+        anders gekennzeichnet, Originaldokumenten entnommen oder konservative
+        Schätzungen aus parlamentarischen Drucksachen.
+        <b>Keine Vorverurteilung</b> — die Aufnahme stellt keine Aussage über
+        individuelle strafrechtliche Verantwortung dar.
+        <a class="fdc-link" onclick="openMethodology()">→ Vollständige Methodik</a>
+      </div>
+    </div>
+
     <div class="fnd-mhdr">
       <div class="fnd-stat"><b id="fnd-h-records">—</b>EINTRÄGE</div>
       <div class="fnd-stat green"><b id="fnd-h-total">—</b>SUMME</div>
@@ -961,6 +991,84 @@ body.mod-funding #mod-funding-view{display:grid !important;}
   </div>
 </div>
 
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- METHODOLOGY MODAL — explains the funding-tracker inclusion rules.    -->
+<!-- This MUST be reachable from the funding view at all times.           -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div id="methodology-modal" onclick="closeMethodology()">
+  <div class="sup-card" onclick="event.stopPropagation()" style="max-width:680px">
+    <div class="sup-hd">
+      <span style="font-size:18px;color:var(--accent)">⌕</span>
+      <span class="sup-hd-t">Methodik · Förderfluss-Datenbank</span>
+      <button class="sup-close" onclick="closeMethodology()">✕</button>
+    </div>
+
+    <div class="sup-intro" style="margin-bottom:14px">
+      Diese Datenbank dokumentiert öffentlich nachweisbare Geldflüsse an Organisationen,
+      die im Sinne des deutschen, österreichischen oder schweizerischen Verfassungsschutzes
+      dem gewaltbereiten linksextremen Spektrum zugerechnet werden oder Gegenstand
+      laufender Ermittlungsverfahren wegen militanter Aktionen sind. Sie ist
+      <b>kein Strafvorwurf gegen Einzelpersonen</b> und keine Vorverurteilung.
+    </div>
+
+    <div class="sup-block">
+      <div class="sup-block-lbl">Aufnahmekriterien</div>
+      <div style="font-size:12px;line-height:1.65;color:var(--t1)">
+        Ein Empfänger wird nur dann aufgenommen, wenn <b>mindestens eines</b> der folgenden
+        Kriterien erfüllt und mit Primärquelle belegt ist:
+        <ol style="margin:10px 0 0 20px;padding:0">
+          <li>Namentliche Nennung in einem aktuellen Verfassungsschutzbericht
+              (BfV, LfV der Länder, DSN Österreich, NDB Schweiz) als linksextremistisch
+              oder linksextremistisch beeinflusst.</li>
+          <li>Laufendes Ermittlungsverfahren nach §§ 129 / 129a StGB
+              (Deutschland), § 246a öStGB (Österreich) oder Art. 260ter StGB (Schweiz)
+              gegen führende Mitglieder oder die Struktur als solche.</li>
+          <li>Dokumentierte, dauerhafte juristische oder finanzielle Infrastruktur
+              für Personen, die wegen militanter linker Straftaten verurteilt
+              wurden oder angeklagt sind.</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="sup-block">
+      <div class="sup-block-lbl">Was NICHT aufgenommen wird</div>
+      <div style="font-size:12px;line-height:1.65;color:var(--t1)">
+        Allgemeine zivilgesellschaftliche Organisationen — auch wenn sie politisch
+        links zu verorten sind — gehören <b>nicht</b> in diese Datenbank: Antirassismus-NGOs
+        ohne militanten Bezug, allgemeine Integrationsförderung, Stipendienwerke
+        parteinaher Stiftungen, Holocaust-Gedenkstätten, Flüchtlings-Rechtsberatung,
+        EU-Civic-Programme. Diese sind legitime Förderempfänger und werden hier
+        bewusst nicht aufgeführt.
+      </div>
+    </div>
+
+    <div class="sup-block">
+      <div class="sup-block-lbl">Konfidenz-Skala</div>
+      <div style="font-size:12px;line-height:1.7;color:var(--t1);font-family:var(--mono)">
+        <span style="color:var(--amber)">●●●●●</span> &nbsp;5 — Primärquelle Behörde, Gericht, Bundesanzeiger<br>
+        <span style="color:var(--amber)">●●●●</span><span style="color:var(--t3)">●</span> &nbsp;4 — Stiftungs-/NGO-Transparenzbericht mit Originaldokument<br>
+        <span style="color:var(--amber)">●●●</span><span style="color:var(--t3)">●●</span> &nbsp;3 — Belastbare journalistische Recherche mit Quellenkette<br>
+        <span style="color:var(--amber)">●●</span><span style="color:var(--t3)">●●●</span> &nbsp;2 — Schätzung aus mehreren Sekundärquellen<br>
+        <span style="color:var(--amber)">●</span><span style="color:var(--t3)">●●●●</span> &nbsp;1 — Hinweis, nur eine Quelle (im Seed nicht verwendet)
+      </div>
+    </div>
+
+    <div class="sup-block">
+      <div class="sup-block-lbl">Korrekturen &amp; Gegendarstellungen</div>
+      <div style="font-size:12px;line-height:1.65;color:var(--t1)">
+        Betroffene Organisationen können belegte Korrekturen und Gegendarstellungen
+        einreichen. Berechtigte Korrekturen werden zeitnah eingearbeitet, Einträge
+        ohne haltbare Quellengrundlage werden entfernt. Kontakt über die
+        Repository-Issues auf GitHub.
+      </div>
+    </div>
+
+    <div class="sup-disclaimer" style="margin-top:14px">
+      Datengrundlage öffentlich · Quellenlinks pro Eintrag · Kein automatisches Scraping individueller Daten
+    </div>
+  </div>
+</div>
+
 <!-- STATUS BAR -->
 <footer id="statusbar">
   <div class="si"><span class="sk">QUELLEN</span><span class="sv" id="s-src">—</span></div>
@@ -1055,22 +1163,9 @@ let fndShown=50, fndDebounceTimer=null, fndLoaded=false;
 const SEV_COL={1:'#3a5570',2:'#5a7a92',3:'#f0a500',4:'#ff6644',5:'#ff3355'};
 const SEV_BG={1:'rgba(58,85,112,0.18)',2:'rgba(90,122,146,0.18)',3:'rgba(240,165,0,0.18)',4:'rgba(255,102,68,0.18)',5:'rgba(255,51,85,0.18)'};
 
-// ── BOOT SCREEN ────────────────────────────────────────────────────
+// Boot screen entfernt — Daten werden direkt geladen, kein theatralisches Intro.
 function runBoot(){
-  const prog=document.getElementById('boot-prog');
-  const status=document.getElementById('boot-status');
-  let p=0;
-  const iv=setInterval(()=>{
-    p+=5;prog.style.width=Math.min(p,94)+'%';
-    if(p>=94){clearInterval(iv);prog.style.width='100%';
-      status.textContent='BEREIT.';
-      setTimeout(()=>{
-        document.getElementById('boot').classList.add('fade');
-        setTimeout(()=>document.getElementById('boot').style.display='none',520);
-        loadData();loadTrends();loadTimeline();
-      },300);
-    }
-  },50);
+  loadData(); loadTrends(); loadTimeline();
 }
 
 // ── TEXT CLEANER ───────────────────────────────────────────────────
@@ -2113,10 +2208,17 @@ function renderFundingTable(){
     return;
   }
   const slice=fndVis.slice(0, fndShown);
+  // Each visible record renders as TWO <tr> rows: the summary row and a
+  // hidden detail row that exposes the Verbindungsnachweis (notes field).
+  // The detail row is the legally critical disclosure — readers must be
+  // able to see WHY a recipient is in the database with one click.
   tbody.innerHTML = slice.map(r=>{
-    const src = r.source_url ? `<a class="fnd-srclink" href="${escapeHtml(r.source_url)}" target="_blank" rel="noopener">↗</a>` : '<span style="color:var(--t3)">—</span>';
+    const src = r.source_url
+      ? `<a class="fnd-srclink" href="${escapeHtml(r.source_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">↗ Quelle</a>`
+      : '<span style="color:var(--t3)">—</span>';
     const proj = r.project ? `<span class="fnd-proj">${escapeHtml(r.project)}</span>` : '';
-    return `<tr>
+    const notes = (r.notes||'').trim() || '<em style="color:var(--t3)">— Keine Begründung erfasst —</em>';
+    return `<tr class="fnd-row" data-rid="${r.id}" onclick="fndToggleDetail(${r.id})">
       <td class="fnd-yr">${escapeHtml(String(r.year||'—'))}</td>
       <td><div class="fnd-org">${escapeHtml(r.recipient_org)}</div>${proj}</td>
       <td>${escapeHtml(r.donor_name)}</td>
@@ -2125,9 +2227,54 @@ function renderFundingTable(){
       <td><span style="font-family:var(--mono);font-size:10px">${escapeHtml(r.country||'—')}</span></td>
       <td>${fndConfDots(r.confidence)}</td>
       <td style="text-align:center">${src}</td>
+    </tr>
+    <tr class="fnd-detail" id="fnd-det-${r.id}" style="display:none">
+      <td colspan="8">
+        <dl class="fnd-detail-grid">
+          <dt>Verbindung</dt>
+          <dd class="note">${escapeHtml(notes)}</dd>
+          <dt>Primärquelle</dt>
+          <dd>${r.source_url ? `<a href="${escapeHtml(r.source_url)}" target="_blank" rel="noopener">${escapeHtml(r.source_url)}</a>` : '<em style="color:var(--t3)">—</em>'}</dd>
+          <dt>Konfidenz</dt>
+          <dd>${fndConfDots(r.confidence)} <span style="color:var(--t2);font-size:10px;margin-left:6px">${fndConfLabel(r.confidence)}</span></dd>
+        </dl>
+      </td>
     </tr>`;
   }).join('');
   document.getElementById('fnd-loadmore').style.display = fndVis.length>fndShown ? '' : 'none';
+}
+
+// Toggle the expandable detail row for a funding record.
+function fndToggleDetail(rid){
+  const det = document.getElementById('fnd-det-'+rid);
+  if(!det) return;
+  const isOpen = det.style.display !== 'none';
+  // Close all others — keep at most one detail open for clarity.
+  document.querySelectorAll('.fnd-detail').forEach(el=>el.style.display='none');
+  document.querySelectorAll('.fnd-row.open').forEach(el=>el.classList.remove('open'));
+  if(!isOpen){
+    det.style.display='';
+    const row = document.querySelector(`tr.fnd-row[data-rid="${rid}"]`);
+    if(row) row.classList.add('open');
+  }
+}
+
+function fndConfLabel(c){
+  return ({5:'Primärquelle Behörde / Gericht',
+           4:'Stiftungs- / Transparenzbericht',
+           3:'Journalistische Recherche, belastbar',
+           2:'Schätzung aus mehreren Sekundärquellen',
+           1:'Hinweis, eine Quelle'})[c] || '—';
+}
+
+// Methodology modal — reusing the support-modal pattern.
+function openMethodology(){
+  const m = document.getElementById('methodology-modal');
+  if(m) m.classList.add('open');
+}
+function closeMethodology(){
+  const m = document.getElementById('methodology-modal');
+  if(m) m.classList.remove('open');
 }
 
 function fndLoadMore(){ fndShown+=50; renderFundingTable(); }
