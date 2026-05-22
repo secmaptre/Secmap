@@ -1505,9 +1505,10 @@ function renderActors(data,el){
   const max=Math.max(...data.map(a=>a.count),1);
   el.innerHTML=data.map(a=>{
     const w=Math.round(a.count/max*100);
-    return `<div class="actor-entry" onclick="filterActor('${a.actor.replace(/'/g,"\\'")}')">
+    const nm=a.name||a.actor||'?';
+    return `<div class="actor-entry" onclick="filterActor('${nm.replace(/'/g,"\\'")}')">
       <div class="actor-hd">
-        <span class="actor-name">${a.actor}</span>
+        <span class="actor-name">${nm}</span>
         <span class="actor-cnt">${a.count}</span>
       </div>
       <div class="actor-bar"><div class="actor-bar-fill" style="width:${w}%"></div></div>
