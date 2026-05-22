@@ -54,7 +54,10 @@ def get_db():
     c.execute('''CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, expires TEXT)''')
     # Schema migrations — add columns that may be missing in older DBs
     for col, defn in [("hash","TEXT"), ("lat","REAL"), ("lon","REAL"),
-                      ("manual","INTEGER DEFAULT 0"), ("timestamp","TEXT")]:
+                      ("manual","INTEGER DEFAULT 0"), ("timestamp","TEXT"),
+                      ("severity_score","INTEGER DEFAULT 0"),
+                      ("actors","TEXT DEFAULT ''"),
+                      ("confidence","INTEGER DEFAULT 0")]:
         try:
             c.execute(f"ALTER TABLE incidents ADD COLUMN {col} {defn}")
         except Exception:
@@ -236,6 +239,68 @@ CATEGORIES = [
     "Militante Aktion","Sachbeschädigung","Demo/Kundgebung","Besetzung",
     "Repression","Verhaftung","Sonstiges"
 ]
+
+# ── SEVERITY SCORING ─────────────────────────────────────────────
+SEVERITY_MAP = {
+    "Brandanschlag": 5, "Gewalt": 5, "Militante Aktion": 5,
+    "Aufruf zu Gewalt": 4, "Sabotage": 4,
+    "Sachbeschädigung": 3, "Besetzung": 3, "Demo/Kundgebung": 2,
+    "Verhaftung": 2, "Repression": 2,
+    "Schmiererei": 1, "Sonstiges": 1,
+}
+
+def score_severity(category, text=""):
+    base = SEVERITY_MAP.get(category, 1)
+    t = (text or "").lower()
+    if re.search(r"\bschwer\s+verletzt|\btot\b|\bgetötet\b|\bexplosion\b", t):
+        base = min(base + 1, 5)
+    return base
+
+# ── ACTOR / GROUP TRACKING ────────────────────────────────────────
+KNOWN_ACTORS = [
+    ("Rote Flora",         [r"rote\s+flora"]),
+    ("Rigaer 94",          [r"rigaer\s*(?:94|straße|str\.)", r"liebig\s*34"]),
+    ("Ende Gelände",       [r"ende\s+gel[äa]nde"]),
+    ("Schwarzer Block",    [r"schwarzer\s+block", r"black\s+bloc"]),
+    ("Rev. Zellen",        [r"revolutionäre\s+zellen", r"\brz\b"]),
+    ("Letzte Generation",  [r"letzte\s+generation"]),
+    ("Lina E. Netzwerk",   [r"\blina\s+e[\.\b]", r"hammerbande"]),
+    ("Rote Hilfe",         [r"rote\s+hilfe"]),
+    ("Antifa Leipzig",     [r"antifa\s+leipzig", r"connewitz"]),
+    ("Autonome Gruppe",    [r"eine?\s+autonome\s+gruppe", r"autonome\s+zelle"]),
+    ("Junge Welt Umfeld",  [r"junge\s+welt\s+gruppe"]),
+    ("Interventionist Left",[r"interventionistische\s+linke", r"\bil\b.*linke"]),
+]
+
+def extract_actors(text):
+    found = []
+    t = (text or "").lower()
+    for name, patterns in KNOWN_ACTORS:
+        if any(re.search(p, t) for p in patterns):
+            found.append(name)
+    return ",".join(found)
+
+# ── SOURCE CONFIDENCE SCORING ─────────────────────────────────────
+SOURCE_CONFIDENCE = {
+    "verfassungsschutz.de": 5,
+    "tagesschau.de": 4, "zdf.de": 4, "deutschlandfunk.de": 4,
+    "spiegel.de": 4, "zeit.de": 4, "sueddeutsche.de": 4, "faz.net": 4,
+    "srf.ch": 4, "orf.at": 4, "derstandard.at": 4, "nzz.ch": 4,
+    "tagesanzeiger.ch": 4,
+    "tagesspiegel.de": 3, "mdr.de": 3, "rbb24.de": 3, "taz.de": 3,
+    "blick.ch": 3, "20min.ch": 3, "belltower.news": 3, "br.de": 3,
+    "barrikade.info": 2, "de.indymedia.org": 2, "nd-aktuell.de": 2,
+    "jungle.world": 2, "gnews": 2, "labournet.de": 2,
+    "perspektive-online.net": 1, "radikal.news": 1, "klassegegenklasse.org": 1,
+    "Archiv": 3, "Manuell": 2,
+}
+
+def score_confidence(source):
+    src = source or ""
+    for k, v in SOURCE_CONFIDENCE.items():
+        if k in src:
+            return v
+    return 2
 
 # ── KEYWORD CLASSIFICATION (AI-free) ─────────────────────────────
 KEYWORD_MAP = [
@@ -552,21 +617,47 @@ def save_incident(ai, text, source, url, date_str=None, manual=False):
     if is_seen(h): return False
     lat, lon = geocode(ai.get("ort",""), ai.get("land",""))
     d = date_str or datetime.now().strftime("%Y-%m-%d")
+    cat = ai.get("kategorie","Sonstiges")
+    sev = score_severity(cat, text)
+    act = extract_actors(text)
+    conf = score_confidence(source)
     try:
         db.execute(
             """INSERT OR IGNORE INTO incidents
-               (date,location,country,category,description,source,url,hash,lat,lon,manual,timestamp)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'))""",
+               (date,location,country,category,description,source,url,hash,lat,lon,
+                manual,timestamp,severity_score,actors,confidence)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'),?,?,?)""",
             (d, ai.get("ort","Unbekannt"), ai.get("land","Unbekannt"),
-             ai.get("kategorie","Sonstiges"), text[:700],
-             source, url or "", h, lat, lon, 1 if manual else 0)
+             cat, text[:700], source, url or "", h, lat, lon,
+             1 if manual else 0, sev, act, conf)
         )
         db.commit()
-        log.info(f"SAVED: {ai.get('kategorie')} / {ai.get('ort')} / {source}")
+        log.info(f"SAVED [sev={sev}/conf={conf}]: {cat} / {ai.get('ort')} / {source}")
         return True
     except Exception as e:
         log.warning(f"save_incident: {e}")
         return False
+
+def backfill_enrichment():
+    """Backfill severity, actors, confidence for existing records that have 0 values."""
+    rows = db.execute(
+        "SELECT id, category, description, source FROM incidents WHERE severity_score=0 OR confidence=0"
+    ).fetchall()
+    if not rows:
+        return
+    updated = 0
+    for row in rows:
+        sev  = score_severity(row["category"], row["description"] or "")
+        act  = extract_actors(row["description"] or "")
+        conf = score_confidence(row["source"] or "")
+        db.execute(
+            "UPDATE incidents SET severity_score=?, actors=?, confidence=? WHERE id=?",
+            (sev, act, conf, row["id"])
+        )
+        updated += 1
+    if updated:
+        db.commit()
+        log.info(f"Backfill: enriched {updated} incidents")
 
 def seed_historical_data():
     """Insert pre-defined historical incidents if not already seeded."""
@@ -747,59 +838,38 @@ def _coords_in_country(country, lat, lon):
     return b[0] <= lat <= b[2] and b[1] <= lon <= b[3]
 
 RSS_FEEDS = [
-    # ── Sicherheit / Verfassungsschutz ─────────────────────────────
+    # ── Sicherheitsbehörden ────────────────────────────────────────
     ("verfassungsschutz.de",  "https://www.verfassungsschutz.de/SiteGlobals/Functions/RSSNewsFeed/AlleMeldungen.xml"),
-    # ── DACH Nachrichtenagenturen / öffentlich-rechtlich ───────────
+    # ── Kernquellen Deutschland (öffentlich-rechtlich + Leitmedien) ─
     ("tagesschau.de",         "https://www.tagesschau.de/xml/rss2/"),
-    ("zdf.de",                "https://www.zdf.de/rss/zdf/nachrichten"),
     ("deutschlandfunk.de",    "https://www.deutschlandfunk.de/nachrichten.rss"),
-    ("deutschlandfunk.de",    "https://www.deutschlandfunk.de/inland.rss"),
-    ("br.de",                 "https://www.br.de/nachrichten/rss-alle-nachrichten100.xml"),
-    ("mdr.de",                "https://www.mdr.de/nachrichten/rss-nachrichten100.xml"),
-    ("ndr.de",                "https://www.ndr.de/nachrichten/index-rss.xml"),
-    ("rbb24.de",              "https://www.rbb24.de/index/rss.xml/index.xml"),
-    ("srf.ch",                "https://www.srf.ch/news/bnf/rss/1646"),
-    ("orf.at",                "https://rss.orf.at/news.xml"),
-    # ── Deutsche Tageszeitungen ─────────────────────────────────────
     ("spiegel.de",            "https://www.spiegel.de/schlagzeilen/index.rss"),
     ("zeit.de",               "https://newsfeed.zeit.de/politik/index"),
     ("sueddeutsche.de",       "https://rss.sueddeutsche.de/rss/Politik"),
     ("faz.net",               "https://www.faz.net/rss/aktuell/"),
     ("tagesspiegel.de",       "https://www.tagesspiegel.de/contentexport/feed/home"),
     ("taz.de",                "https://taz.de/!p4608;rss/"),
-    ("welt.de",               "https://www.welt.de/feeds/latest.rss"),
-    ("focus.de",              "https://rss.focus.de/fol/XML/rss_folnews.xml"),
-    ("n-tv.de",               "https://www.n-tv.de/rss"),
-    ("stern.de",              "https://www.stern.de/feed/"),
-    # ── Regionale DE ───────────────────────────────────────────────
-    ("l-iz.de",               "https://www.l-iz.de/feed"),        # Leipzig — lokal relevant
-    ("nd-aktuell.de",         "https://www.nd-aktuell.de/static/rss/rss.xml"),
-    # ── Spezial: Extremismusbeobachtung ────────────────────────────
-    ("barrikade.info",        "https://barrikade.info/feed"),
-    ("belltower.news",        "https://www.belltower.news/feed/"),
-    ("labournet.de",          "https://www.labournet.de/feed/"),
-    # ── Schweiz (Deutschschweiz) ────────────────────────────────────
+    ("mdr.de",                "https://www.mdr.de/nachrichten/rss-nachrichten100.xml"),
+    ("rbb24.de",              "https://www.rbb24.de/index/rss.xml/index.xml"),
+    ("ndr.de",                "https://www.ndr.de/nachrichten/index-rss.xml"),
+    # ── Schweiz (Kernquellen) ─────────────────────────────────────
     ("nzz.ch",                "https://www.nzz.ch/recent.rss"),
     ("tagesanzeiger.ch",      "https://www.tagesanzeiger.ch/rss.xml"),
-    ("watson.ch",             "https://www.watson.ch/rss"),
+    ("srf.ch",                "https://www.srf.ch/news/bnf/rss/1646"),
     ("20min.ch",              "https://api.20min.ch/rss/view/1"),
     ("blick.ch",              "https://www.blick.ch/news/rss.xml"),
     ("woz.ch",                "https://www.woz.ch/rss.xml"),
-    ("luzerner-zeitung.ch",   "https://www.luzernerzeitung.ch/rss"),
-    ("berner-zeitung.ch",     "https://www.bernerzeitung.ch/rss"),
-    ("tagblatt.ch",           "https://www.tagblatt.ch/rss"),          # St. Galler Tagblatt
-    ("bazonline.ch",          "https://www.bazonline.ch/rss"),          # Basler Zeitung
-    ("zueritoday.ch",         "https://www.zueritoday.ch/rss"),
-    # ── Schweiz (Romandie / Westschweiz) ───────────────────────────
-    ("rts.ch",                "https://www.rts.ch/rss/info.xml"),       # Radio Télévision Suisse
-    ("tdg.ch",                "https://www.tdg.ch/rss"),                # Tribune de Genève
-    ("24heures.ch",           "https://www.24heures.ch/rss"),
-    # ── Österreich ─────────────────────────────────────────────────
+    ("rts.ch",                "https://www.rts.ch/rss/info.xml"),
+    # ── Österreich (Kernquellen) ──────────────────────────────────
+    ("orf.at",                "https://rss.orf.at/news.xml"),
     ("derstandard.at",        "https://www.derstandard.at/rss/inland"),
     ("diepresse.com",         "https://www.diepresse.com/rss/politik"),
     ("kurier.at",             "https://kurier.at/rss"),
-    ("krone.at",              "https://www.krone.at/feed/news"),
-    ("heute.at",              "https://www.heute.at/feed"),
+    # ── Einschlägige Quellen (szenenah + extremismusbeobachtend) ──
+    ("barrikade.info",        "https://barrikade.info/feed"),
+    ("belltower.news",        "https://www.belltower.news/feed/"),
+    ("radikal.news",          "https://radikal.news/feed/"),
+    ("nd-aktuell.de",         "https://www.nd-aktuell.de/static/rss/rss.xml"),
 ]
 
 GNEWS_Q = [
@@ -1017,8 +1087,8 @@ async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/api/incidents")
-async def get_incidents(country:str="", category:str="", date_from:str="", date_to:str="", search:str=""):
-    q = "SELECT id,date,location,country,category,description,url,lat,lon,manual,source FROM incidents WHERE 1=1"
+async def get_incidents(country:str="", category:str="", date_from:str="", date_to:str="", search:str="", severity_min:int=0):
+    q = "SELECT id,date,location,country,category,description,url,lat,lon,manual,source,severity_score,actors,confidence FROM incidents WHERE 1=1"
     p = []
     if country:   q += " AND country=?";   p.append(country)
     if category:  q += " AND category=?";  p.append(category)
@@ -1027,6 +1097,9 @@ async def get_incidents(country:str="", category:str="", date_from:str="", date_
     if search:
         q += " AND (description LIKE ? OR location LIKE ? OR category LIKE ?)"
         p.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
+    if severity_min > 0:
+        q += " AND severity_score >= ?"
+        p.append(severity_min)
     q += " ORDER BY date DESC, timestamp DESC"
     return JSONResponse([dict(r) for r in db.execute(q, p).fetchall()])
 
@@ -1146,6 +1219,172 @@ async def get_trends():
         "week_curr": week_curr,
         "week_prev": week_prev,
     })
+
+@app.get("/api/actors")
+async def get_actors():
+    rows = db.execute(
+        "SELECT actors, COUNT(*) n, SUM(CASE WHEN severity_score>=4 THEN 1 ELSE 0 END) as hi, MAX(date) as last_seen "
+        "FROM incidents WHERE actors IS NOT NULL AND actors != '' "
+        "GROUP BY actors ORDER BY n DESC LIMIT 30"
+    ).fetchall()
+    actor_map: dict = {}
+    for row in rows:
+        for a in (row["actors"] or "").split(","):
+            a = a.strip()
+            if not a: continue
+            if a not in actor_map:
+                actor_map[a] = {"name": a, "count": 0, "high": 0, "last_seen": ""}
+            actor_map[a]["count"] += row["n"]
+            actor_map[a]["high"]  += row["hi"]
+            if (row["last_seen"] or "") > actor_map[a]["last_seen"]:
+                actor_map[a]["last_seen"] = row["last_seen"]
+    result = sorted(actor_map.values(), key=lambda x: x["count"], reverse=True)[:15]
+    return JSONResponse(result)
+
+@app.get("/api/export-json")
+async def export_json(country:str="", category:str="", date_from:str="", date_to:str="", search:str="", severity_min:int=0):
+    q = "SELECT id,date,location,country,category,description,url,lat,lon,source,severity_score,actors,confidence FROM incidents WHERE 1=1"
+    p = []
+    if country:   q += " AND country=?";   p.append(country)
+    if category:  q += " AND category=?";  p.append(category)
+    if date_from: q += " AND date>=?";     p.append(date_from)
+    if date_to:   q += " AND date<=?";     p.append(date_to)
+    if search:
+        q += " AND (description LIKE ? OR location LIKE ?)"; p.extend([f"%{search}%",f"%{search}%"])
+    if severity_min > 0:
+        q += " AND severity_score>=?"; p.append(severity_min)
+    q += " ORDER BY date DESC"
+    rows = [dict(r) for r in db.execute(q, p).fetchall()]
+    return StreamingResponse(
+        iter([json.dumps(rows, ensure_ascii=False, indent=2)]),
+        media_type="application/json",
+        headers={"Content-Disposition": f"attachment; filename=lex-europe-{datetime.now().strftime('%Y%m%d')}.json"}
+    )
+
+@app.get("/api/report")
+async def generate_report(days: int = 7):
+    since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    prev  = (datetime.now() - timedelta(days=days*2)).strftime("%Y-%m-%d")
+    rows  = [dict(r) for r in db.execute(
+        "SELECT date,location,country,category,description,url,source,severity_score,actors,confidence "
+        "FROM incidents WHERE date >= ? ORDER BY severity_score DESC, date DESC", (since,)
+    ).fetchall()]
+    prev_count = db.execute("SELECT COUNT(*) FROM incidents WHERE date>=? AND date<?", (prev,since)).fetchone()[0]
+    total = len(rows)
+    high  = sum(1 for r in rows if (r.get("severity_score") or 0) >= 4)
+    by_co  = {}; by_cat = {}; actor_counts = {}
+    for r in rows:
+        by_co[r["country"]]   = by_co.get(r["country"],0)+1
+        by_cat[r["category"]] = by_cat.get(r["category"],0)+1
+        for a in (r.get("actors") or "").split(","):
+            a=a.strip()
+            if a: actor_counts[a] = actor_counts.get(a,0)+1
+    chg = round((total-prev_count)/max(prev_count,1)*100)
+    chg_str = f"+{chg}%" if chg >= 0 else f"{chg}%"
+    top_country = sorted(by_co.items(), key=lambda x:x[1], reverse=True)[:5]
+    top_cat     = sorted(by_cat.items(), key=lambda x:x[1], reverse=True)[:5]
+    top_actors  = sorted(actor_counts.items(), key=lambda x:x[1], reverse=True)[:8]
+    top_incidents = rows[:10]
+    now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
+    report_html = f"""<!DOCTYPE html>
+<html lang="de">
+<head><meta charset="UTF-8">
+<title>LEX EUROPE — Intelligence Report {now_str}</title>
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:'Segoe UI',Arial,sans-serif;background:#f4f6f8;color:#1a2332;font-size:13px;}}
+.page{{max-width:900px;margin:0 auto;padding:32px 24px;}}
+.header{{background:linear-gradient(135deg,#0d1b2e 0%,#1a2f4e 100%);color:#fff;padding:28px 32px;margin-bottom:24px;}}
+.header h1{{font-size:22px;letter-spacing:3px;font-weight:700;margin-bottom:4px;}}
+.header .sub{{font-size:11px;letter-spacing:2px;opacity:.7;margin-bottom:16px;}}
+.header .meta{{display:flex;gap:32px;}}
+.header .meta div{{font-size:11px;opacity:.6;}}
+.header .meta b{{font-size:16px;display:block;opacity:1;color:#00c8ff;}}
+.section{{background:#fff;border:1px solid #dee2e8;padding:20px 24px;margin-bottom:16px;}}
+.section h2{{font-size:11px;font-weight:700;letter-spacing:2px;color:#5a7a92;border-bottom:2px solid #e8edf2;padding-bottom:8px;margin-bottom:14px;text-transform:uppercase;}}
+.exec{{background:#fff8e6;border-left:4px solid #f0a500;padding:16px 20px;font-size:13px;line-height:1.7;}}
+.stat-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}}
+.stat{{background:#f4f6f8;padding:14px;text-align:center;border:1px solid #dee2e8;}}
+.stat .val{{font-size:24px;font-weight:700;color:#0d1b2e;}}
+.stat .lbl{{font-size:10px;letter-spacing:1.5px;color:#5a7a92;margin-top:4px;}}
+.red{{color:#cc1133;}} .amber{{color:#cc7a00;}} .green{{color:#008844;}}
+table{{width:100%;border-collapse:collapse;font-size:11px;}}
+th{{background:#f4f6f8;padding:7px 10px;text-align:left;font-weight:700;letter-spacing:1px;color:#5a7a92;font-size:10px;border-bottom:2px solid #dee2e8;}}
+td{{padding:7px 10px;border-bottom:1px solid #eef0f3;vertical-align:top;}}
+tr:hover td{{background:#f8fafc;}}
+.sev{{display:inline-block;padding:2px 7px;border-radius:2px;font-size:10px;font-weight:700;}}
+.s5,.s4{{background:#ffebee;color:#cc1133;}} .s3{{background:#fff8e6;color:#cc7a00;}} .s2,.s1{{background:#e8f4ff;color:#1a6699;}}
+.bar-row{{display:flex;align-items:center;gap:8px;margin-bottom:6px;}}
+.bar-lbl{{min-width:120px;font-size:11px;}}
+.bar-track{{flex:1;height:8px;background:#eef0f3;border-radius:4px;overflow:hidden;}}
+.bar-fill{{height:100%;border-radius:4px;background:#0d6699;}}
+.footer{{text-align:center;font-size:10px;color:#999;margin-top:24px;padding-top:16px;border-top:1px solid #dee2e8;}}
+@media print{{body{{background:#fff;}}.page{{padding:0;}}}}
+</style>
+</head>
+<body>
+<div class="page">
+<div class="header">
+  <div class="sub">OSINT INTELLIGENCE // LEX EUROPE // RESTRICTED</div>
+  <h1>WÖCHENTLICHER LAGEBERICHT</h1>
+  <div class="meta">
+    <div><b>{total}</b>VORFÄLLE GESAMT</div>
+    <div><b class="red">{high}</b>HOCH RISIKOVORFÄLLE</div>
+    <div><b>{chg_str}</b>VS. VORPERIODE</div>
+    <div><b>{len(actor_counts)}</b>AKTEURE IDENTIFIZIERT</div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Executive Summary</h2>
+  <div class="exec">
+    Im Berichtszeitraum der letzten {days} Tage (seit {since}) wurden <strong>{total} Vorfälle</strong> gewalttätiger linksextremer Aktivitäten in Europa dokumentiert.
+    Davon wurden <strong>{high} Vorfälle</strong> als hoch-risikoreich eingestuft (Schweregrad 4-5).
+    Im Vergleich zur Vorperiode entspricht dies einer Veränderung von <strong>{chg_str}</strong>.
+    {"Die Lage ist eskalierend — verstärkte Überwachung empfohlen." if chg > 20 else "Die Lage ist stabil." if abs(chg) <= 20 else "Rückläufige Aktivität beobachtet."}
+    {"Schwerpunkte liegen in " + ", ".join(c for c,_ in top_country[:3]) + "." if top_country else ""}
+  </div>
+</div>
+
+<div class="section">
+  <h2>Schlüsselstatistiken</h2>
+  <div class="stat-grid">
+    <div class="stat"><div class="val">{total}</div><div class="lbl">VORFÄLLE GESAMT</div></div>
+    <div class="stat"><div class="val red">{high}</div><div class="lbl">HOCHRISIKO (≥4)</div></div>
+    <div class="stat"><div class="val {'green' if chg < 0 else 'red'}">{chg_str}</div><div class="lbl">VS. VORPERIODE</div></div>
+    <div class="stat"><div class="val">{len(actor_counts)}</div><div class="lbl">AKTEURE</div></div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Geografische Verteilung</h2>
+  {''.join(f'<div class="bar-row"><span class="bar-lbl">{c}</span><div class="bar-track"><div class="bar-fill" style="width:{round(n/max(total,1)*100)}%"></div></div><span style="font-size:11px;color:#666">{n}</span></div>' for c,n in top_country)}
+</div>
+
+<div class="section">
+  <h2>Aktivitätstypen</h2>
+  {''.join(f'<div class="bar-row"><span class="bar-lbl">{c[:20]}</span><div class="bar-track"><div class="bar-fill" style="width:{round(n/max(total,1)*100)}%;background:#cc1133"></div></div><span style="font-size:11px;color:#666">{n}</span></div>' for c,n in top_cat)}
+</div>
+
+{ f'<div class="section"><h2>Aktive Akteure / Gruppen</h2><table><thead><tr><th>GRUPPE</th><th>VORFÄLLE</th></tr></thead><tbody>' + "".join(f"<tr><td>{a}</td><td><b>{n}</b></td></tr>" for a,n in top_actors) + '</tbody></table></div>' if top_actors else '' }
+
+<div class="section">
+  <h2>Top Vorfälle (nach Schweregrad)</h2>
+  <table>
+    <thead><tr><th>DATUM</th><th>ORT</th><th>KATEGORIE</th><th>SCHWERE</th><th>BESCHREIBUNG</th></tr></thead>
+    <tbody>
+      {"".join(f'<tr><td style="white-space:nowrap">{r.get("date","—")}</td><td>{r.get("location","—")}, {r.get("country","—")}</td><td>{r.get("category","—")}</td><td><span class="sev s{r.get("severity_score",1)}">{r.get("severity_score",1)}/5</span></td><td style="max-width:300px">{(r.get("description") or "")[:120]}…</td></tr>' for r in top_incidents)}
+    </tbody>
+  </table>
+</div>
+
+<div class="footer">
+  LEX EUROPE · Automatisch generiert am {now_str} · Datenstand: {since} bis {datetime.now().strftime("%d.%m.%Y")} · Nur zur internen Verwendung
+</div>
+</div>
+</body>
+</html>"""
+    return HTMLResponse(report_html)
 
 @app.get("/api/diagnose")
 async def diagnose():
@@ -1325,8 +1564,11 @@ async def admin_seed(_=Depends(require_admin)):
 
 @app.on_event("startup")
 async def startup():
-    if db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0] == 0:
+    cnt = db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
+    if cnt == 0:
         seed_historical_data()
+    else:
+        backfill_enrichment()
     sched = BackgroundScheduler(daemon=True, timezone="Europe/Zurich")
     # Main crawler: every 12 hours (cost-efficient)
     sched.add_job(run_crawler, "interval", hours=12, id="main",

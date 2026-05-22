@@ -339,6 +339,53 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;bac
 .tcat-chg{font-family:var(--mono);font-size:8px;min-width:42px;text-align:right;flex-shrink:0;}
 #forecast-svg rect{transition:height .3s ease;}
 
+/* ── SEVERITY FILTER BUTTONS ── */
+.sevbtn{font-family:var(--mono);font-size:9px;padding:3px 8px;border:1px solid var(--pb);border-radius:2px;background:transparent;color:var(--t2);cursor:pointer;transition:all .12s;-webkit-tap-highlight-color:transparent;}
+.sevbtn.on{border-color:var(--accent);color:var(--accent);background:var(--ag);}
+.sev-btns{display:flex;gap:4px;flex-wrap:wrap;}
+
+/* ── SEVERITY SCORE BADGE ── */
+.sev-score{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:2px;font-family:var(--mono);font-size:9px;font-weight:700;flex-shrink:0;}
+
+/* ── PANEL TABS ── */
+.tab-nav{display:flex;border-bottom:1px solid var(--pb);flex-shrink:0;}
+.tab-btn{flex:1;font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:1.5px;padding:8px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--t2);cursor:pointer;transition:all .15s;-webkit-tap-highlight-color:transparent;}
+.tab-btn.on{color:var(--accent);border-bottom-color:var(--accent);}
+
+/* ── ACTOR TABLE ── */
+.actor-entry{padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);}
+.actor-hd{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
+.actor-name{font-family:var(--mono);font-size:10px;color:var(--t0);flex:1;}
+.actor-cnt{font-family:var(--mono);font-size:10px;color:var(--accent);}
+.actor-bar{height:2px;background:rgba(0,200,255,0.1);border-radius:1px;overflow:hidden;}
+.actor-bar-fill{height:100%;background:var(--accent);border-radius:1px;}
+.actor-chip{display:inline-block;font-family:var(--mono);font-size:8px;padding:2px 6px;border:1px solid rgba(0,200,255,0.25);border-radius:10px;color:var(--accent);background:rgba(0,200,255,0.07);margin:2px 2px 2px 0;}
+.ifempty-actors{font-family:var(--mono);font-size:10px;color:var(--t2);opacity:.5;text-align:center;padding:40px 14px;}
+
+/* ── CONFIDENCE ── */
+.conf-row{display:flex;gap:3px;align-items:center;margin-top:4px;}
+.conf-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.1);}
+.conf-dot.on{background:var(--accent);}
+
+/* ── CHARTS MODAL ── */
+#charts-modal{display:none;position:fixed;inset:0;z-index:800;background:rgba(4,8,18,0.96);backdrop-filter:blur(12px);flex-direction:column;}
+#charts-modal.open{display:flex;}
+.charts-hdr{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--pb);flex-shrink:0;}
+.charts-title{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:2px;color:var(--accent);}
+.charts-close{font-family:var(--mono);font-size:9px;padding:4px 12px;border:1px solid var(--pb2);border-radius:2px;background:transparent;color:var(--t2);cursor:pointer;margin-left:auto;transition:all .15s;}
+.charts-close:hover{border-color:var(--red);color:var(--red);}
+.charts-body{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px;overflow-y:auto;}
+.chart-card{background:rgba(5,11,22,0.98);border:1px solid var(--pb);padding:14px;min-height:220px;}
+.chart-card.wide{grid-column:1/-1;}
+.chart-title{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:2px;color:var(--accent);margin-bottom:12px;}
+@media(max-width:700px){.charts-body{grid-template-columns:1fr;}.chart-card.wide{grid-column:1;}}
+
+/* ── DETAIL EXTRAS ── */
+.det-sev-bar{display:flex;gap:3px;margin:8px 0;}
+.det-sev-seg{flex:1;height:4px;border-radius:1px;background:rgba(255,255,255,0.07);}
+.det-sev-seg.on{background:var(--accent);}
+.det-section-lbl{font-family:var(--mono);font-size:8px;letter-spacing:2px;color:var(--t2);margin-bottom:5px;margin-top:12px;}
+
 /* ── MOBILE RESPONSIVE ── */
 @media (max-width: 800px) {
   :root{--tbh:44px;--sbh:0px;}
@@ -415,6 +462,9 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;bac
     <button class="gbtn hide-mob" onclick="cmdOpen()" title="Befehlspalette (Ctrl+K)">⌘ SEARCH</button>
     <button class="gbtn hide-mob" id="btn-layer" onclick="toggleLayer()" title="Kartenebene">⬡ LAYER</button>
     <button class="gbtn" id="btn-heat" onclick="toggleHeat()" title="Heatmap">⊞ HEAT</button>
+    <button class="gbtn hide-mob" id="btn-charts" onclick="openCharts()" title="Statistik-Charts">⬛ CHARTS</button>
+    <button class="gbtn hide-mob" onclick="exportJson()" title="JSON-Export">↓ EXPORT</button>
+    <button class="gbtn hide-mob" onclick="openReport()" title="Intelligence-Bericht">⎗ BERICHT</button>
     <button class="gbtn hide-mob" onclick="copyLink()" title="Link kopieren">⎘ TEILEN</button>
     <button class="gbtn hide-mob" onclick="kbdOpen()" title="Tastatur">? HILFE</button>
     <a class="gbtn" href="/admin" target="_blank">⚙</a>
@@ -475,6 +525,17 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;bac
         <div class="frow2" style="margin-top:7px">
           <input class="finput" id="f-von" type="date" onchange="applyFilters()" title="Von">
           <input class="finput" id="f-bis" type="date" onchange="applyFilters()" title="Bis">
+        </div>
+        <div style="margin-top:7px">
+          <label class="flbl">SCHWERE MIN.</label>
+          <div class="sev-btns" id="sev-btns">
+            <button class="sevbtn on" id="sevbtn-0" onclick="setSevMin(0)">ALLE</button>
+            <button class="sevbtn" id="sevbtn-1" onclick="setSevMin(1)" style="color:#3a5570;border-color:#3a5570" title="Schwere 1">1</button>
+            <button class="sevbtn" id="sevbtn-2" onclick="setSevMin(2)" style="color:#5a7a92;border-color:#5a7a92" title="Schwere 2+">2</button>
+            <button class="sevbtn" id="sevbtn-3" onclick="setSevMin(3)" style="color:#f0a500;border-color:#f0a500" title="Schwere 3+">3</button>
+            <button class="sevbtn" id="sevbtn-4" onclick="setSevMin(4)" style="color:#ff6644;border-color:#ff6644" title="Schwere 4+">4</button>
+            <button class="sevbtn" id="sevbtn-5" onclick="setSevMin(5)" style="color:#ff3355;border-color:#ff3355" title="Nur Schwere 5">5</button>
+          </div>
         </div>
       </div>
     </div>
@@ -539,19 +600,26 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;bac
   </div>
 </aside>
 
-<!-- RIGHT PANEL (feed) -->
+<!-- RIGHT PANEL (feed + actors) -->
 <aside id="right">
   <div class="panel-handle"></div>
   <div class="phdr">
-    <span class="phdr-t">THREAT FEED</span>
+    <span class="phdr-t" id="rp-title">THREAT FEED</span>
     <span class="phdr-n" id="rcount">—</span>
-    <div class="sort-toggle" style="margin-left:auto">
+    <div class="sort-toggle" style="margin-left:auto" id="feed-sort-ctrl">
       <button class="sort-btn on" id="sort-date" onclick="sortFeed('date')" title="Nach Datum">DATUM ↓</button>
       <button class="sort-btn" id="sort-sev" onclick="sortFeed('severity')" title="Nach Schwere">SCHWERE ↓</button>
     </div>
   </div>
+  <div class="tab-nav">
+    <button class="tab-btn on" id="tab-feed" onclick="switchTab('feed')">FEED</button>
+    <button class="tab-btn" id="tab-akteure" onclick="switchTab('akteure')">AKTEURE</button>
+  </div>
   <div class="pbody" id="feed">
     <div class="ifempty">LADE DATENSÄTZE…</div>
+  </div>
+  <div class="pbody" id="actor-panel" style="display:none">
+    <div class="ifempty-actors">LADE AKTEURE…</div>
   </div>
 </aside>
 
@@ -565,8 +633,11 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;bac
   <div class="det-body">
     <div id="det-loc"></div>
     <div id="det-meta"></div>
+    <div id="det-sev-row" style="margin:8px 0 12px"></div>
     <hr class="det-divider">
+    <div id="det-actors" style="margin-bottom:10px"></div>
     <div id="det-desc"></div>
+    <div id="det-conf-row" style="margin-top:12px"></div>
     <div id="det-actions">
       <button class="det-act" onclick="detFlyTo()">AUF KARTE</button>
       <button class="det-act" onclick="detShare()">⎘ TEILEN</button>
@@ -574,6 +645,29 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;bac
     <a id="det-src" href="#" target="_blank" rel="noopener"></a>
   </div>
 </aside>
+
+<!-- CHARTS MODAL -->
+<div id="charts-modal" onclick="closeCharts()">
+  <div class="charts-hdr" onclick="event.stopPropagation()">
+    <span class="charts-title">◈ STATISTIK & ANALYSE</span>
+    <span style="font-family:var(--mono);font-size:8px;color:var(--t2);letter-spacing:1px">GEFILTERTER DATENSATZ</span>
+    <button class="charts-close" onclick="closeCharts()">✕ SCHLIESSEN</button>
+  </div>
+  <div class="charts-body" onclick="event.stopPropagation()">
+    <div class="chart-card wide">
+      <div class="chart-title">WÖCHENTLICHE ENTWICKLUNG · LETZTE 24 WOCHEN</div>
+      <canvas id="chart-weekly" height="100"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">NACH LAND</div>
+      <canvas id="chart-country" height="180"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">NACH KATEGORIE</div>
+      <canvas id="chart-category" height="180"></canvas>
+    </div>
+  </div>
+</div>
 
 <!-- STATUS BAR -->
 <footer id="statusbar">
@@ -631,6 +725,7 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;bac
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 // ── CONSTANTS ──────────────────────────────────────────────────────
 const SEV_H=new Set(['Brandanschlag','Gewalt','Militante Aktion','Aufruf zu Gewalt']);
@@ -656,8 +751,11 @@ function col(c){return CAT_COL[c]||'#3a5570';}
 
 // ── STATE ──────────────────────────────────────────────────────────
 let all=[],vis=[],map,cg,heatL=null,heatMode=false,darkLayer=true,dTimer=null,activeYr=null;
-let feedSort='date';
+let feedSort='date',sevMin=0,activeRTab='feed';
 let detailItem=null;
+let chartInstances={};
+const SEV_COL={1:'#3a5570',2:'#5a7a92',3:'#f0a500',4:'#ff6644',5:'#ff3355'};
+const SEV_BG={1:'rgba(58,85,112,0.18)',2:'rgba(90,122,146,0.18)',3:'rgba(240,165,0,0.18)',4:'rgba(255,102,68,0.18)',5:'rgba(255,51,85,0.18)'};
 
 // ── BOOT SCREEN ────────────────────────────────────────────────────
 function runBoot(){
@@ -773,9 +871,32 @@ function openDetail(i){
 
   const hasGeo=i.lat!=null&&i.lon!=null&&!isNaN(i.lat)&&!isNaN(i.lon);
   document.getElementById('det-loc').textContent=hasGeo?`${i.location||'—'} · ${i.country||'—'}`:`? ${i.location||'Standort unbekannt'} · ${i.country||'—'}`;
+  const sc=i.severity_score||0;
   document.getElementById('det-meta').innerHTML=
-    `${i.date||'—'}&nbsp;&nbsp;·&nbsp;&nbsp;SCHWERE: <span style="color:${c}">${s==='h'?'HOCH':s==='m'?'MITTEL':'NIEDRIG'}</span>`;
+    `${i.date||'—'}&nbsp;&nbsp;·&nbsp;&nbsp;SCHWERE: <span style="color:${c}">${s==='h'?'HOCH':s==='m'?'MITTEL':'NIEDRIG'}</span>${sc?`&nbsp;&nbsp;·&nbsp;&nbsp;<span style="color:${SEV_COL[sc]||'var(--t2)'}">SCORE ${sc}/5</span>`:''}`;
+
+  // Severity bar
+  const sevRow=document.getElementById('det-sev-row');
+  if(sc>0){
+    const segs=[1,2,3,4,5].map(n=>`<div class="det-sev-seg${n<=sc?' on':''}" style="${n<=sc?`background:${SEV_COL[sc]}`:''}"></div>`).join('');
+    sevRow.innerHTML=`<div class="det-section-lbl">SCHWEREBEWERTUNG</div><div class="det-sev-bar">${segs}</div>`;
+  } else sevRow.innerHTML='';
+
+  // Actor chips
+  const actRow=document.getElementById('det-actors');
+  if(i.actors&&i.actors.trim()){
+    const chips=i.actors.split(',').filter(Boolean).map(a=>`<span class="actor-chip">${a.trim()}</span>`).join('');
+    actRow.innerHTML=`<div class="det-section-lbl">AKTEURE / GRUPPEN</div><div>${chips}</div>`;
+  } else actRow.innerHTML='';
+
   document.getElementById('det-desc').textContent=cleanDesc(i.description)||'Keine Beschreibung verfügbar.';
+
+  // Confidence dots
+  const confRow=document.getElementById('det-conf-row');
+  if(i.confidence>0){
+    const dots=[1,2,3,4,5].map(n=>`<div class="conf-dot${n<=i.confidence?' on':''}"></div>`).join('');
+    confRow.innerHTML=`<div class="det-section-lbl">QUELLENVERTRAUEN</div><div class="conf-row">${dots}<span style="font-family:var(--mono);font-size:8px;color:var(--t2);margin-left:6px">${i.source||'—'}</span></div>`;
+  } else confRow.innerHTML='';
 
   const srcEl=document.getElementById('det-src');
   if(i.url&&i.url.startsWith('http')){
@@ -843,10 +964,12 @@ function renderFeed(list){
     const noGeo=!(i.lat!=null&&i.lon!=null&&!isNaN(i.lat)&&!isNaN(i.lon));
     const newBadge=isNew?'<span class="neu-badge">NEU</span>':'';
     const geoBadge=noGeo?'<span class="nogeo-badge">? ORT</span>':'';
+    const sc=i.severity_score||0;
+    const scBadge=sc>0?`<span class="sev-score" style="background:${SEV_BG[sc]||'transparent'};color:${SEV_COL[sc]||'var(--t2)'};border:1px solid ${SEV_COL[sc]||'var(--t3)'}44">${sc}</span>`:'';
     return `<div class="icard" id="ic-${i.id}" onclick="openDetailById(${i.id})" style="border-left-color:${c}">
       <div class="icard-hd">
         <span class="ibadge s${s}">${i.category}</span>
-        ${newBadge}${geoBadge}
+        ${scBadge}${newBadge}${geoBadge}
         <span class="idate">${i.date||'—'}</span>
       </div>
       <div class="iloc">${noGeo?'<span style="color:var(--t3)">? STANDORT UNBEKANNT</span>':i.location+'&nbsp;·&nbsp;<span style="opacity:.6">'+i.country+'</span>'}</div>
@@ -887,6 +1010,7 @@ function renderChips(){
   if(von) chips.push(`<span class="chip-tag">AB ${von} <button onclick="clearChip('von')">✕</button></span>`);
   if(bis) chips.push(`<span class="chip-tag">BIS ${bis} <button onclick="clearChip('bis')">✕</button></span>`);
   if(q) chips.push(`<span class="chip-tag">SUCHE: ${q.substring(0,16)} <button onclick="clearChip('srch')">✕</button></span>`);
+  if(sevMin>0) chips.push(`<span class="chip-tag" style="color:${SEV_COL[sevMin]}">SCHWERE ≥${sevMin} <button onclick="clearChip('sev')">✕</button></span>`);
   document.getElementById('active-chips').innerHTML=chips.join('');
 }
 
@@ -896,6 +1020,7 @@ function clearChip(field){
   else if(field==='von') document.getElementById('f-von').value='';
   else if(field==='bis') document.getElementById('f-bis').value='';
   else if(field==='srch') document.getElementById('f-srch').value='';
+  else if(field==='sev') setSevMin(0);
   applyFilters();
 }
 
@@ -1010,8 +1135,9 @@ function applyFilters(){
     if(ca&&i.category!==ca) return false;
     if(von&&i.date<von) return false;
     if(bis&&i.date>bis) return false;
+    if(sevMin>0&&(i.severity_score||0)<sevMin) return false;
     if(srch){
-      const h=((i.description||'')+' '+(i.location||'')+' '+(i.category||'')).toLowerCase();
+      const h=((i.description||'')+' '+(i.location||'')+' '+(i.category||'')+' '+(i.actors||'')).toLowerCase();
       if(!h.includes(srch)) return false;
     }
     return true;
@@ -1031,6 +1157,7 @@ function resetFilters(){
   activeYr=null;
   document.querySelectorAll('.yrbtn').forEach(b=>b.classList.remove('on'));
   document.getElementById('yr-ALLE').classList.add('on');
+  setSevMin(0);
   applyFilters();
 }
 
@@ -1337,6 +1464,150 @@ function filterLoc(loc){
   document.getElementById('f-srch').value=loc;
   applyFilters();
   if(window.innerWidth<=800) mobTab('filter');
+}
+
+// ── SEVERITY FILTER ────────────────────────────────────────────────
+function setSevMin(n){
+  sevMin=n;
+  document.querySelectorAll('.sevbtn').forEach(b=>b.classList.remove('on'));
+  const btn=document.getElementById(`sevbtn-${n}`);
+  if(btn) btn.classList.add('on');
+  applyFilters();
+}
+
+// ── RIGHT PANEL TABS ───────────────────────────────────────────────
+function switchTab(tab){
+  activeRTab=tab;
+  ['feed','akteure'].forEach(t=>{
+    document.getElementById(`tab-${t}`).classList.toggle('on',t===tab);
+  });
+  document.getElementById('feed').style.display=tab==='feed'?'':'none';
+  document.getElementById('actor-panel').style.display=tab==='akteure'?'':'none';
+  document.getElementById('feed-sort-ctrl').style.display=tab==='feed'?'':'none';
+  const titleEl=document.getElementById('rp-title');
+  if(titleEl) titleEl.textContent=tab==='feed'?'THREAT FEED':'AKTEURE & GRUPPEN';
+  const rcEl=document.getElementById('rcount');
+  if(tab==='akteure'){rcEl.textContent='';loadActors();}
+  else{animCount(rcEl,vis.length);}
+}
+
+// ── ACTOR TRACKING ─────────────────────────────────────────────────
+async function loadActors(){
+  const el=document.getElementById('actor-panel');
+  try{
+    const data=await fetch('/api/actors').then(r=>r.json());
+    renderActors(data,el);
+  }catch(e){el.innerHTML='<div class="ifempty-actors">FEHLER BEIM LADEN</div>';}
+}
+
+function renderActors(data,el){
+  if(!data||!data.length){el.innerHTML='<div class="ifempty-actors">KEINE AKTEURSDATEN</div>';return;}
+  const max=Math.max(...data.map(a=>a.count),1);
+  el.innerHTML=data.map(a=>{
+    const w=Math.round(a.count/max*100);
+    return `<div class="actor-entry" onclick="filterActor('${a.actor.replace(/'/g,"\\'")}')">
+      <div class="actor-hd">
+        <span class="actor-name">${a.actor}</span>
+        <span class="actor-cnt">${a.count}</span>
+      </div>
+      <div class="actor-bar"><div class="actor-bar-fill" style="width:${w}%"></div></div>
+      ${a.last_seen?`<div style="font-family:var(--mono);font-size:8px;color:var(--t3);margin-top:3px">ZULETZT: ${a.last_seen}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function filterActor(name){
+  document.getElementById('f-srch').value=name;
+  switchTab('feed');
+  applyFilters();
+}
+
+// ── CHARTS ─────────────────────────────────────────────────────────
+function openCharts(){
+  document.getElementById('charts-modal').classList.add('open');
+  document.getElementById('btn-charts').classList.add('on');
+  loadCharts();
+}
+
+function closeCharts(){
+  document.getElementById('charts-modal').classList.remove('open');
+  document.getElementById('btn-charts').classList.remove('on');
+}
+
+function loadCharts(){
+  if(!vis.length) return;
+
+  // Weekly trend
+  const weekMap={};
+  vis.forEach(i=>{
+    if(!i.date) return;
+    const d=new Date(i.date);
+    const yr=d.getFullYear(),wk=Math.ceil((d-new Date(yr,0,1))/(7*864e5));
+    const key=`${yr}-W${String(wk).padStart(2,'0')}`;
+    weekMap[key]=(weekMap[key]||0)+1;
+  });
+  const wKeys=Object.keys(weekMap).sort().slice(-24);
+  const wVals=wKeys.map(k=>weekMap[k]);
+  renderChart('weekly','bar',wKeys,wVals,'rgba(0,200,255,0.65)','rgba(0,200,255,0.9)');
+
+  // By country
+  const coMap={};
+  vis.forEach(i=>{coMap[i.country||'?']=(coMap[i.country||'?']||0)+1;});
+  const coE=Object.entries(coMap).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  renderChart('country','doughnut',coE.map(e=>e[0]),coE.map(e=>e[1]),
+    coE.map(e=>CO_COL[e[0]]||'#5a7a92'));
+
+  // By category
+  const caMap={};
+  vis.forEach(i=>{caMap[i.category||'?']=(caMap[i.category||'?']||0)+1;});
+  const caE=Object.entries(caMap).sort((a,b)=>b[1]-a[1]);
+  renderChart('category','bar',caE.map(e=>e[0]),caE.map(e=>e[1]),
+    caE.map(e=>col(e[0])),caE.map(e=>col(e[0])));
+}
+
+function renderChart(id,type,labels,data,bg,border){
+  const canvas=document.getElementById(`chart-${id}`);
+  if(!canvas) return;
+  if(chartInstances[id]){chartInstances[id].destroy();delete chartInstances[id];}
+  const baseOpts={
+    responsive:true,maintainAspectRatio:true,
+    plugins:{legend:{labels:{color:'#a0bcd4',font:{family:"'JetBrains Mono',monospace",size:9}}},tooltip:{titleFont:{family:"'JetBrains Mono',monospace"},bodyFont:{family:"'JetBrains Mono',monospace"}}},
+    scales:type==='bar'?{x:{ticks:{color:'#5a7a92',font:{family:"'JetBrains Mono',monospace",size:8}},grid:{color:'rgba(0,180,255,0.06)'}},y:{ticks:{color:'#5a7a92',font:{family:"'JetBrains Mono',monospace",size:8}},grid:{color:'rgba(0,180,255,0.06)'}}}:undefined
+  };
+  chartInstances[id]=new Chart(canvas,{
+    type,
+    data:{labels,datasets:[{data,backgroundColor:bg,borderColor:border||bg,borderWidth:1}]},
+    options:baseOpts
+  });
+}
+
+// ── EXPORT JSON ────────────────────────────────────────────────────
+function exportJson(){
+  const co=document.getElementById('f-co').value;
+  const ca=document.getElementById('f-ca').value;
+  const von=document.getElementById('f-von').value;
+  const bis=document.getElementById('f-bis').value;
+  const q=document.getElementById('f-srch').value;
+  const params=new URLSearchParams();
+  if(co)params.set('country',co);if(ca)params.set('category',ca);
+  if(von)params.set('date_from',von);if(bis)params.set('date_to',bis);
+  if(q)params.set('search',q);if(sevMin>0)params.set('severity_min',sevMin);
+  const url='/api/export-json?'+params.toString();
+  const a=document.createElement('a');
+  a.href=url;a.download=`lex-europe-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  showToast('JSON-EXPORT GESTARTET');
+}
+
+// ── INTELLIGENCE REPORT ────────────────────────────────────────────
+function openReport(){
+  const params=new URLSearchParams();
+  params.set('days',activeYr?365:90);
+  const co=document.getElementById('f-co').value;
+  const ca=document.getElementById('f-ca').value;
+  if(co)params.set('country',co);if(ca)params.set('category',ca);
+  window.open('/api/report?'+params.toString(),'_blank');
+  showToast('BERICHT WIRD GENERIERT…');
 }
 
 // ── INIT ───────────────────────────────────────────────────────────
