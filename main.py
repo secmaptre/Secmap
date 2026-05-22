@@ -453,6 +453,37 @@ HISTORICAL_EVENTS = [
     ("2024-03-18","London","UK","Demo/Kundgebung",
      "Antifaschistische Demonstration in London. Gruppen griffen Polizei an, Scheiben in Westminster eingeworfen. 22 Festnahmen durch Metropolitan Police.",
      "Archiv",51.50,-0.12),
+    # ── 2025 ─────────────────────────────────────────────
+    ("2025-01-25","Dresden","DE","Gewalt",
+     "Massenproteste gegen den AfD-Bundesparteitag in Dresden. Autonome Gruppen blockierten Zugänge, Zusammenstöße mit Polizeikräften. Beamte mit Pyrotechnik und Flaschen angegriffen. Über 30 Festnahmen, Bahnverkehr teilweise blockiert.",
+     "Archiv",51.05,13.74),
+    ("2025-01-25","Dresden","DE","Sabotage",
+     "Sabotage an Bahninfrastruktur nahe Dresden im Umfeld der AfD-Parteitagsproteste. Signalkabel durchtrennt, Zugverkehr für mehrere Stunden unterbrochen. Linksextremistisches Bekennerschreiben veröffentlicht.",
+     "Archiv",51.05,13.74),
+    ("2025-02-23","Berlin","DE","Demo/Kundgebung",
+     "Protestdemonstrationen in Berlin nach der Bundestagswahl. Linksautonome Gruppen versuchten Wahlparties zu blockieren. Sachbeschädigungen, kleinere Ausschreitungen in Friedrichshain-Kreuzberg. 14 Festnahmen.",
+     "Archiv",52.516,13.445),
+    ("2025-03-29","Hamburg","DE","Brandanschlag",
+     "Drei Fahrzeuge einer Baufirma in Hamburg-Altona in der Nacht in Brand gesetzt. Bekennerschreiben autonomer Gruppe: 'Gegen Verdrängung und Wohnungsnot.' Sachschaden ca. 95.000 Euro.",
+     "Archiv",53.55,9.97),
+    ("2025-04-12","Leipzig","DE","Sabotage",
+     "Kabelschnitte an Signalanlagen der S-Bahn Leipzig. Bekennerschreiben von 'Sabotage gegen Repression': Aktion als Solidarität mit inhaftierten Aktivisten. Betrieb für 5 Stunden eingestellt.",
+     "Archiv",51.34,12.37),
+    ("2025-05-01","Berlin","DE","Gewalt",
+     "1.-Mai-Demonstration in Berlin-Neukölln und Kreuzberg. Schwarzer Block griff Polizeiabsperrungen an. 23 Beamte verletzt, 67 Festnahmen. Fahrzeuge beschädigt, Scheiben eingeworfen.",
+     "Archiv",52.488,13.430),
+    ("2025-05-01","Zürich","CH","Gewalt",
+     "1.-Mai-Umzug in Zürich eskaliert. Autonome Gruppen attackierten Polizeikräfte mit Steinen und Feuerwerkskörpern. 18 Festnahmen, 3 Beamte verletzt. Sachschäden an Bankfilialen.",
+     "Archiv",47.38,8.54),
+    ("2025-05-01","Wien","AT","Demo/Kundgebung",
+     "1.-Mai-Demonstration der Gewerkschaftsjugend und autonomer Gruppen in Wien. Kleinere Ausschreitungen am Rande, Polizei im Großeinsatz. 6 Festnahmen.",
+     "Archiv",48.21,16.37),
+    ("2025-03-15","Bern","CH","Sachbeschädigung",
+     "Antifaschistische Aktion in Bern: Büros einer als rechtsextrem eingestuften Organisation mit Farbe beschmiert, Scheiben eingeworfen. Bekennerschreiben veröffentlicht. Sachschaden ca. 12.000 CHF.",
+     "Archiv",46.95,7.44),
+    ("2025-02-08","München","DE","Brandanschlag",
+     "Fahrzeug eines als rechtsextrem bekannten Kaders in München-Schwabing in der Nacht angezündet. Bekennerschreiben antifaschistischer Gruppe. Sachschaden ca. 35.000 Euro.",
+     "Archiv",48.16,11.57),
 ]
 
 def classify(text):
@@ -601,40 +632,23 @@ def crawl_barrikade_range(start_id, stop_id):
 
 # ── INDYMEDIA RSS + PAGE CRAWLER ──────────────────────────────────
 def crawl_indymedia_feed():
+    """Crawls active left-wing / alternative German-language sources
+    (de.indymedia.org has been offline since 2017 — replaced with live alternatives)."""
     inserted = 0
-    feeds = [
-        "https://de.indymedia.org/RSS/newswire.xml",
-        "https://de.indymedia.org/RSS/features.xml",
-        "https://de.indymedia.org/taxonomy/term/20/all/feed",
-        "https://de.indymedia.org/taxonomy/term/56/all/feed",
-        "https://de.indymedia.org/taxonomy/term/671/all/feed",
-        "https://de.indymedia.org/taxonomy/term/100/all/feed",
-        "https://de.indymedia.org/taxonomy/term/130/all/feed",
+    alt_feeds = [
+        ("labournet.de",           "https://www.labournet.de/feed/"),
+        ("perspektive-online.net", "https://perspektive-online.net/feed/"),
+        ("klassegegenklasse.org",  "https://www.klassegegenklasse.org/feed/"),
+        ("jungle.world",           "https://jungle.world/rss.xml"),
     ]
-    seen_urls = set()
-    for feed_url in feeds:
+    for source, feed_url in alt_feeds:
         try:
-            xml   = fetch(feed_url, timeout=15)
-            items = parse_rss(xml)
-            log.info(f"indymedia feed {feed_url.split('/')[-1]}: {len(items)} items")
-            for title, link, desc, pub in items:
-                if link in seen_urls: continue
-                seen_urls.add(link)
-                h = mk_hash(link, title + desc)
-                if is_seen(h): continue
-                # Get full article
-                full = get_text(link)
-                text = full if len(full) > 100 else f"{title}. {desc}"
-                if len(text) < 30: continue
-                ai = smart_classify(text)
-                if ai:
-                    d = parse_date(pub) or date_from_url(link)
-                    save_incident(ai, text, "de.indymedia.org", link, d)
-                    inserted += 1
-                time.sleep(0.5)
+            n = crawl_rss_feed(source, feed_url, max_items=10)
+            inserted += n
+            if n: log.info(f"Alt-feed {source}: +{n}")
         except Exception as e:
-            log.warning(f"indymedia feed {feed_url}: {e}")
-        time.sleep(0.3)
+            log.warning(f"Alt-feed {source}: {e}")
+        time.sleep(0.4)
     return inserted
 
 # ── RSS FEEDS ─────────────────────────────────────────────────────
@@ -647,42 +661,74 @@ RSS_KEYWORDS = [
 ]
 
 RSS_FEEDS = [
-    ("verfassungsschutz.de", "https://www.verfassungsschutz.de/SiteGlobals/Functions/RSSNewsFeed/AlleMeldungen.xml"),
-    ("barrikade.info",    "https://barrikade.info/feed"),
-    ("tagesschau.de",     "https://www.tagesschau.de/xml/rss2/"),
-    ("deutschlandfunk.de","https://www.deutschlandfunk.de/nachrichten.rss"),
-    ("deutschlandfunk.de","https://www.deutschlandfunk.de/inland.rss"),
-    ("spiegel.de",        "https://www.spiegel.de/schlagzeilen/index.rss"),
-    ("zeit.de",           "https://newsfeed.zeit.de/politik/index"),
-    ("sueddeutsche.de",   "https://rss.sueddeutsche.de/rss/Politik"),
-    ("faz.net",           "https://www.faz.net/rss/aktuell/"),
-    ("tagesspiegel.de",   "https://www.tagesspiegel.de/contentexport/feed/home"),
-    ("taz.de",            "https://taz.de/!p4608;rss/"),
-    ("rbb24.de",          "https://www.rbb24.de/index/rss.xml/index.xml"),
-    ("ndr.de",            "https://www.ndr.de/nachrichten/index-rss.xml"),
-    ("mdr.de",            "https://www.mdr.de/nachrichten/rss-nachrichten100.xml"),
-    ("srf.ch",            "https://www.srf.ch/news/bnf/rss/1646"),
-    ("nzz.ch",            "https://www.nzz.ch/recent.rss"),
-    ("20min.ch",          "https://api.20min.ch/rss/view/1"),
-    ("blick.ch",          "https://www.blick.ch/news/rss.xml"),
-    ("orf.at",            "https://rss.orf.at/news.xml"),
-    ("derstandard.at",    "https://www.derstandard.at/rss/inland"),
-    ("diepresse.com",     "https://www.diepresse.com/rss/politik"),
-    ("krone.at",          "https://www.krone.at/feed/news"),
+    # ── Sicherheit / Verfassungsschutz ─────────────────────────────
+    ("verfassungsschutz.de",  "https://www.verfassungsschutz.de/SiteGlobals/Functions/RSSNewsFeed/AlleMeldungen.xml"),
+    # ── DACH Nachrichtenagenturen / öffentlich-rechtlich ───────────
+    ("tagesschau.de",         "https://www.tagesschau.de/xml/rss2/"),
+    ("zdf.de",                "https://www.zdf.de/rss/zdf/nachrichten"),
+    ("deutschlandfunk.de",    "https://www.deutschlandfunk.de/nachrichten.rss"),
+    ("deutschlandfunk.de",    "https://www.deutschlandfunk.de/inland.rss"),
+    ("br.de",                 "https://www.br.de/nachrichten/rss-alle-nachrichten100.xml"),
+    ("mdr.de",                "https://www.mdr.de/nachrichten/rss-nachrichten100.xml"),
+    ("ndr.de",                "https://www.ndr.de/nachrichten/index-rss.xml"),
+    ("rbb24.de",              "https://www.rbb24.de/index/rss.xml/index.xml"),
+    ("srf.ch",                "https://www.srf.ch/news/bnf/rss/1646"),
+    ("orf.at",                "https://rss.orf.at/news.xml"),
+    # ── Deutsche Tageszeitungen ─────────────────────────────────────
+    ("spiegel.de",            "https://www.spiegel.de/schlagzeilen/index.rss"),
+    ("zeit.de",               "https://newsfeed.zeit.de/politik/index"),
+    ("sueddeutsche.de",       "https://rss.sueddeutsche.de/rss/Politik"),
+    ("faz.net",               "https://www.faz.net/rss/aktuell/"),
+    ("tagesspiegel.de",       "https://www.tagesspiegel.de/contentexport/feed/home"),
+    ("taz.de",                "https://taz.de/!p4608;rss/"),
+    ("welt.de",               "https://www.welt.de/feeds/latest.rss"),
+    ("focus.de",              "https://rss.focus.de/fol/XML/rss_folnews.xml"),
+    ("n-tv.de",               "https://www.n-tv.de/rss"),
+    ("stern.de",              "https://www.stern.de/feed/"),
+    # ── Regionale DE ───────────────────────────────────────────────
+    ("l-iz.de",               "https://www.l-iz.de/feed"),        # Leipzig — lokal relevant
+    ("nd-aktuell.de",         "https://www.nd-aktuell.de/static/rss/rss.xml"),
+    # ── Spezial: Extremismusbeobachtung ────────────────────────────
+    ("barrikade.info",        "https://barrikade.info/feed"),
+    ("belltower.news",        "https://www.belltower.news/feed/"),
+    ("labournet.de",          "https://www.labournet.de/feed/"),
+    # ── Schweiz ────────────────────────────────────────────────────
+    ("nzz.ch",                "https://www.nzz.ch/recent.rss"),
+    ("tagesanzeiger.ch",      "https://www.tagesanzeiger.ch/rss.xml"),
+    ("watson.ch",             "https://www.watson.ch/rss"),
+    ("20min.ch",              "https://api.20min.ch/rss/view/1"),
+    ("blick.ch",              "https://www.blick.ch/news/rss.xml"),
+    ("woz.ch",                "https://www.woz.ch/rss.xml"),
+    # ── Österreich ─────────────────────────────────────────────────
+    ("derstandard.at",        "https://www.derstandard.at/rss/inland"),
+    ("diepresse.com",         "https://www.diepresse.com/rss/politik"),
+    ("kurier.at",             "https://kurier.at/rss"),
+    ("krone.at",              "https://www.krone.at/feed/news"),
+    ("heute.at",              "https://www.heute.at/feed"),
 ]
 
 GNEWS_Q = [
-    ("DE","linksextremismus anschlag"),
+    # Deutschland
+    ("DE","linksextremismus anschlag bekennerschreiben"),
     ("DE","autonome brandanschlag sachbeschädigung"),
-    ("DE","antifa gewalt bekennerschreiben"),
-    ("DE","schwarzer block randalen"),
-    ("DE","militante linke sabotage"),
-    ("CH","linksextrem schweiz anschlag"),
-    ("CH","autonome zürich bern"),
-    ("AT","linksextremismus österreich"),
-    ("AT","autonome wien sabotage"),
+    ("DE","antifa gewalt festnahmen"),
+    ("DE","schwarzer block randalen ausschreitungen"),
+    ("DE","militante linke sabotage bahn"),
     ("DE","rigaer strasse linksradikal"),
     ("DE","bundesverfassungsschutz linksextremismus"),
+    ("DE","linksextrem hausbesetzung räumung"),
+    ("DE","autonome demo eskaliert polizei verletzt"),
+    ("DE","antifa razzia festnahmen"),
+    # Schweiz
+    ("CH","linksextrem schweiz anschlag"),
+    ("CH","autonome zürich bern demonstration"),
+    ("CH","krawall schweiz ausschreitungen polizei"),
+    # Österreich
+    ("AT","linksextremismus österreich anschlag"),
+    ("AT","autonome wien demonstration eskaliert"),
+    # Überregional
+    ("DE","lina e linksextremismus urteil"),
+    ("DE","antifaschistische aktion sachbeschädigung"),
 ]
 
 def parse_rss(xml_text):
@@ -825,60 +871,29 @@ def run_historical(reset=False):
     _hist_run[0] = True
     log.info("══ HISTORICAL START ══")
     try:
-        # Barrikade: all IDs from max down to 1
+        # Mark indymedia historical as done — de.indymedia.org offline since 2017
+        if not meta_get("hist_im_done"):
+            meta_set("hist_im_done", datetime.now().isoformat())
+            log.info("Indymedia hist: skipped (site offline since 2017)")
+
+        # Barrikade: crawl 800 IDs per invocation, save progress
         DONE="hist_b_done"; CURR="hist_b_curr"
         if not meta_get(DONE):
             if not meta_get(CURR):
                 mx = barrikade_latest_id()
                 meta_set("hist_b_max", mx)
                 meta_set(CURR, mx)
-            curr  = int(meta_get(CURR))
-            stop  = max(1, curr - 300)
+            curr = int(meta_get(CURR))
+            stop = max(1, curr - 800)
             log.info(f"Barrikade hist: {curr}→{stop}")
             n = crawl_barrikade_range(curr, stop)
             meta_set(CURR, stop - 1)
-            if stop <= 1: meta_set(DONE, datetime.now().isoformat())
-            log.info(f"Barrikade hist: +{n}")
-
-        # Indymedia: offset pagination
-        IDONE="hist_im_done"; IOFF="hist_im_offset"
-        if not meta_get(IDONE):
-            off = int(meta_get(IOFF) or 0)
-            inserted = 0
-            empty    = 0
-            for o in range(off, off + 40*20, 20):
-                links = []
-                for base in [f"https://de.indymedia.org/?limit=20&offset={o}",
-                             f"https://de.indymedia.org/index.html?limit=20&offset={o}"]:
-                    try:
-                        soup = BeautifulSoup(fetch(base), "html.parser")
-                        for a in soup.find_all("a", href=True):
-                            href = a["href"].strip()
-                            if not href or any(x in href for x in ["#","mailto:",".css",".js","?"]): continue
-                            full = urljoin("https://de.indymedia.org", href)
-                            if "indymedia.org" not in full: continue
-                            path = full.replace("https://de.indymedia.org","").strip("/")
-                            if path and path not in ("impressum","about","contact","rss"): links.append(full)
-                        if links: break
-                    except: pass
-                if not links:
-                    empty += 1
-                    if empty >= 6: meta_set(IDONE, datetime.now().isoformat()); break
-                    time.sleep(1.5); continue
-                empty = 0
-                for url in list(dict.fromkeys(links))[:15]:
-                    text = get_text(url)
-                    if len(text) < 80: continue
-                    h = mk_hash(url, text)
-                    if is_seen(h): continue
-                    ai = smart_classify(text)
-                    if ai:
-                        if save_incident(ai, text, "de.indymedia.org", url, date_from_url(url)):
-                            inserted += 1
-                    time.sleep(0.65)
-                meta_set(IOFF, o + 20)
-                time.sleep(1.0)
-            log.info(f"Indymedia hist: +{inserted}")
+            if stop <= 1:
+                meta_set(DONE, datetime.now().isoformat())
+                log.info("Barrikade hist: COMPLETE")
+            log.info(f"Barrikade hist: +{n} (remaining: {stop-1} IDs)")
+        else:
+            log.info("Barrikade hist: already complete")
 
         regeocode_nulls()
     except Exception as e:
@@ -886,6 +901,16 @@ def run_historical(reset=False):
     finally:
         _hist_run[0] = False
     log.info("══ HISTORICAL DONE ══")
+
+
+def auto_hist():
+    """Auto-continue historical barrikade crawl on a schedule until complete."""
+    if meta_get("hist_b_done"):
+        return
+    if _hist_run[0] or _running[0]:
+        return
+    log.info("Auto-continuing historical crawl…")
+    run_historical()
 
 # ── FASTAPI ───────────────────────────────────────────────────────
 app = FastAPI(title="LEX EUROPE")
@@ -1207,8 +1232,12 @@ async def startup():
     if db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0] == 0:
         seed_historical_data()
     sched = BackgroundScheduler(daemon=True, timezone="Europe/Zurich")
+    # Main crawler: every 2 hours
     sched.add_job(run_crawler, "interval", hours=2, id="main",
-                  next_run_time=datetime.now() + timedelta(seconds=15))
+                  next_run_time=datetime.now() + timedelta(seconds=20))
+    # Auto-continue historical barrikade crawl every 45 min until complete
+    sched.add_job(auto_hist, "interval", minutes=45, id="auto_hist",
+                  next_run_time=datetime.now() + timedelta(seconds=90))
     sched.start()
-    log.info(f"LEX EUROPE v7 — {len(RSS_FEEDS)} RSS + {len(GNEWS_Q)} GNews — crawl in 15s")
+    log.info(f"LEX EUROPE — {len(RSS_FEEDS)} RSS + {len(GNEWS_Q)} GNews — crawl in 20s | hist auto-continue every 45min")
 

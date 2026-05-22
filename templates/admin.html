@@ -248,12 +248,12 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
     <div class="ctitle">HISTORISCHES CRAWLING</div>
 
     <div class="hprog">
-      <div class="hprog-hd"><span>🇩🇪 barrikade.info</span><span id="h-b-pct">{{ hist_b_pct }}</span></div>
+      <div class="hprog-hd"><span>barrikade.info (alle Artikel)</span><span id="h-b-pct">{{ hist_b_pct }}</span></div>
       <div class="hprog-track"><div class="hprog-fill" id="h-b-fill" style="width:0%;background:var(--accent)"></div></div>
     </div>
     <div class="hprog">
-      <div class="hprog-hd"><span>de.indymedia.org</span><span id="h-im">{% if hist_im_done %}✓ FERTIG{% else %}BEREIT{% endif %}</span></div>
-      <div class="hprog-track"><div class="hprog-fill" id="h-im-fill" style="width:0%;background:var(--amber)"></div></div>
+      <div class="hprog-hd"><span>de.indymedia.org</span><span id="h-im" style="color:var(--t2)">{% if hist_im_done %}✓ ÜBERSPRUNGEN (offline){% else %}—{% endif %}</span></div>
+      <div class="hprog-track"><div class="hprog-fill" id="h-im-fill" style="width:{% if hist_im_done %}100{% else %}0{% endif %}%;background:var(--t3)"></div></div>
     </div>
 
     <div class="brow" style="margin-top:14px">
@@ -262,8 +262,8 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
       <button class="btn" onclick="refreshHistStatus()">↺ STATUS</button>
     </div>
     <p style="font-family:var(--mono);font-size:8px;color:var(--t2);margin-top:9px;line-height:1.7;">
-      Barrikade iteriert alle Artikel-IDs · Indymedia offset-basiert ·<br>
-      Fortschritt wird gespeichert, bei Unterbrechung fortsetzbar
+      Barrikade: ~800 Artikel pro Durchlauf · Auto-Fortsetzung alle 45 min ·<br>
+      Fortschritt gespeichert, bei Neustart fortsetzbar
     </p>
   </div>
 
@@ -543,9 +543,8 @@ async function refreshHistStatus(){
     const bpct=h.barrikade_pct||0;
     $('h-b-pct').textContent=h.barrikade_done?'✓ FERTIG':(bpct>0?Math.round(bpct)+'%':'BEREIT');
     $('h-b-fill').style.width=bpct+'%';
-    const ioff=h.indymedia_off||0;
-    $('h-im').textContent=h.indymedia_done?'✓ FERTIG':(ioff>0?'OFF '+ioff:'BEREIT');
-    $('h-im-fill').style.width=h.indymedia_done?'100%':(ioff>0?Math.min(ioff/200,100)+'%':'0%');
+    $('h-im').textContent=h.indymedia_done?'✓ ÜBERSPRUNGEN (offline)':'—';
+    $('h-im-fill').style.width=h.indymedia_done?'100%':'0%';
     const hb=$('h-badge');
     if(s.hist_running){hb.className='badge badge-warn';hb.textContent='AKTIV';}
     else{hb.className='badge badge-ok';hb.textContent='BEREIT';}
