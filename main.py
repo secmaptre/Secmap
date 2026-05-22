@@ -125,7 +125,11 @@ def get_text(url):
               soup.find(True, class_=re.compile(r"\b(article|content|post|entry|body|node)\b", re.I)) or
               soup.body or soup)
         raw = el.get_text(" ", strip=True)
-        return re.sub(r"\s{3,}", " ", raw)[:5000]
+        # Strip indymedia navigation artifacts
+        raw = re.sub(r'Direkt zum Inhalt.{0,600}?(?=[A-ZÜÄÖ][a-züäöA-ZÜÄÖ\s]{10,})', '', raw, flags=re.DOTALL)
+        raw = re.sub(r'dont hate the media.{0,400}?(?=\w{8,})', '', raw, flags=re.DOTALL|re.IGNORECASE)
+        raw = re.sub(r'\b(Openposting|Terminkalender|Gruppenstatements|Editorialliste|Linkliste|Mailinglisten|Moderation|Unterstützen|Outcall|Übersetzungskoordination|Mission Statement)\b', '', raw)
+        return re.sub(r"\s{3,}", " ", raw).strip()[:5000]
     except Exception as e:
         log.warning(f"get_text {url}: {e}")
         return ""
@@ -750,7 +754,11 @@ BARRIKADE_RELEVANCE_KWS = [
     "angriff","brand","sabotage","ausschreitungen","krawalle","randalen",
     "besetzung","verhaftung","razzia","molotow","bekennerschreiben",
     "autonome","antifa","schwarzer block","linksextrem","schäden","verletzt",
-    "festnahmen","überfall","protest","demonstration","blockade","besetzt"
+    "festnahmen","überfall","protest","demonstration","blockade","besetzt",
+    # Actions against right-wing groups (barrikade.info coverage)
+    "junge tat","identitär","neonazi","faschistisch"," nazi","rechtsextrem",
+    "eingelackt","lackiert","lack ","besprüht","outing","dox","antifaschist",
+    "aktion gegen","solidarität","hausdurchsuchung",
 ]
 
 # ── MASTER CRAWLER ────────────────────────────────────────────────
@@ -946,6 +954,77 @@ async def get_timeline():
         ORDER BY month ASC
     """).fetchall()
     return JSONResponse([dict(r) for r in rows])
+
+@app.get("/api/trends")
+async def get_trends():
+    # Monthly data last 24 months
+    rows = db.execute("""
+        SELECT strftime('%Y-%m', date) as month, COUNT(*) as n,
+               SUM(CASE WHEN category IN ('Brandanschlag','Gewalt','Militante Aktion','Aufruf zu Gewalt') THEN 1 ELSE 0 END) as high
+        FROM incidents
+        WHERE date >= date('now','-24 months') AND date IS NOT NULL AND length(date) >= 7
+        GROUP BY month ORDER BY month ASC
+    """).fetchall()
+    months = [dict(r) for r in rows]
+
+    # Linear regression on monthly counts (last 12 months)
+    recent = months[-12:] if len(months) >= 3 else months
+    n = len(recent)
+    slope = 0.0
+    forecast = []
+    if n >= 3:
+        xs = list(range(n)); ys = [r['n'] for r in recent]
+        xm = sum(xs)/n; ym = sum(ys)/n
+        num = sum((xs[i]-xm)*(ys[i]-ym) for i in range(n))
+        den = sum((xs[i]-xm)**2 for i in range(n))
+        slope = num/den if den else 0.0
+        intercept = ym - slope*xm
+        last_m = recent[-1]['month'] if recent else ""
+        if last_m:
+            yr, mo = int(last_m[:4]), int(last_m[5:7])
+            for i in range(1, 4):
+                mo2 = mo+i; yr2 = yr+(mo2-1)//12; mo2 = ((mo2-1)%12)+1
+                pred = max(0, round(intercept + slope*(n-1+i)))
+                forecast.append({"month": f"{yr2:04d}-{mo2:02d}", "predicted": pred})
+
+    # Hot spots last 6 months
+    hot_spots = [dict(r) for r in db.execute("""
+        SELECT location, country, COUNT(*) n,
+               SUM(CASE WHEN category IN ('Brandanschlag','Gewalt','Militante Aktion') THEN 1 ELSE 0 END) as high
+        FROM incidents
+        WHERE date >= date('now','-6 months')
+          AND location IS NOT NULL AND location NOT IN ('','Unbekannt','Unknown')
+        GROUP BY location, country ORDER BY n DESC LIMIT 8
+    """).fetchall()]
+
+    # Category trends: current 3m vs previous 3m
+    cat_curr = {r['category']: r['n'] for r in db.execute(
+        "SELECT category, COUNT(*) n FROM incidents WHERE date >= date('now','-3 months') GROUP BY category"
+    ).fetchall()}
+    cat_prev = {r['category']: r['n'] for r in db.execute(
+        "SELECT category, COUNT(*) n FROM incidents WHERE date >= date('now','-6 months') AND date < date('now','-3 months') GROUP BY category"
+    ).fetchall()}
+    cat_trends = []
+    for cat in CATEGORIES:
+        curr = cat_curr.get(cat, 0); prev = cat_prev.get(cat, 0)
+        if curr + prev > 0:
+            chg = round((curr-prev)/max(prev,1)*100)
+            cat_trends.append({"category": cat, "current": curr, "previous": prev, "change_pct": chg})
+    cat_trends.sort(key=lambda x: x['current'], reverse=True)
+
+    week_curr = db.execute("SELECT COUNT(*) FROM incidents WHERE date >= date('now','-7 days')").fetchone()[0]
+    week_prev = db.execute("SELECT COUNT(*) FROM incidents WHERE date >= date('now','-14 days') AND date < date('now','-7 days')").fetchone()[0]
+
+    return JSONResponse({
+        "monthly": months,
+        "forecast": forecast,
+        "trend_direction": "up" if slope > 0.1 else "down" if slope < -0.1 else "stable",
+        "slope": round(slope, 2),
+        "hot_spots": hot_spots,
+        "cat_trends": cat_trends,
+        "week_curr": week_curr,
+        "week_prev": week_prev,
+    })
 
 @app.get("/api/diagnose")
 async def diagnose():

@@ -29,33 +29,26 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 /* ── BOOT SCREEN ── */
 #boot{
   position:fixed;inset:0;z-index:9000;background:var(--bg);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
-  transition:opacity .4s ease;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  transition:opacity .5s ease;
 }
 #boot.fade{opacity:0;pointer-events:none;}
 #boot-logo{
-  font-family:var(--mono);font-size:28px;font-weight:700;letter-spacing:8px;
-  color:var(--accent);text-shadow:0 0 30px rgba(0,200,255,.45);
-  margin-bottom:10px;
+  font-family:var(--mono);font-size:32px;font-weight:700;letter-spacing:10px;
+  color:var(--accent);text-shadow:0 0 40px rgba(0,200,255,.5);
+  margin-bottom:12px;opacity:0;animation:bfadein .6s .1s ease forwards;
 }
 #boot-sub{
   font-family:var(--mono);font-size:9px;letter-spacing:3px;color:var(--t2);
-  margin-bottom:36px;
+  margin-bottom:44px;opacity:0;animation:bfadein .6s .4s ease forwards;
 }
-#boot-lines{
-  font-family:var(--mono);font-size:10px;color:var(--t1);
-  width:360px;min-height:116px;margin-bottom:24px;
-  display:flex;flex-direction:column;gap:6px;
+#boot-status{
+  font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--t2);
+  margin-bottom:16px;height:14px;opacity:0;animation:bfadein .4s .7s ease forwards;
 }
-.boot-line{
-  display:flex;gap:8px;align-items:center;opacity:0;
-  animation:bfade .22s ease forwards;
-}
-@keyframes bfade{to{opacity:1}}
-.boot-line .bl-pfx{color:var(--accent);flex-shrink:0;}
-.boot-line .bl-ok{color:var(--green);margin-left:auto;font-size:8px;letter-spacing:1px;}
-#boot-bar{width:360px;height:3px;background:rgba(0,200,255,0.12);border-radius:2px;overflow:hidden;}
-#boot-prog{height:100%;width:0%;background:var(--accent);border-radius:2px;transition:width .18s ease;}
+#boot-bar{width:280px;height:2px;background:rgba(0,200,255,0.1);border-radius:1px;overflow:hidden;opacity:0;animation:bfadein .4s .7s ease forwards;}
+#boot-prog{height:100%;width:0%;background:var(--accent);border-radius:1px;transition:width .12s linear;}
+@keyframes bfadein{to{opacity:1}}
 
 /* ── MAP ── */
 #map{position:fixed;inset:0;z-index:0;}
@@ -333,6 +326,13 @@ input[type=range]{width:100%;-webkit-appearance:none;height:2px;background:var(-
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--accent);border:2px solid var(--bg);cursor:pointer;}
 input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--accent);border:2px solid var(--bg);cursor:pointer;}
 
+/* ── TRENDS ── */
+.tspot{display:flex;align-items:center;gap:7px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;}
+.tspot:hover .dbar-hd{color:var(--t0);}
+.tcat-row{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.04);}
+.tcat-chg{font-family:var(--mono);font-size:8px;min-width:42px;text-align:right;flex-shrink:0;}
+#forecast-svg rect{transition:height .3s ease;}
+
 /* ── MOBILE RESPONSIVE ── */
 @media (max-width: 800px) {
   :root{--tbh:44px;--sbh:0px;}
@@ -379,9 +379,9 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;bac
 
 <!-- BOOT SCREEN -->
 <div id="boot">
-  <div id="boot-logo">◈ LEX EUROPE</div>
+  <div id="boot-logo">◈ &nbsp;LEX EUROPE</div>
   <div id="boot-sub">GEWALTBEREITER LINKSEXTREMISMUS // OSINT INTELLIGENCE</div>
-  <div id="boot-lines"></div>
+  <div id="boot-status">INITIALISIERUNG...</div>
   <div id="boot-bar"><div id="boot-prog"></div></div>
 </div>
 
@@ -427,7 +427,7 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;bac
     <div class="fsec">
       <span class="flbl">⌕ SUCHE</span>
       <div class="srch-w">
-        <span class="srch-ic">🔍</span>
+        <span class="srch-ic">⌕</span>
         <input class="finput srch-in" id="f-srch" type="search" placeholder="Stichwort…" oninput="debounce()">
       </div>
     </div>
@@ -496,6 +496,40 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;bac
       <div id="dist-ca" class="clist" style="margin-top:6px"></div>
     </div>
 
+    <hr class="sep">
+
+    <!-- Collapsible: TENDENZEN & PROGNOSE -->
+    <div id="trends-section">
+      <div class="fsec-hdr" onclick="toggleSec(this)"><span>▼ TENDENZEN & PROGNOSE</span><span class="fsec-arr">▼</span></div>
+      <div class="fsec-body" style="max-height:680px">
+        <div style="margin-top:8px">
+
+          <div class="stitle">ENTWICKLUNG · 7 TAGE</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <span id="trend-arrow" style="font-family:var(--mono);font-size:26px;color:var(--accent);line-height:1">—</span>
+            <div>
+              <div id="trend-label" style="font-family:var(--mono);font-size:10px;font-weight:600;color:var(--t0)">LADE...</div>
+              <div id="trend-detail" style="font-family:var(--mono);font-size:8px;color:var(--t2);margin-top:3px;line-height:1.5">—</div>
+            </div>
+          </div>
+
+          <div class="stitle" style="margin-bottom:5px">PROGNOSE · NÄCHSTE 3 MONATE</div>
+          <svg id="forecast-svg" viewBox="0 0 260 48" style="width:100%;height:48px;display:block"></svg>
+          <div style="display:flex;gap:14px;margin-top:4px;margin-bottom:13px">
+            <span style="font-family:var(--mono);font-size:7px;color:rgba(0,200,255,0.55)">■ HISTORISCH</span>
+            <span style="font-family:var(--mono);font-size:7px;color:rgba(240,165,0,0.75)">■ PROGNOSE</span>
+          </div>
+
+          <div class="stitle" style="margin-bottom:5px">HOTSPOTS · 6 MONATE</div>
+          <div id="trend-hotspots" style="margin-bottom:13px"></div>
+
+          <div class="stitle" style="margin-bottom:5px">KATEGORIEN · TREND</div>
+          <div id="trend-cats"></div>
+
+        </div>
+      </div>
+    </div>
+
   </div>
 </aside>
 
@@ -503,7 +537,7 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;bac
 <aside id="right">
   <div class="panel-handle"></div>
   <div class="phdr">
-    <span class="phdr-t">⚡ THREAT FEED</span>
+    <span class="phdr-t">THREAT FEED</span>
     <span class="phdr-n" id="rcount">—</span>
     <div class="sort-toggle" style="margin-left:auto">
       <button class="sort-btn on" id="sort-date" onclick="sortFeed('date')" title="Nach Datum">DATUM ↓</button>
@@ -528,7 +562,7 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;bac
     <hr class="det-divider">
     <div id="det-desc"></div>
     <div id="det-actions">
-      <button class="det-act" onclick="detFlyTo()">🗺 AUF KARTE</button>
+      <button class="det-act" onclick="detFlyTo()">AUF KARTE</button>
       <button class="det-act" onclick="detShare()">⎘ TEILEN</button>
     </div>
     <a id="det-src" href="#" target="_blank" rel="noopener"></a>
@@ -548,13 +582,16 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;bac
 <!-- MOBILE BOTTOM NAV -->
 <nav id="mobnav">
   <button class="mobbtn on" id="mobbtn-map" onclick="mobTab('map')">
-    <span class="mob-ico">🗺</span>KARTE
+    <span class="mob-ico">◉</span>KARTE
   </button>
   <button class="mobbtn" id="mobbtn-filter" onclick="mobTab('filter')">
-    <span class="mob-ico">🔍</span>FILTER
+    <span class="mob-ico">⌕</span>FILTER
   </button>
   <button class="mobbtn" id="mobbtn-feed" onclick="mobTab('feed')">
-    <span class="mob-ico">⚡</span>FEED
+    <span class="mob-ico">▶</span>FEED
+  </button>
+  <button class="mobbtn" id="mobbtn-trends" onclick="mobTab('trends')">
+    <span class="mob-ico">↗</span>PROGNOSE
   </button>
 </nav>
 
@@ -616,47 +653,32 @@ let feedSort='date';
 let detailItem=null;
 
 // ── BOOT SCREEN ────────────────────────────────────────────────────
-const BOOT_LINES=[
-  'DATENBANKVERBINDUNG…',
-  'RSS-QUELLEN GELADEN…',
-  'KLASSIFIZIERUNG AKTIV…',
-  'GEOKODIERUNG BEREIT…',
-  'KARTENRENDERER INITIALISIERT…',
-  'SYSTEM BEREIT.'
-];
-
 function runBoot(){
-  const container=document.getElementById('boot-lines');
   const prog=document.getElementById('boot-prog');
-  let i=0;
-  const step=()=>{
-    if(i>=BOOT_LINES.length){
-      prog.style.width='100%';
+  const status=document.getElementById('boot-status');
+  let p=0;
+  const iv=setInterval(()=>{
+    p+=5;prog.style.width=Math.min(p,94)+'%';
+    if(p>=94){clearInterval(iv);prog.style.width='100%';
+      status.textContent='BEREIT.';
       setTimeout(()=>{
         document.getElementById('boot').classList.add('fade');
-        setTimeout(()=>{
-          document.getElementById('boot').style.display='none';
-        },420);
-        loadData();
+        setTimeout(()=>document.getElementById('boot').style.display='none',520);
+        loadData();loadTrends();loadTimeline();
       },300);
-      return;
     }
-    const line=document.createElement('div');
-    line.className='boot-line';
-    const pfx=document.createElement('span');
-    pfx.className='bl-pfx';pfx.textContent='>';
-    const txt=document.createElement('span');
-    txt.textContent=BOOT_LINES[i];
-    const ok=document.createElement('span');
-    ok.className='bl-ok';ok.textContent='OK';
-    line.appendChild(pfx);line.appendChild(txt);
-    if(i<BOOT_LINES.length-1) line.appendChild(ok);
-    container.appendChild(line);
-    prog.style.width=Math.round((i+1)/BOOT_LINES.length*100)+'%';
-    i++;
-    setTimeout(step,200);
-  };
-  step();
+  },50);
+}
+
+// ── TEXT CLEANER ───────────────────────────────────────────────────
+function cleanDesc(s){
+  if(!s) return '';
+  // Remove indymedia navigation artifacts
+  s=s.replace(/Direkt zum Inhalt[\s\S]{0,800}?(?=[A-ZÜÄÖ][a-züäöA-ZÜÄÖ\s]{10,})/,'');
+  s=s.replace(/dont hate the media[\s\S]{0,400}?(?=\w{8,})/i,'');
+  s=s.replace(/\b(Openposting|Terminkalender|Gruppenstatements|Editorialliste|Linkliste|Mailinglisten|Moderation|Unterstützen|Outcall|Übersetzungskoordination|Mission Statement)\b/g,'');
+  s=s.replace(/\s{2,}/g,' ').trim();
+  return s;
 }
 
 // ── MAP INIT ───────────────────────────────────────────────────────
@@ -742,15 +764,14 @@ function openDetail(i){
   catEl.textContent=i.category.toUpperCase();
   catEl.style.color=c;
 
-  document.getElementById('det-loc').textContent=`📍 ${i.location||'—'}, ${i.country||'—'}`;
+  document.getElementById('det-loc').textContent=`${i.location||'—'} · ${i.country||'—'}`;
   document.getElementById('det-meta').innerHTML=
-    `📅 ${i.date||'—'}&nbsp;&nbsp;·&nbsp;&nbsp;${i.source||'—'}`+
-    `<br>SCHWERE: <span style="color:${c}">${s==='h'?'HOCH':s==='m'?'MITTEL':'NIEDRIG'}</span>`;
-  document.getElementById('det-desc').textContent=i.description||'Keine Beschreibung verfügbar.';
+    `${i.date||'—'}&nbsp;&nbsp;·&nbsp;&nbsp;SCHWERE: <span style="color:${c}">${s==='h'?'HOCH':s==='m'?'MITTEL':'NIEDRIG'}</span>`;
+  document.getElementById('det-desc').textContent=cleanDesc(i.description)||'Keine Beschreibung verfügbar.';
 
   const srcEl=document.getElementById('det-src');
   if(i.url&&i.url.startsWith('http')){
-    srcEl.href=i.url;srcEl.textContent='→ QUELLE AUFRUFEN';srcEl.style.display='block';
+    srcEl.href=i.url;srcEl.textContent='→ QUELLE';srcEl.style.display='inline-block';
   } else {
     srcEl.style.display='none';
   }
@@ -808,7 +829,8 @@ function renderFeed(list){
   const now=new Date();
   el.innerHTML=sorted.slice(0,300).map(i=>{
     const c=col(i.category),s=sev(i.category);
-    const d=(i.description||'').substring(0,130);
+    const raw=cleanDesc(i.description||'');
+    const d=raw.substring(0,130);
     const isNew=i.date&&(now-new Date(i.date))<7*24*3600*1000;
     const newBadge=isNew?'<span class="neu-badge">NEU</span>':'';
     return `<div class="icard" id="ic-${i.id}" onclick="openDetailById(${i.id})" style="border-left-color:${c}">
@@ -817,7 +839,7 @@ function renderFeed(list){
         ${newBadge}
         <span class="idate">${i.date||'—'}</span>
       </div>
-      <div class="iloc">📍 ${i.location||'—'} · <span style="opacity:.6">${i.country||'—'}</span></div>
+      <div class="iloc">${i.location||'—'} · <span style="opacity:.6">${i.country||'—'}</span></div>
       <div class="idesc">${d}${d.length>=130?'…':''}</div>
     </div>`;
   }).join('');
@@ -851,10 +873,10 @@ function renderChips(){
   const q=document.getElementById('f-srch').value.trim();
   const chips=[];
   if(co) chips.push(`<span class="chip-tag">${CO_FLAG[co]||''} ${co} <button onclick="clearChip('co')">✕</button></span>`);
-  if(ca) chips.push(`<span class="chip-tag">⚡ ${ca} <button onclick="clearChip('ca')">✕</button></span>`);
-  if(von) chips.push(`<span class="chip-tag">↑ ${von} <button onclick="clearChip('von')">✕</button></span>`);
-  if(bis) chips.push(`<span class="chip-tag">↓ ${bis} <button onclick="clearChip('bis')">✕</button></span>`);
-  if(q) chips.push(`<span class="chip-tag">🔍 ${q.substring(0,16)} <button onclick="clearChip('srch')">✕</button></span>`);
+  if(ca) chips.push(`<span class="chip-tag">${ca} <button onclick="clearChip('ca')">✕</button></span>`);
+  if(von) chips.push(`<span class="chip-tag">AB ${von} <button onclick="clearChip('von')">✕</button></span>`);
+  if(bis) chips.push(`<span class="chip-tag">BIS ${bis} <button onclick="clearChip('bis')">✕</button></span>`);
+  if(q) chips.push(`<span class="chip-tag">SUCHE: ${q.substring(0,16)} <button onclick="clearChip('srch')">✕</button></span>`);
   document.getElementById('active-chips').innerHTML=chips.join('');
 }
 
@@ -1015,7 +1037,7 @@ function decodeURL(){
 }
 
 function copyLink(){
-  navigator.clipboard.writeText(location.href).then(()=>showToast('🔗 Link kopiert'));
+  navigator.clipboard.writeText(location.href).then(()=>showToast('LINK KOPIERT'));
 }
 
 // ── LAYER TOGGLE ───────────────────────────────────────────────────
@@ -1026,7 +1048,7 @@ function toggleLayer(){
   tileL.setZIndex(0);
   const btn=document.getElementById('btn-layer');
   if(btn) btn.classList.toggle('on',!darkLayer);
-  showToast(darkLayer?'🌑 Dark Map':'☀️ Light Map');
+  showToast(darkLayer?'DARK MAP':'LIGHT MAP');
 }
 
 // ── HEAT TOGGLE ────────────────────────────────────────────────────
@@ -1034,7 +1056,7 @@ function toggleHeat(){
   heatMode=!heatMode;
   document.getElementById('btn-heat').classList.toggle('on',heatMode);
   renderMarkers(vis);
-  showToast(heatMode?'🔥 Heatmap aktiv':'📍 Marker aktiv');
+  showToast(heatMode?'HEATMAP AKTIV':'MARKER AKTIV');
 }
 
 // ── MOBILE TABS ────────────────────────────────────────────────────
@@ -1042,10 +1064,17 @@ let mobActive='map';
 function mobTab(tab){
   mobActive=tab;
   document.querySelectorAll('.mobbtn').forEach(b=>b.classList.remove('on'));
-  document.getElementById(`mobbtn-${tab}`).classList.add('on');
-  document.getElementById('left').classList.toggle('mob-open',tab==='filter');
+  const btn=document.getElementById(`mobbtn-${tab}`);
+  if(btn) btn.classList.add('on');
+  document.getElementById('left').classList.toggle('mob-open',tab==='filter'||tab==='trends');
   document.getElementById('right').classList.toggle('mob-open',tab==='feed');
   if(tab!=='feed') closeDetail();
+  if(tab==='trends'){
+    setTimeout(()=>{
+      const el=document.getElementById('trends-section');
+      if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
+    },120);
+  }
 }
 
 // ── COMMAND PALETTE ────────────────────────────────────────────────
@@ -1188,6 +1217,99 @@ async function loadData(){
     const sc=document.getElementById('s-cr');if(sc)sc.textContent=stats.crawl_running?'⟳ AKTIV':'● BEREIT';
     applyFilters();
   }catch(e){console.error(e);}
+}
+
+// ── TRENDS ─────────────────────────────────────────────────────────
+async function loadTrends(){
+  try{
+    const d=await fetch('/api/trends').then(r=>r.json());
+    renderTrends(d);
+  }catch(e){console.error('trends:',e);}
+}
+
+function renderTrends(d){
+  // Trend direction
+  const arrow=document.getElementById('trend-arrow');
+  const lbl=document.getElementById('trend-label');
+  const det=document.getElementById('trend-detail');
+  if(arrow&&lbl&&det){
+    const dir=d.trend_direction;
+    if(dir==='up'){
+      arrow.textContent='↑';arrow.style.color='var(--red)';
+      lbl.textContent='ANSTEIGEND';lbl.style.color='var(--red)';
+    } else if(dir==='down'){
+      arrow.textContent='↓';arrow.style.color='var(--green)';
+      lbl.textContent='RÜCKLÄUFIG';lbl.style.color='var(--green)';
+    } else {
+      arrow.textContent='→';arrow.style.color='var(--accent)';
+      lbl.textContent='STABIL';lbl.style.color='var(--accent)';
+    }
+    const wk=d.week_curr||0,pw=d.week_prev||0;
+    const wkChg=pw>0?Math.round((wk-pw)/pw*100):0;
+    det.textContent=`${wk} VORFÄLLE · LETZTE 7T · ${wkChg>=0?'+':''}${wkChg}% GGÜ. VORWOCHE`;
+  }
+
+  // Forecast SVG chart
+  const svg=document.getElementById('forecast-svg');
+  if(svg&&d.monthly&&d.forecast){
+    const hist=d.monthly.slice(-9);
+    const fcast=(d.forecast||[]).slice(0,3);
+    const allData=[...hist,...fcast];
+    const W=260,H=48;
+    const bw=W/Math.max(allData.length,1);
+    const mx=Math.max(...allData.map(x=>x.n||x.predicted||0),1);
+    let bars='';
+    hist.forEach((m,i)=>{
+      const h=Math.max(2,Math.round((m.n||0)/mx*(H-6)));
+      const c=(m.high||0)>0?'rgba(255,51,85,0.65)':'rgba(0,200,255,0.42)';
+      bars+=`<rect x="${i*bw}" y="${H-h}" width="${Math.max(bw-1,1)}" height="${h}" fill="${c}" rx="1"/>`;
+    });
+    fcast.forEach((m,i)=>{
+      const h=Math.max(2,Math.round((m.predicted||0)/mx*(H-6)));
+      bars+=`<rect x="${(hist.length+i)*bw}" y="${H-h}" width="${Math.max(bw-1,1)}" height="${h}" fill="rgba(240,165,0,0.55)" rx="1" stroke="rgba(240,165,0,0.35)" stroke-width="0.8"/>`;
+      if(h>10) bars+=`<text x="${(hist.length+i)*bw+bw/2}" y="${H-h-2}" text-anchor="middle" fill="#f0a500" font-size="5" font-family="JetBrains Mono,monospace">${m.predicted}</text>`;
+    });
+    svg.innerHTML=bars;
+  }
+
+  // Hot spots
+  const hs=document.getElementById('trend-hotspots');
+  if(hs&&d.hot_spots&&d.hot_spots.length){
+    const mx=Math.max(...d.hot_spots.map(s=>s.n),1);
+    hs.innerHTML=d.hot_spots.slice(0,6).map(s=>{
+      const clr=CO_COL[s.country]||'#5a7a92';
+      const w=Math.round(s.n/mx*100);
+      return `<div class="dbar tspot" onclick="filterLoc('${s.location.replace(/'/g,"\\'")}')">
+        <div class="dbar-hd"><span>${CO_FLAG[s.country]||''} ${s.location}</span><span class="dbar-n">${s.n}</span></div>
+        <div class="dbar-track"><div class="dbar-fill" style="width:${w}%;background:${clr}"></div></div>
+      </div>`;
+    }).join('');
+  } else if(hs){
+    hs.innerHTML='<div style="font-family:var(--mono);font-size:9px;color:var(--t2);opacity:.5">Keine Daten verfügbar</div>';
+  }
+
+  // Category trends
+  const ct=document.getElementById('trend-cats');
+  if(ct&&d.cat_trends&&d.cat_trends.length){
+    ct.innerHTML=d.cat_trends.slice(0,9).map(c=>{
+      const clr=col(c.category);
+      const chg=c.change_pct||0;
+      const chgColor=chg>20?'var(--red)':chg>5?'var(--amber)':chg<-10?'var(--green)':'var(--t2)';
+      const arrow=chg>5?'↑':chg<-5?'↓':'→';
+      return `<div class="tcat-row">
+        <div class="cdot" style="background:${clr}"></div>
+        <span style="font-family:var(--mono);font-size:9px;color:var(--t1);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.category}</span>
+        <span style="font-family:var(--mono);font-size:9px;color:var(--t2)">${c.current}</span>
+        <span class="tcat-chg" style="color:${chgColor}">${arrow} ${chg>0?'+':''}${chg}%</span>
+      </div>`;
+    }).join('');
+  }
+}
+
+function filterLoc(loc){
+  document.getElementById('f-srch').value=loc;
+  applyFilters();
+  if(window.innerWidth<=800) mobTab('filter');
 }
 
 // ── INIT ───────────────────────────────────────────────────────────
