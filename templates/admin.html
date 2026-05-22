@@ -166,7 +166,7 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
     <span class="tb-icon">◈</span>
     <div>
       <div class="tb-name">LEX EUROPE</div>
-      <div class="tb-sub">GEWALTBEREITER LINKSEXTREMISMUS</div>
+      <div class="tb-sub">Administration · Datenpflege · Quellen-Validierung</div>
     </div>
   </div>
   <span class="tb-badge">ADMINISTRATION</span>
@@ -438,8 +438,14 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
         <input type="url" id="fnd-f-source-url" placeholder="https://… (Bundesanzeiger, Transparenzportal, Förderübersicht)">
       </div>
       <div class="field full">
-        <label>NOTIZEN (OPTIONAL)</label>
-        <textarea id="fnd-f-notes" placeholder="Kontext, Herkunft der Schätzung, Verwendung der Mittel…"></textarea>
+        <label>VERBINDUNGSNACHWEIS (PFLICHT)</label>
+        <textarea id="fnd-f-notes" rows="4" placeholder="Welcher Verfassungsschutzbericht nennt die Organisation? Welches Aktenzeichen? Welche §-Konstellation? Welche Primärquelle belegt den Betrag? Ohne belastbare Begründung wird der Eintrag nicht aufgenommen."></textarea>
+        <div style="font-size:10px;color:var(--t2);margin-top:6px;line-height:1.5">
+          ⚠ Aufnahmekriterien: (a) Nennung in BfV/LfV/DSN/NDB-Bericht, ODER
+          (b) laufendes §§ 129/129a-Verfahren, ODER (c) dokumentierte
+          juristische/finanzielle Infrastruktur für militante Straftäter. Allgemeine
+          zivilgesellschaftliche Organisationen gehören NICHT in diese Datenbank.
+        </div>
       </div>
     </div>
     <div class="brow" style="margin-top:12px">
@@ -688,6 +694,14 @@ async function submitFunding(){
   };
   if(!data.recipient_org||!data.donor_name||isNaN(data.amount)||isNaN(data.year)){
     toast('PFLICHTFELDER FEHLEN');
+    return;
+  }
+  if(!data.source_url){
+    toast('QUELLE-URL FEHLT — KEIN EINTRAG OHNE PRIMÄRQUELLE');
+    return;
+  }
+  if(!data.notes || data.notes.length < 40){
+    toast('VERBINDUNGSNACHWEIS FEHLT (min. 40 Zeichen — VS-Bericht/Aktenzeichen nennen)');
     return;
   }
   try{

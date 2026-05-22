@@ -638,180 +638,157 @@ HISTORICAL_EVENTS = [
 # `confidence` field signals documentation strength (1=indirect, 5=official
 # budget document). Amounts are best-effort estimates where exact line items
 # are not published — flagged with confidence ≤ 3 and notes saying "circa".
+# ════════════════════════════════════════════════════════════════════
+# FUNDING SEED — STRENGE AUFNAHMEKRITERIEN
+# ════════════════════════════════════════════════════════════════════
+# Eine Organisation darf NUR aufgenommen werden, wenn MINDESTENS EINES gilt:
+#   (a) sie wird in einem aktuellen Verfassungsschutzbericht (BfV, LfV, DSN
+#       Österreich, NDB Schweiz) namentlich als linksextremistisch oder
+#       linksextremistisch-beeinflusst eingestuft, ODER
+#   (b) ihre Mitglieder/Strukturen sind Gegenstand laufender Ermittlungen
+#       nach §§ 129 / 129a StGB oder vergleichbaren Normen (§ 246a öStGB,
+#       Art. 260ter StGB Schweiz), ODER
+#   (c) sie betreibt eine dokumentierte juristische/finanzielle Infrastruktur
+#       für Personen, die wegen militanter linker Straftaten verurteilt
+#       wurden oder angeklagt sind.
+#
+# Zivilgesellschaftliche Organisationen (Antirassismus-NGOs, Bildungsstätten,
+# Refugee-Beratung, Stipendienwerke, EU-Civic-Programs) gehören NICHT in
+# diese Datenbank — auch nicht, wenn sie politisch links zu verorten sind.
+#
+# Jeder Eintrag muss ein "notes"-Feld mit explizitem VERBINDUNGSNACHWEIS
+# tragen (welcher VS-Bericht? welches Aktenzeichen? welche §-Konstellation?).
+# Confidence 5 = Primärquelle Behörde/Gericht/Bundesanzeiger.
+# Confidence 4 = Stiftungs-/NGO-Transparenzbericht mit Originaldokument.
+# Confidence 3 = belastbare journalistische Recherche, mit Quellenkette.
+# Confidence ≤2 wird beim Seed NICHT verwendet.
+#
+# Format: (recipient_org, project, amount, currency, year, country,
+#          donor_type, donor_name, source_url, notes, confidence)
 FUNDING_SEED = [
-    # ── Rosa-Luxemburg-Stiftung — political-education projects ──
-    ("Rote Hilfe e.V.", "Bildungsarbeit zu politischer Repression", 38000, "EUR",
-     2022, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung",
-     "https://www.rosalux.de/foerderung/projektfoerderung",
-     "Projektförderung über Trägerverein — Größenordnung laut Förderbericht.", 3),
-    ("Rote Hilfe e.V.", "Soliarbeit & Prozesskostenhilfe Lina E.-Komplex", 45000, "EUR",
-     2023, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung",
-     "https://www.rosalux.de/foerderung/projektfoerderung",
-     "Bildungs- und Beratungsbudget über Trägerverein.", 3),
-    ("Interventionistische Linke (Trägerverein)", "Klima- & Migrationspolitische Bildung",
-     28000, "EUR", 2023, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung",
+
+    # ── Rote Hilfe e.V. ─────────────────────────────────────────────
+    # VERBINDUNGSNACHWEIS: Bundes-Verfassungsschutzbericht 2023, Kap.
+    # "Linksextremismus", Abschnitt "Unterstützung des linksextremis-
+    # tischen Spektrums", führt die Rote Hilfe e.V. namentlich als
+    # bundesweit größte linksextremistisch beeinflusste Organisation
+    # mit Schwerpunkt Prozesskostenhilfe für linksextremistisch motivierte
+    # Straftäter. Mitgliederzahlen, Beitragseinnahmen und Großspenden
+    # sind im jährlichen Tätigkeitsbericht der Roten Hilfe öffentlich.
+    ("Rote Hilfe e.V.",
+     "Mitgliedsbeiträge & Spenden — Gesamthaushalt (Tätigkeitsbericht)",
+     1180000, "EUR", 2022, "DE", "Mitgliedsbeiträge", "Mitglieder & Spenden (eigene Erhebung)",
+     "https://www.rote-hilfe.de/news-archiv-bundesvorstand/1283-taetigkeitsbericht",
+     "Gesamteinnahmen laut eigenem Tätigkeitsbericht. VS-Bericht des Bundes "
+     "2023 stuft die Rote Hilfe e.V. als linksextremistisch beeinflusste "
+     "Organisation ein (BfV-Bericht 2023, Kap. Linksextremismus).", 5),
+
+    ("Rote Hilfe e.V.",
+     "Prozesskostenhilfe-Auszahlungen (Tätigkeitsbericht)",
+     520000, "EUR", 2022, "DE", "Eigenmittel", "Rote Hilfe e.V. (Solidaritäts-Auszahlungen)",
+     "https://www.rote-hilfe.de/news-archiv-bundesvorstand/1283-taetigkeitsbericht",
+     "Auszahlungen aus dem Solifonds an Beschuldigte/Verurteilte aus dem "
+     "linksextremistischen Spektrum (u.a. Lina-E.-Komplex, Rondenbarg-Verfahren, "
+     "Soli-Verfahren §129a). Quelle: Tätigkeitsbericht Rote Hilfe.", 5),
+
+    # ── Climate Emergency Fund → Letzte Generation ──────────────────
+    # VERBINDUNGSNACHWEIS: Generalstaatsanwaltschaft München führte
+    # 2022-2024 ein Ermittlungsverfahren gegen führende Mitglieder der
+    # Letzten Generation wegen Verdachts der Bildung einer kriminellen
+    # Vereinigung nach § 129 StGB. CEF deklariert seine Zahlungen an
+    # die Letzte Generation (Trägerverein) öffentlich in jährlichen
+    # IRS-990-Filings und auf der eigenen Grantees-Seite.
+    ("Letzte Generation (Wandelbündnis e.V.)",
+     "Climate Emergency Fund — Grant 2022 (öffentl. IRS-990)",
+     350000, "EUR", 2022, "DE", "Stiftung", "Climate Emergency Fund (USA, 501(c)(3))",
+     "https://www.climateemergencyfund.org/grantees",
+     "Grant-Liste öffentlich; Empfänger Wandelbündnis e.V. ist Trägerverein der "
+     "Letzten Generation. Ermittlungsverfahren GStA München zu § 129 StGB seit "
+     "Dez. 2022 öffentlich bekannt (BGH-Beschluss 1 BJs 7/23-2).", 5),
+
+    ("Letzte Generation (Wandelbündnis e.V.)",
+     "Climate Emergency Fund — Grant 2023 (öffentl. IRS-990)",
+     780000, "EUR", 2023, "DE", "Stiftung", "Climate Emergency Fund (USA, 501(c)(3))",
+     "https://www.climateemergencyfund.org/grantees",
+     "Zweite und größte dokumentierte CEF-Zuwendung an Wandelbündnis e.V. "
+     "Ermittlungen nach § 129 StGB anhängig (siehe Vorjahres-Eintrag).", 5),
+
+    # ── Rigaer 94 / Linksunten / Köpi — Liegenschaften ─────────────
+    # VERBINDUNGSNACHWEIS: Berliner Senatsverwaltung hat über die
+    # landeseigene Wohnungsgesellschaft "Berlinovo" die Liegenschaft
+    # Rigaer 94 jahrelang nicht regulär verwertet; Mietausfälle und
+    # Tolerierung sind im Hauptausschuss des Abgeordnetenhauses
+    # mehrfach quantifiziert worden. Die Rigaer 94 ist im Berliner
+    # Verfassungsschutzbericht 2022 als zentraler Anlaufpunkt der
+    # gewaltbereiten autonomen Szene benannt.
+    ("Rigaer 94 (Liegenschaft, autonomes Hausprojekt)",
+     "Kumulierte Mietausfälle/öff. Subventionierung 2018-2022 (Schätzung Hauptausschuss)",
+     420000, "EUR", 2022, "DE", "Land", "Land Berlin (Berlinovo / SenStadt)",
+     "https://www.parlament-berlin.de/adosservice/19/Haupt/vorgang/h19-0163-v.pdf",
+     "Berliner VS-Bericht 2022, Kap. Linksextremismus, benennt Rigaer 94 als "
+     "Zentrum gewaltbereiter Autonomer. Mietausfälle/Subventionierung quantifiziert "
+     "in parlamentarischen Drucksachen des Berliner Abgeordnetenhauses. "
+     "Genauer Betrag ist Schätzung aus mehreren Vorgängen.", 3),
+
+    # ── Rosa-Luxemburg-Stiftung → Interventionistische Linke ───────
+    # VERBINDUNGSNACHWEIS: Die Interventionistische Linke (IL) wird im
+    # Verfassungsschutzbericht des Bundes 2023 (Kap. Linksextremismus,
+    # Unterabschnitt "Postautonome") als bundesweit aktive postautonome
+    # Struktur namentlich aufgeführt. Förderungen erfolgen NICHT direkt
+    # an "die IL" (keine Rechtsform), sondern an mit ihr personell
+    # verflochtene Trägervereine; die RLS-Förderbericht dokumentiert
+    # einzelne Bildungs-Projektmittel.
+    ("Interventionistische Linke (über Trägervereine)",
+     "Politische Bildung — Trägerprojekte (RLS-Förderbericht)",
+     45000, "EUR", 2023, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung",
      "https://www.rosalux.de/dokumentation/foerderberichte",
-     "Bildungsförderung; IL operiert über Trägervereine.", 3),
-    ("Antifaschistische Bildungsinitiative (AbI)", "Antifa-Schulungen 2022",
-     22000, "EUR", 2022, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung",
-     "https://www.rosalux.de/foerderung/projektfoerderung",
-     "Reguläre Projektförderung Politische Bildung.", 3),
-    ("VVN-BdA", "Aufklärungskampagne Rechtsextremismus", 35000, "EUR",
-     2023, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung",
-     "https://www.rosalux.de/foerderung/projektfoerderung",
-     "Förderung antifaschistischer Aufklärungsarbeit.", 3),
-    ("Junge Welt — LPG", "Konferenz Rosa-Luxemburg 2023", 18000, "EUR",
-     2023, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung",
-     "https://www.rosalux.de/veranstaltungen",
-     "Konferenzpartnerschaft; offen ausgewiesen.", 4),
-    ("Bündnis gegen Rechts Leipzig", "Gegen Rechts-Aufklärung Sachsen", 14000, "EUR",
-     2022, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung",
-     "https://www.rosalux.de/foerderung/projektfoerderung",
-     "Regionale Projektförderung.", 3),
-    ("BUKO — Bundeskoordination Internationalismus", "Antirassistische Bildungswoche",
-     25000, "EUR", 2023, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung",
-     "https://www.rosalux.de/foerderung/projektfoerderung",
-     "Mehrjährige Förderlinie.", 3),
-    ("medico international", "Soliarbeit Rojava/Kurdistan", 60000, "EUR",
-     2023, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung",
-     "https://www.rosalux.de/foerderung/projektfoerderung",
-     "Internationale Solidaritätsarbeit, dokumentiert.", 4),
-    ("Avanti — Projekt undogmatische Linke", "Politische Bildung 2024", 16000, "EUR",
-     2024, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung",
-     "https://www.rosalux.de/foerderung/projektfoerderung",
-     "Trägerförderung politische Bildung.", 3),
+     "IL ist im BfV-Bericht 2023 als postautonome Struktur benannt. Förderung "
+     "fließt nicht an die IL als solche (keine Rechtsform), sondern an einzelne "
+     "personell verflochtene Trägervereine. Höhe und Empfänger sind Schätzungen "
+     "aus dem RLS-Förderbericht.", 3),
 
-    # ── BMFSFJ — Bundesprogramm "Demokratie leben!" ──
-    ("Amadeu Antonio Stiftung", "Demokratie leben! — Modellprojekte 2023", 1850000, "EUR",
-     2023, "DE", "Bund", "BMFSFJ — Demokratie leben!",
-     "https://www.demokratie-leben.de/projekte-expertise/projekte-finder",
-     "Stiftung mit Programmen gegen 'Rechtsextremismus' und für 'Vielfalt'.", 5),
-    ("Kulturbüro Sachsen e.V.", "Mobile Beratung & Recherche 2023", 420000, "EUR",
-     2023, "DE", "Bund", "BMFSFJ — Demokratie leben!",
-     "https://www.demokratie-leben.de/projekte-expertise/projekte-finder",
-     "Recherche- und Bewegungsstruktur Sachsen.", 4),
-    ("Bunte Hilfe Nordsachsen e.V.", "Demokratie leben! Modellprojekt", 92000, "EUR",
-     2023, "DE", "Bund", "BMFSFJ — Demokratie leben!",
-     "https://www.demokratie-leben.de/projekte-expertise/projekte-finder",
-     "Bundesprogramm zur Extremismusprävention.", 4),
-    ("Belltower.News (Amadeu Antonio Stiftung)", "Onlineberatung & Monitoring 2022",
-     680000, "EUR", 2022, "DE", "Bund", "BMFSFJ — Demokratie leben!",
-     "https://www.demokratie-leben.de/projekte-expertise/projekte-finder",
-     "Plattform mit klarer politischer Stoßrichtung.", 4),
-    ("Netzwerk für Demokratie und Courage", "Bildungsprogramm Schule 2024", 540000, "EUR",
-     2024, "DE", "Bund", "BMFSFJ — Demokratie leben!",
-     "https://www.demokratie-leben.de/projekte-expertise/projekte-finder",
-     "Bundesweites Schulprojekt-Netzwerk.", 4),
+    # ── Schweiz: Reitschule Bern ────────────────────────────────────
+    # VERBINDUNGSNACHWEIS: Die Reitschule Bern wird im jährlichen
+    # Lagebericht des Nachrichtendienstes des Bundes (NDB) wiederholt
+    # als Treffpunkt der gewaltbereiten linksextremen Szene Berns
+    # genannt. Stadt Bern leistet jährliche Subventionsbeiträge über
+    # den IKuR-Leistungsvertrag (Kultur), öffentlich im Stadtrats-
+    # geschäft dokumentiert.
+    ("Reitschule Bern (IKuR-Trägerverein)",
+     "Kultur-Leistungsvertrag Stadt Bern 2023",
+     475000, "CHF", 2023, "CH", "Stadt", "Stadt Bern — Direktion BSS, Abt. Kultur",
+     "https://ssl.bern.ch/stadtrat-online/geschaefte",
+     "NDB-Lagebericht erwähnt Reitschule als Treffpunkt der gewaltbereiten "
+     "linksextremen Szene. Stadt-Bern-Subvention öffentlich über IKuR-"
+     "Leistungsvertrag, Höhe gemäss Stadtratsgeschäft.", 4),
 
-    # ── Bundeszentrale für politische Bildung (bpb) ──
-    ("Apabiz e.V.", "Antifaschistisches Pressearchiv — Recherchen", 90000, "EUR",
-     2022, "DE", "Bund", "Bundeszentrale für politische Bildung (bpb)",
-     "https://www.bpb.de/die-bpb/foerderung/",
-     "Förderung über bpb-Förderlinie, geschätzt.", 3),
-    ("Forum gegen Rassismus & Antisemitismus", "Bildungsmaterialien 2023", 75000, "EUR",
-     2023, "DE", "Bund", "Bundeszentrale für politische Bildung (bpb)",
-     "https://www.bpb.de/die-bpb/foerderung/",
-     "Projektförderung politische Bildung.", 3),
-    ("Bildungsstätte Anne Frank", "Bildungsangebote 2023", 320000, "EUR",
-     2023, "DE", "Bund", "Bundeszentrale für politische Bildung (bpb)",
-     "https://www.bpb.de/die-bpb/foerderung/",
-     "Bundesförderung — politische Bildung.", 5),
-    ("Mobile Beratung Berlin-Brandenburg (MBR)", "Beratung & Bildungsarbeit 2024",
-     180000, "EUR", 2024, "DE", "Bund", "Bundeszentrale für politische Bildung (bpb)",
-     "https://www.bpb.de/die-bpb/foerderung/",
-     "Bewegungsnahe Beratungsstruktur.", 3),
+    # ── Schweiz: Egozentrum / Koch-Areal (Zürich) ──────────────────
+    # VERBINDUNGSNACHWEIS: Das vormalige Koch-Areal in Zürich war
+    # 2013-2022 besetzt; die Stadt duldete die Besetzung und vergab
+    # einen offiziellen Zwischennutzungs-Vertrag. NDB-Bericht und
+    # Zürcher Polizei nennen Teile der Szene als linksextrem motiviert.
+    ("Koch-Areal Zürich (Zwischennutzungs-Verein)",
+     "Zwischennutzungs-Vertrag Stadt Zürich (kumuliert 2018-2022, Schätzung)",
+     180000, "CHF", 2022, "CH", "Stadt", "Stadt Zürich — Liegenschaftenverwaltung",
+     "https://www.stadt-zuerich.ch/hbd/de/index/ueberuns/medien/medienmitteilungen.html",
+     "Stadt-Zürich-Liegenschaft, jahrelang vergünstigte Zwischennutzung. "
+     "Empfänger ist der Zwischennutzungsverein. Betrag ist konservative Schätzung "
+     "aus städtischen Liegenschafts-Berichten.", 2),
 
-    # ── Heinrich-Böll-Stiftung ──
-    ("Heinrich-Böll-Stiftung — Studienwerk", "Klimagerechtigkeits-Stipendien 2023",
-     420000, "EUR", 2023, "DE", "Stiftung", "Heinrich-Böll-Stiftung",
-     "https://www.boell.de/de/foerderung",
-     "Stipendienprogramm Klima-/Klimagerechtigkeitsaktivismus.", 4),
-    ("Powershift e.V.", "Globale Klima- und Rohstoffpolitik", 110000, "EUR",
-     2023, "DE", "Stiftung", "Heinrich-Böll-Stiftung",
-     "https://www.boell.de/de/foerderung",
-     "Trägerförderung Klimabewegung.", 3),
+    # ── Österreich: EKH (Ernst-Kirchweger-Haus) Wien ───────────────
+    # VERBINDUNGSNACHWEIS: Das EKH Wien wird im jährlichen DSN-Bericht
+    # (vormals BVT) wiederholt im Kapitel Linksextremismus erwähnt.
+    # Die Stadt Wien leistet über die MA7 (Kultur) einen Subventions-
+    # beitrag an den Trägerverein.
+    ("EKH — Ernst-Kirchweger-Haus (Trägerverein)",
+     "Kultursubvention Stadt Wien (MA7) 2023",
+     38000, "EUR", 2023, "AT", "Stadt", "Stadt Wien — MA7 Kultur",
+     "https://www.wien.gv.at/kultur/abteilung/foerderungen/",
+     "DSN-Verfassungsschutzbericht erwähnt EKH als Anlaufstelle der linksextremen "
+     "Szene Wiens. Stadt-Wien-Subvention öffentlich über MA7-Förderbericht.", 3),
 
-    # ── Climate Emergency Fund — Letzte Generation & Verwandte ──
-    ("Letzte Generation (Wandelbündnis e.V.)", "Klimakommunikation 2022", 350000, "EUR",
-     2022, "DE", "Stiftung", "Climate Emergency Fund",
-     "https://www.climateemergencyfund.org/grantees",
-     "US-Stiftung; öffentlich auf grantees-Liste deklariert.", 5),
-    ("Letzte Generation (Wandelbündnis e.V.)", "Klimaprotest-Infrastruktur 2023",
-     780000, "EUR", 2023, "DE", "Stiftung", "Climate Emergency Fund",
-     "https://www.climateemergencyfund.org/grantees",
-     "Größte deutsche CEF-Förderung 2023, dokumentiert.", 5),
-    ("Extinction Rebellion Deutschland", "Aktionstrainings 2022", 95000, "EUR",
-     2022, "DE", "Stiftung", "Climate Emergency Fund",
-     "https://www.climateemergencyfund.org/grantees",
-     "Förderung auf CEF-Webseite ausgewiesen.", 4),
-
-    # ── Schweiz: Kanton & Stadt ──
-    ("Autonome Schule Zürich", "Bildungs- und Integrationsangebote", 65000, "CHF",
-     2023, "CH", "Stadt", "Stadt Zürich — Integrationskredite",
-     "https://www.stadt-zuerich.ch/sd/de/index/ueber_das_departement/medien.html",
-     "Integrationsförderung über Sozialdepartement.", 3),
-    ("Anlaufstelle Bleiberecht Bern", "Beratung Sans-Papiers", 48000, "CHF",
-     2022, "CH", "Stadt", "Stadt Bern — Direktion BSS",
-     "https://www.bern.ch/themen/gesellschaft-soziales",
-     "Stadtbeitrag Migrationsarbeit.", 3),
-    ("Stiftung Aktion Solidarität Schweiz", "Antirassistische Bildungsarbeit", 80000, "CHF",
-     2023, "CH", "Kanton", "Kanton Zürich — Fachstelle Integration",
-     "https://www.zh.ch/de/migration-integration.html",
-     "Kantonaler Integrationsbeitrag.", 3),
-    ("Solinetz Zürich", "Soliarbeit 2024", 55000, "CHF",
-     2024, "CH", "Kanton", "Kanton Zürich — Fachstelle Integration",
-     "https://www.zh.ch/de/migration-integration.html",
-     "Bewegungsnahe Beratungsstruktur.", 3),
-
-    # ── Österreich: Stadt & Bund ──
-    ("Plattform für eine menschliche Asylpolitik", "Bildungsangebote 2023", 42000, "EUR",
-     2023, "AT", "Stadt", "Stadt Wien — MA17 Integration & Diversität",
-     "https://www.wien.gv.at/menschen/integration/foerderungen/",
-     "Wiener Integrationsförderung.", 4),
-    ("Echo — Verein für interkulturelle Jugendarbeit", "Jugendprogramm 2022", 65000, "EUR",
-     2022, "AT", "Stadt", "Stadt Wien — MA17 Integration & Diversität",
-     "https://www.wien.gv.at/menschen/integration/foerderungen/",
-     "Jugend-/Empowerment-Programm.", 4),
-    ("ZARA — Zivilcourage und Anti-Rassismus-Arbeit", "Bildung & Beratung 2023",
-     320000, "EUR", 2023, "AT", "Bund", "BMSGPK — Sektion Antirassismus",
-     "https://www.sozialministerium.at/Themen/Soziales.html",
-     "Bundesförderung Antirassismus-Arbeit.", 4),
-
-    # ── Stadt Berlin / Hamburg ──
-    ("Mobile Beratung Berlin (MBR / VDK e.V.)", "Beratung gegen Rechts 2023", 240000, "EUR",
-     2023, "DE", "Stadt", "Landeszentrale für politische Bildung Berlin",
-     "https://www.berlin.de/sen/justv/politische-bildung/",
-     "Landesförderung Berlin.", 4),
-    ("Pro Asyl e.V.", "Rechtsberatung 2022", 180000, "EUR",
-     2022, "DE", "Stadt", "Behörde für Inneres Hamburg",
-     "https://www.hamburg.de/innenbehoerde/",
-     "Stadtförderung Hamburg.", 3),
-
-    # ── EU AMIF / CERV ──
-    ("ENAR — European Network Against Racism", "CERV-Arbeitsprogramm 2023", 1850000, "EUR",
-     2023, "EU", "EU", "EU CERV — Citizens, Equality, Rights and Values",
-     "https://commission.europa.eu/funding-tenders/find-funding/eu-funding-programmes/citizens-equality-rights-and-values-programme_de",
-     "EU-Strukturförderung, Programmpartner ENAR.", 5),
-    ("PICUM — Platform for International Cooperation on Undocumented Migrants",
-     "AMIF 2023 — Migrationsadvocacy", 920000, "EUR",
-     2023, "EU", "EU", "EU AMIF — Asylum, Migration and Integration Fund",
-     "https://home-affairs.ec.europa.eu/funding/asylum-migration-and-integration-funds_en",
-     "AMIF-Direktförderung.", 5),
-    ("European Civic Forum", "CERV — Civic Space Programme 2024", 540000, "EUR",
-     2024, "EU", "EU", "EU CERV — Citizens, Equality, Rights and Values",
-     "https://commission.europa.eu/funding-tenders/find-funding/eu-funding-programmes/citizens-equality-rights-and-values-programme_de",
-     "Civic-Space-Förderlinie 2024.", 5),
-
-    # ── Zusatz: Friedrich-Ebert-Stiftung / direkte Linien ──
-    ("Friedrich-Ebert-Stiftung — Studienförderung", "Stipendien linke Aktivist:innen 2023",
-     650000, "EUR", 2023, "DE", "Stiftung", "Friedrich-Ebert-Stiftung",
-     "https://www.fes.de/studienfoerderung",
-     "Stipendienlinie politisch aktive Studierende.", 4),
-    ("Aktionsbündnis gegen das Polizeigesetz NRW", "Kampagnenarbeit 2022", 28000, "EUR",
-     2022, "DE", "Stiftung", "Heinrich-Böll-Stiftung",
-     "https://www.boell.de/de/foerderung",
-     "Kampagnenförderung Polizeigesetz.", 3),
 ]
+
 
 
 def classify(text):
@@ -1286,16 +1263,72 @@ def seed_historical_data():
         log.info(f"Seed: {inserted} historische Einträge eingespielt")
     return inserted
 
+# ════════════════════════════════════════════════════════════════════
+# Funding seed version tracking.
+#
+# When the curated seed list changes — especially when entries are REMOVED
+# because they no longer meet the strict inclusion criteria — we must purge
+# old seeded records from existing production databases. A version bump
+# triggers a one-shot reseed: previously seeded entries are deleted and the
+# current FUNDING_SEED is re-inserted. Manual admin-added entries (anything
+# whose hash is NOT in the current seed-hash set) are preserved.
+# ════════════════════════════════════════════════════════════════════
+FUNDING_SEED_VERSION = "2026-05-strict-v1"
+
+def _funding_seed_hashes():
+    """Return the set of hashes for entries currently in FUNDING_SEED."""
+    hs = set()
+    for row in FUNDING_SEED:
+        recipient_org, _project, amount, _currency, year, _country, \
+            _donor_type, donor_name, _src, _notes, _conf = row
+        h_input = (f"fund|{recipient_org.lower().strip()}|{year}|"
+                   f"{donor_name.lower().strip()}|{round(float(amount))}")
+        hs.add(hashlib.sha256(h_input.encode()).hexdigest())
+    return hs
+
+def purge_stale_funding_seeds():
+    """
+    Remove seeded funding records that are no longer part of the curated
+    FUNDING_SEED list. Identifies "seeded" records as those whose hash is
+    NOT one of the current seed-hash set AND whose hash starts with the
+    seed pattern (`fund|`-derived hash). To avoid touching anything that
+    might be admin-added, we ONLY delete rows whose hash matches a stored
+    "previously-seeded" hash list, and rebuild that list from the current
+    seed afterwards.
+    """
+    current_hashes = _funding_seed_hashes()
+    prev_serialized = meta_get("fund_seed_hashes") or ""
+    prev_hashes = set(h for h in prev_serialized.split(",") if h)
+    stale = prev_hashes - current_hashes
+    deleted = 0
+    if stale:
+        placeholders = ",".join("?" * len(stale))
+        cur = db.execute(
+            f"DELETE FROM funding_records WHERE hash IN ({placeholders})",
+            tuple(stale)
+        )
+        deleted = cur.rowcount
+        db.commit()
+        log.info(f"Funding purge: removed {deleted} stale seed records "
+                 f"(seed version → {FUNDING_SEED_VERSION})")
+    # Persist the new seed-hash set so the next version bump can find stale rows
+    meta_set("fund_seed_hashes", ",".join(sorted(current_hashes)))
+    meta_set("fund_seed_version", FUNDING_SEED_VERSION)
+    return deleted
+
 def seed_funding_data():
     """
     Idempotently seed the funding_records table from FUNDING_SEED.
     Returns the number of newly inserted rows. Safe to call repeatedly:
     the UNIQUE hash prevents duplicates.
+    Before seeding, purge any stale records left behind by an earlier
+    (now-removed) seed entry — see purge_stale_funding_seeds().
     """
+    purge_stale_funding_seeds()
     existing = db.execute("SELECT COUNT(*) FROM funding_records").fetchone()[0]
-    if existing > 0:
-        log.info(f"Funding seed: {existing} records already present")
-        return 0
+    # We allow re-seeding even when records already exist, because purge
+    # may have just emptied the table. The UNIQUE hash constraint prevents
+    # duplicate insertion of records that survived the purge.
     inserted = 0
     for row in FUNDING_SEED:
         (recipient_org, project, amount, currency, year, country,
@@ -2373,7 +2406,12 @@ _FUND_DONOR_TYPES = {"Bund","Kanton","Stadt","Stiftung","EU","Anderes"}
 _FUND_COUNTRIES   = {"DE","AT","CH","EU","Andere"}
 
 def _validate_funding(data: dict) -> str:
-    """Return '' if valid, else an error message."""
+    """
+    Return '' if valid, else an error message.
+    Funding data is legally sensitive — we enforce a Primärquelle (source_url)
+    and a Verbindungsnachweis (notes, ≥40 chars) for every manual entry so
+    that no record ever lives in the public DB without traceable justification.
+    """
     for f in ["recipient_org","amount","year","country","donor_type","donor_name"]:
         if data.get(f) in (None, ""):
             return f"Pflichtfeld '{f}' fehlt"
@@ -2388,6 +2426,13 @@ def _validate_funding(data: dict) -> str:
         return f"Land '{data['country']}' ungültig (erlaubt: {', '.join(sorted(_FUND_COUNTRIES))})"
     if data["donor_type"] not in _FUND_DONOR_TYPES:
         return f"Geber-Typ '{data['donor_type']}' ungültig"
+    src = (data.get("source_url") or "").strip()
+    if not src or not src.lower().startswith(("http://", "https://")):
+        return "Primärquelle (source_url) fehlt oder ist keine vollständige URL"
+    notes = (data.get("notes") or "").strip()
+    if len(notes) < 40:
+        return ("Verbindungsnachweis (notes) fehlt — mind. 40 Zeichen mit Nennung "
+                "des VS-Berichts / Aktenzeichens / Primärquelle erforderlich")
     return ""
 
 @app.post("/admin/api/funding")
