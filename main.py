@@ -52,6 +52,13 @@ def get_db():
     c.execute('''CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS geocache (query TEXT PRIMARY KEY, lat REAL, lon REAL)''')
     c.execute('''CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, expires TEXT)''')
+    # Schema migrations — add columns that may be missing in older DBs
+    for col, defn in [("hash","TEXT"), ("lat","REAL"), ("lon","REAL"),
+                      ("manual","INTEGER DEFAULT 0"), ("timestamp","TEXT")]:
+        try:
+            c.execute(f"ALTER TABLE incidents ADD COLUMN {col} {defn}")
+        except Exception:
+            pass  # column already exists
     c.commit()
     return c
 
