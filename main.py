@@ -13,17 +13,30 @@ from fastapi.templating import Jinja2Templates
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
 
-DB_PATH = os.getenv("DB_PATH",
-    "/data/lex_threat.db" if os.path.isdir("/data") else
-    "/disk/lex_threat.db" if os.path.isdir("/disk") else
-    "lex_threat.db"
-)
+def _resolve_db_path():
+    p = os.getenv("DB_PATH")
+    if p:
+        d = os.path.dirname(p)
+        if not d or os.path.isdir(d):
+            return p
+        log.warning(f"DB_PATH dir '{d}' does not exist, falling back to local DB")
+    if os.path.isdir("/disk"):   return "/disk/lex_threat.db"
+    if os.path.isdir("/data"):   return "/data/lex_threat.db"
+    return "lex_threat.db"
+
+DB_PATH = _resolve_db_path()
 GROK_MODEL = os.getenv("GROK_MODEL", "grok-4")
 ADMIN_USER = os.getenv("ADMIN_USER", "admin")
 ADMIN_PASS = os.getenv("ADMIN_PASS", "changeme")
 
 # ── DATABASE ──────────────────────────────────────────────────────
 def get_db():
+    db_dir = os.path.dirname(DB_PATH)
+    if db_dir:
+        try:
+            os.makedirs(db_dir, exist_ok=True)
+        except OSError:
+            pass
     c = sqlite3.connect(DB_PATH, check_same_thread=False)
     c.row_factory = sqlite3.Row
     c.execute('''CREATE TABLE IF NOT EXISTS incidents (
