@@ -13,7 +13,11 @@ from fastapi.templating import Jinja2Templates
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
 
-DB_PATH    = "/data/lex_threat.db" if os.path.isdir("/data") else "lex_threat.db"
+DB_PATH = os.getenv("DB_PATH",
+    "/data/lex_threat.db" if os.path.isdir("/data") else
+    "/disk/lex_threat.db" if os.path.isdir("/disk") else
+    "lex_threat.db"
+)
 GROK_MODEL = os.getenv("GROK_MODEL", "grok-4")
 ADMIN_USER = os.getenv("ADMIN_USER", "admin")
 ADMIN_PASS = os.getenv("ADMIN_PASS", "changeme")
@@ -36,6 +40,9 @@ def get_db():
     return c
 
 db = get_db()
+db.execute("PRAGMA journal_mode=WAL")
+db.execute("PRAGMA busy_timeout=5000")
+db.commit()
 
 def meta_get(k):
     r = db.execute("SELECT value FROM metadata WHERE key=?", (k,)).fetchone()
@@ -196,6 +203,82 @@ CATEGORIES = [
     "Militante Aktion","Sachbeschädigung","Demo/Kundgebung","Besetzung",
     "Repression","Verhaftung","Sonstiges"
 ]
+
+# ── KEYWORD CLASSIFICATION (AI-free) ─────────────────────────────
+KEYWORD_MAP = [
+    ("Brandanschlag",   ["brand gesetzt","abgefackelt","angezündet","molotow","brandsatz","in flammen",
+                         "fahrzeug brannte","auto brannte","feuer gelegt","brandstiftung","anzündeten"]),
+    ("Sabotage",        ["sabotage","sabotiert","gleisanlage","kabelanlage","signalanlage",
+                         "stromkabel","bahnsabotage","infrastruktur sabotiert","zugsperrung"]),
+    ("Gewalt",          ["angriff auf polizei","verletzte beamte","ausschreitungen","krawalle",
+                         "randalen","beamte angegriffen","steinwürfe","attackierten","übergriff",
+                         "verletzt","zusammenstöße"]),
+    ("Militante Aktion",["bekennerschreiben","militante gruppe","direkte aktion","autonome gruppe",
+                         "militante linke","revolutionäre","bewaffnete"]),
+    ("Besetzung",       ["besetzung","besetzt","räumung","squat","hausbesetzung","besetzen"]),
+    ("Demo/Kundgebung", ["demonstration","kundgebung","protestzug","aufmarsch","streik",
+                         "protestierende","auf die straße","gegendemonstration"]),
+    ("Sachbeschädigung",["sachbeschädigung","scheiben eingeworfen","farbbeutel","beschädigt",
+                         "verwüstet","zerstört","scheiben zertrümmert"]),
+    ("Verhaftung",      ["festnahmen","verhaftet","festgenommen","inhaftiert","in gewahrsam"]),
+    ("Schmiererei",     ["graffiti","besprüht","parolen gesprüht","spraydosen","beschriftung"]),
+    ("Repression",      ["razzia","hausdurchsuchung","überwachung","durchsuchungsbeschluss"]),
+    ("Aufruf zu Gewalt",["aufruf zu gewalt","aufhetzen","aufgerufen zu","zur gewalt aufgerufen"]),
+]
+
+# Country/location extraction helpers
+LOCATION_PATTERNS = [
+    r'\bin\s+([A-ZÜÄÖ][a-züäöA-ZÜÄÖ\-]+(?:\s+[A-ZÜÄÖ][a-züäöA-ZÜÄÖ\-]+)?)\b',
+    r'([A-ZÜÄÖ][a-züäöA-ZÜÄÖ\-]+):\s',
+]
+COUNTRY_KEYWORDS = {
+    "DE": ["deutschland","berlin","hamburg","münchen","köln","frankfurt","leipzig","dresden",
+           "stuttgart","hannover","bremen","dortmund","nürnberg","sachsen","thüringen","Bayern",
+           "NRW","Baden-Württemberg"],
+    "AT": ["österreich","wien","graz","linz","salzburg","innsbruck"],
+    "CH": ["schweiz","zürich","bern","genf","basel","lausanne","winterthur"],
+    "FR": ["frankreich","paris","lyon","marseille","bordeaux"],
+    "IT": ["italien","rom","mailand","turin","neapel"],
+    "GR": ["griechenland","athen","thessaloniki"],
+    "ES": ["spanien","madrid","barcelona","valencia"],
+    "UK": ["england","großbritannien","london","manchester","glasgow"],
+}
+
+def classify_keywords(text):
+    """Fast keyword-based classifier — no API calls."""
+    t = text.lower()
+    # Detect category
+    found_cat = None
+    for cat, kws in KEYWORD_MAP:
+        if any(kw in t for kw in kws):
+            found_cat = cat
+            break
+    if not found_cat:
+        return None
+
+    # Detect country
+    found_country = "DE"  # default
+    for co, kws in COUNTRY_KEYWORDS.items():
+        if any(kw.lower() in t for kw in kws):
+            found_country = co
+            break
+
+    # Detect location (simple: find first capitalised word after "in ")
+    found_loc = "Unbekannt"
+    for pat in LOCATION_PATTERNS:
+        m = re.search(pat, text)
+        if m:
+            found_loc = m.group(1).strip()
+            break
+
+    return {"kategorie": found_cat, "land": found_country, "ort": found_loc}
+
+def smart_classify(text):
+    """Try keyword classification first, fall back to Grok only if no match."""
+    result = classify_keywords(text)
+    if result:
+        return result
+    return classify(text)
 
 # ── HISTORICAL SEED DATA ──────────────────────────────────
 # Publicly documented incidents 2018–2024, hardcoded coords (no geocoding needed)
@@ -474,8 +557,7 @@ def crawl_barrikade_range(start_id, stop_id):
             misses = 0
             h = mk_hash(url, text)
             if is_seen(h): time.sleep(0.1); continue
-            # NO keyword filter — send everything to Grok
-            ai = classify(text)
+            ai = smart_classify(text)
             if ai:
                 if save_incident(ai, text, "barrikade.info", url, date_from_url(url)):
                     inserted += 1
@@ -517,7 +599,7 @@ def crawl_indymedia_feed():
                 full = get_text(link)
                 text = full if len(full) > 100 else f"{title}. {desc}"
                 if len(text) < 30: continue
-                ai = classify(text)
+                ai = smart_classify(text)
                 if ai:
                     d = parse_date(pub) or date_from_url(link)
                     save_incident(ai, text, "de.indymedia.org", link, d)
@@ -622,7 +704,7 @@ def crawl_rss_feed(source, feed_url, max_items=15):
             if is_seen(h): continue
             text = get_text(link)
             if len(text) < 80: text = f"{title}. {desc}"
-            ai = classify(text)
+            ai = smart_classify(text)
             if ai:
                 d = parse_date(pub) or date_from_url(link)
                 if save_incident(ai, text, source, link, d):
@@ -750,7 +832,7 @@ def run_historical(reset=False):
                     if len(text) < 80: continue
                     h = mk_hash(url, text)
                     if is_seen(h): continue
-                    ai = classify(text)
+                    ai = smart_classify(text)
                     if ai:
                         if save_incident(ai, text, "de.indymedia.org", url, date_from_url(url)):
                             inserted += 1
@@ -936,14 +1018,18 @@ async def admin_add(request: Request, _=Depends(require_admin)):
     try:
         data = await request.json()
     except Exception:
-        raise HTTPException(400, "Ungültiges JSON")
+        return JSONResponse({"ok": False, "message": "Ungültiges JSON"}, status_code=400)
     for f in ["date","location","country","category","description"]:
         if not data.get(f):
-            raise HTTPException(400, f"Pflichtfeld '{f}' fehlt")
-    ai  = {"land":data["country"], "kategorie":data["category"], "ort":data["location"]}
-    url = data.get("url") or f"manual-{datetime.now().isoformat()}"
-    ok  = save_incident(ai, data["description"], data.get("source","Manuell"), url, data["date"], manual=True)
-    return JSONResponse({"ok":ok, "message":"Gespeichert" if ok else "Bereits vorhanden"})
+            return JSONResponse({"ok": False, "message": f"Pflichtfeld '{f}' fehlt"}, status_code=400)
+    try:
+        ai  = {"land":data["country"], "kategorie":data["category"], "ort":data["location"]}
+        url = data.get("url") or f"manual-{datetime.now().isoformat()}"
+        ok  = save_incident(ai, data["description"], data.get("source","Manuell"), url, data["date"], manual=True)
+        return JSONResponse({"ok": ok, "message": "Gespeichert" if ok else "Bereits vorhanden"})
+    except Exception as e:
+        log.error(f"admin_add: {e}", exc_info=True)
+        return JSONResponse({"ok": False, "message": f"Fehler: {str(e)[:200]}"}, status_code=500)
 
 @app.delete("/admin/api/incident/{inc_id}")
 async def admin_delete(inc_id: int, _=Depends(require_admin)):

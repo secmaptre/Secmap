@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SECMAP // ADMINISTRATION</title>
+<title>LEX EUROPE // ADMINISTRATION</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -154,8 +154,8 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
   <div class="tb-brand">
     <span class="tb-icon">◈</span>
     <div>
-      <div class="tb-name">SECMAP</div>
-      <div class="tb-sub">LEX EUROPE</div>
+      <div class="tb-name">LEX EUROPE</div>
+      <div class="tb-sub">GEWALTBEREITER LINKSEXTREMISMUS</div>
     </div>
   </div>
   <span class="tb-badge">ADMINISTRATION</span>
@@ -349,23 +349,29 @@ const $=id=>document.getElementById(id);
 const log=s=>{const c=$('console');c.textContent+='\n'+new Date().toLocaleTimeString('de-CH')+'  '+s;c.scrollTop=c.scrollHeight;};
 const toast=msg=>{const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);};
 
+async function apiFetch(url, opts={}){
+  const r=await fetch(url,opts);
+  if(!r.ok){const t=await r.text();throw new Error(`HTTP ${r.status}: ${t.substring(0,120)}`);}
+  return r.json();
+}
+
 async function startCrawl(){
   $('btn-crawl').disabled=true;$('btn-crawl').textContent='⟳ CRAWLER LÄUFT…';
   log('Crawler wird gestartet…');
-  try{const d=await fetch('/admin/api/crawl',{method:'POST'}).then(r=>r.json());log(d.status);toast(d.status);setTimeout(refreshStatus,3000);}
-  catch(e){log('Fehler: '+e.message);}
+  try{const d=await apiFetch('/admin/api/crawl',{method:'POST'});log(d.status);toast(d.status);setTimeout(refreshStatus,3000);}
+  catch(e){log('Fehler: '+e.message);$('btn-crawl').disabled=false;$('btn-crawl').textContent='▶ CRAWLER STARTEN';}
 }
 
 async function stopCrawl(){
-  const d=await fetch('/admin/api/stop-crawl',{method:'POST'}).then(r=>r.json());
-  log(d.status);toast(d.status);refreshStatus();
+  try{const d=await apiFetch('/admin/api/stop-crawl',{method:'POST'});log(d.status);toast(d.status);refreshStatus();}
+  catch(e){log('Fehler: '+e.message);}
 }
 
 async function seedData(){
   $('btn-seed').disabled=true;$('btn-seed').textContent='↓ WIRD EINGESPIELT…';
   log('Historische Archiv-Daten werden eingespielt…');
   try{
-    const d=await fetch('/admin/api/seed',{method:'POST'}).then(r=>r.json());
+    const d=await apiFetch('/admin/api/seed',{method:'POST'});
     log(d.status);toast(d.status);refreshStatus();
   }catch(e){log('Fehler: '+e.message);}
   finally{$('btn-seed').disabled=false;$('btn-seed').textContent='↓ HISTORISCHE DATEN';}
@@ -373,7 +379,7 @@ async function seedData(){
 
 async function refreshStatus(){
   try{
-    const s=await fetch('/admin/api/status').then(r=>r.json());
+    const s=await apiFetch('/admin/api/status');
     $('m-total').textContent=s.total;
     $('m-feeds').textContent=s.feed_count;
     $('m-geo').textContent=s.geocoded;
@@ -390,24 +396,24 @@ async function refreshStatus(){
 
 async function testGrok(){
   log('Teste Grok API…');
-  try{const d=await fetch('/admin/api/grok-test',{method:'POST'}).then(r=>r.json());log('Grok → '+JSON.stringify(d));toast('Grok OK');}
+  try{const d=await apiFetch('/admin/api/grok-test',{method:'POST'});log('Grok → '+JSON.stringify(d));toast('Grok OK');}
   catch(e){log('Fehler: '+e.message);}
 }
 
 async function reGeo(){
   log('Geocoding wird wiederholt…');
-  try{const d=await fetch('/admin/api/regeocode',{method:'POST'}).then(r=>r.json());log(d.status);toast(d.status);}
+  try{const d=await apiFetch('/admin/api/regeocode',{method:'POST'});log(d.status);toast(d.status);}
   catch(e){log('Fehler: '+e.message);}
 }
 
 async function clearDB(){
   if(!confirm('Alle Daten unwiderruflich löschen?\n\nDies kann nicht rückgängig gemacht werden.')) return;
-  const d=await fetch('/admin/api/clear',{method:'POST'}).then(r=>r.json());
-  log(d.status);toast(d.status);refreshStatus();
+  try{const d=await apiFetch('/admin/api/clear',{method:'POST'});log(d.status);toast(d.status);refreshStatus();}
+  catch(e){log('Fehler: '+e.message);}
 }
 
 async function delRow(id){
-  await fetch(`/admin/api/incident/${id}`,{method:'DELETE'});
+  try{await fetch(`/admin/api/incident/${id}`,{method:'DELETE'});}catch(e){}
   const row=$(`row-${id}`);if(row)row.remove();
   toast('Eintrag gelöscht');
 }
@@ -420,7 +426,7 @@ async function submitIncident(){
   };
   if(!data.date||!data.location||!data.description){toast('Datum, Ort und Beschreibung sind Pflichtfelder');return;}
   try{
-    const d=await fetch('/admin/api/add-incident',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).then(r=>r.json());
+    const d=await apiFetch('/admin/api/add-incident',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
     log(d.message);toast(d.message);
     if(d.ok){['f-date','f-location','f-source','f-url','f-desc'].forEach(id=>$(id).value='');refreshStatus();}
   }catch(e){log('Fehler: '+e.message);}
@@ -430,7 +436,7 @@ async function startHist(reset){
   $('btn-hist').disabled=true;
   log(reset?'Historischen Crawl zurücksetzen und starten…':'Historischen Crawl fortsetzen…');
   try{
-    const d=await fetch(`/admin/api/crawl-historical?reset=${reset}`,{method:'POST'}).then(r=>r.json());
+    const d=await apiFetch(`/admin/api/crawl-historical?reset=${reset}`,{method:'POST'});
     log(d.status);setTimeout(refreshHistStatus,2000);
   }catch(e){log('Fehler: '+e.message);}
   finally{$('btn-hist').disabled=false;}
@@ -438,7 +444,7 @@ async function startHist(reset){
 
 async function refreshHistStatus(){
   try{
-    const s=await fetch('/admin/api/status').then(r=>r.json());
+    const s=await apiFetch('/admin/api/status');
     const h=s.hist||{};
     const bpct=h.barrikade_pct||0;
     $('h-b-pct').textContent=h.barrikade_done?'✓ FERTIG':(bpct>0?Math.round(bpct)+'%':'BEREIT');
