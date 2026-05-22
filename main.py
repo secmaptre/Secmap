@@ -162,9 +162,23 @@ CITY_FALLBACK = {
 
 _last_geo = [0.0]
 
+_BOGUS_LOCATIONS = {
+    "unbekannt", "unknown", "verschiedene", "mehrere orte", "bundesweit",
+    "deutschland", "österreich", "schweiz", "europa", "online",
+    # Words that are NOT city names but get extracted as such:
+    "schutt", "brand", "hinterlandregionen", "hinterland", "konkurrenz",
+    "ihren", "suchergebnissen", "ergebnissen", "region", "innenstadt",
+    "stadtgebiet", "stadtmitte", "randgebiete", "verschiedene städte",
+    "tutorials", "archiv", "kontakt", "übersicht", "inhalt",
+}
+
 def geocode(location, country):
-    if not location or location.strip() in ("", "Unbekannt", "Unknown"):
-        # Fallback to country center
+    if not location:
+        c = (country or "").lower()
+        if c in CITY_FALLBACK: return CITY_FALLBACK[c]
+        return None, None
+    loc_clean = location.strip()
+    if loc_clean.lower() in _BOGUS_LOCATIONS or len(loc_clean) < 3:
         c = (country or "").lower()
         if c in CITY_FALLBACK: return CITY_FALLBACK[c]
         return None, None
@@ -183,9 +197,14 @@ def geocode(location, country):
     wait = 1.2 - (time.time() - _last_geo[0])
     if wait > 0: time.sleep(wait)
     try:
+        # Pass countrycodes to Nominatim so it only returns results within the expected country
+        _co_map = {"DE":"de","AT":"at","CH":"ch","FR":"fr","IT":"it","GR":"gr","ES":"es","UK":"gb"}
+        params = {"q": location, "format": "json", "limit": 1}
+        if country in _co_map:
+            params["countrycodes"] = _co_map[country]
         r = requests.get(
             "https://nominatim.openstreetmap.org/search",
-            params={"q": f"{location}, {country}", "format": "json", "limit": 1},
+            params=params,
             headers={"User-Agent": "LEX-EUROPE-OSINT/5.0"},
             timeout=10
         )
@@ -612,6 +631,28 @@ def mk_hash(url, text):
 def is_seen(h):
     return db.execute("SELECT 1 FROM incidents WHERE hash=?", (h,)).fetchone() is not None
 
+_INDYMEDIA_NAV = re.compile(
+    r'(?:Direkt zum Inhalt|dont hate the media|become the media)'
+    r'.{0,800}?(?=[A-ZÜÄÖ][a-züäöA-ZÜÄÖ\s]{12,})',
+    re.DOTALL | re.IGNORECASE
+)
+_NAV_WORDS = re.compile(
+    r'\b(Openposting|Terminkalender|Gruppenstatements|Editorialliste|Linkliste'
+    r'|Mailinglisten|Moderation|Unterstützen|Outcall|Übersetzungskoordination'
+    r'|Mission Statement|Tor nutzen|Tor 2|dont hate|become the media'
+    r'|Tutorials Videos Archiv|Über uns > Kontakt)\b',
+    re.IGNORECASE
+)
+
+def clean_description(text):
+    """Strip navigation artifacts before saving to DB."""
+    if not text:
+        return ""
+    text = _INDYMEDIA_NAV.sub('', text)
+    text = _NAV_WORDS.sub('', text)
+    text = re.sub(r'\s{3,}', ' ', text).strip()
+    return text
+
 def save_incident(ai, text, source, url, date_str=None, manual=False):
     h = mk_hash(url or text[:80], text)
     if is_seen(h): return False
@@ -628,7 +669,7 @@ def save_incident(ai, text, source, url, date_str=None, manual=False):
                 manual,timestamp,severity_score,actors,confidence)
                VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'),?,?,?)""",
             (d, ai.get("ort","Unbekannt"), ai.get("land","Unbekannt"),
-             cat, text[:700], source, url or "", h, lat, lon,
+             cat, clean_description(text)[:700], source, url or "", h, lat, lon,
              1 if manual else 0, sev, act, conf)
         )
         db.commit()
@@ -637,6 +678,39 @@ def save_incident(ai, text, source, url, date_str=None, manual=False):
     except Exception as e:
         log.warning(f"save_incident: {e}")
         return False
+
+def purge_garbage():
+    """Remove falsely scraped entries: navigation text, non-EU content, fake locations."""
+    # Delete entries with indymedia nav garbage in description
+    nav_patterns = [
+        "Direkt zum Inhalt", "dont hate the media", "Tutorials Videos Archiv",
+        "Tor nutzen", "Über uns > Kontakt",
+    ]
+    deleted = 0
+    for pat in nav_patterns:
+        c = db.execute("DELETE FROM incidents WHERE description LIKE ?", (f"%{pat}%",)).rowcount
+        deleted += c
+
+    # Delete entries with bogus locations
+    bogus = ["Hinterlandregionen", "Konkurrenz", "Ihren Suchergebnissen",
+             "Suchergebnissen", "Ergebnissen", "Tutorials"]
+    for loc in bogus:
+        c = db.execute("DELETE FROM incidents WHERE location=?", (loc,)).rowcount
+        deleted += c
+
+    # Delete non-EU false positives still in DB
+    fp_desc_patterns = [
+        "%Kongo%", "%Ebola%", "%demokratische Republik Kongo%",
+        "%faschistisches Motiv%", "%Neonazi.*Angriff%",
+    ]
+    for pat in fp_desc_patterns:
+        c = db.execute("DELETE FROM incidents WHERE description LIKE ?", (pat,)).rowcount
+        deleted += c
+
+    if deleted:
+        db.commit()
+        log.info(f"purge_garbage: removed {deleted} bad entries")
+    return deleted
 
 def backfill_enrichment():
     """Backfill severity, actors, confidence for existing records that have 0 values."""
@@ -799,6 +873,7 @@ RSS_KEYWORDS = [
 # ── FALSE-POSITIVE FILTER ─────────────────────────────────────────
 # Reject articles that match RSS_KEYWORDS superficially but are NOT political extremism
 _FP = [
+    # Technology / autonomous vehicles
     r'\bautonomes?\s+(fahren|fahrzeuge?|autos?\b|lkw|pkw|bus\b|roboter|drohnen?|flugzeug)',
     r'\bself.?driving\b', r'\bautopilot\b',
     r'\bautonomes?\s+(parken|laden|liefern)',
@@ -811,12 +886,25 @@ _FP = [
     r'\bkrypto|bitcoin|blockchain\b',
     r'\baktienmarkt|börsen?kurse?\b',
     r'\blandwirtschaft.*sabotag|sabotag.*landwirtschaft',
-    r'\bautonomie\s+(schweiz|österreich|deutschland|region)',  # regional autonomy, not group
+    r'\bautonomie\s+(schweiz|österreich|deutschland|region)',
+    # Non-European conflicts / disasters (not relevant to DACH extremism)
+    r'\bkongo\b', r'\bebola\b', r'\bafrika\b', r'\bnigeria\b', r'\bsomalia\b',
+    r'\bsyrien\b', r'\bjemen\b', r'\biraq\b', r'\bafghanistan\b', r'\bukraine.*front\b',
+    r'\bpalästina.*rakete|rakete.*palästina\b',
+    r'\bdemokratische\s+republik\s+kongo\b',
+    # Right-wing perpetrators attacking others (we track LEFT extremism only)
+    r'\bneonazi.*angriff\b', r'\bnazi.*überfall\b', r'\bnazi.*attack\b',
+    r'\brechtsextrem.*täter\b', r'\brechtsextrem.*angreifer\b',
+    r'\bneonazi.*täter\b', r'\bfaschistisch.*motiv\b', r'\brechts.*täter\b',
+    r'\bRechtsterror\b', r'\bPKK\b', r'\bIslamist\b', r'\bdschihadist\b',
+    # Navigation/website content accidentally scraped
+    r'\bTutorials\s+Videos\s+Archiv\b', r'\bdont\s+hate\s+the\s+media\b',
+    r'\bDirekt\s+zum\s+Inhalt\b',
 ]
 
 def is_false_positive(text):
     t = text.lower()
-    return any(re.search(p, t) for p in _FP)
+    return any(re.search(p, t, re.IGNORECASE) for p in _FP)
 
 # ── GEOCODE COUNTRY BOUNDS ────────────────────────────────────────
 # (min_lat, min_lon, max_lat, max_lon) — generous margins to avoid false rejections
@@ -829,6 +917,10 @@ _CO_BOUNDS = {
     "GR": (34.5, 19.2, 42.0, 29.8),
     "ES": (35.8, -9.5, 43.9,  4.4),
     "UK": (49.7, -8.5, 61.0,  2.2),
+    # Non-DACH neighbours — used to REJECT wrong geocoding (e.g. Prag → DE)
+    "CZ": (48.5, 12.1, 51.1, 18.9),
+    "PL": (49.0, 14.1, 54.9, 24.2),
+    "HU": (45.7, 16.1, 48.6, 22.9),
 }
 
 def _coords_in_country(country, lat, lon):
@@ -1564,6 +1656,7 @@ async def admin_seed(_=Depends(require_admin)):
 
 @app.on_event("startup")
 async def startup():
+    purge_garbage()   # remove nav-garbage and false positives already in DB
     cnt = db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
     if cnt == 0:
         seed_historical_data()
