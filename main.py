@@ -577,6 +577,9 @@ def crawl_barrikade_range(start_id, stop_id):
             misses = 0
             h = mk_hash(url, text)
             if is_seen(h): time.sleep(0.1); continue
+            if not any(kw in text.lower() for kw in BARRIKADE_RELEVANCE_KWS):
+                time.sleep(0.1)
+                continue
             ai = smart_classify(text)
             if ai:
                 if save_incident(ai, text, "barrikade.info", url, date_from_url(url)):
@@ -742,6 +745,14 @@ def crawl_gnews():
         time.sleep(0.5)
     return inserted
 
+# ── BARRIKADE RELEVANCE PRE-FILTER ───────────────────────────────
+BARRIKADE_RELEVANCE_KWS = [
+    "angriff","brand","sabotage","ausschreitungen","krawalle","randalen",
+    "besetzung","verhaftung","razzia","molotow","bekennerschreiben",
+    "autonome","antifa","schwarzer block","linksextrem","schäden","verletzt",
+    "festnahmen","überfall","protest","demonstration","blockade","besetzt"
+]
+
 # ── MASTER CRAWLER ────────────────────────────────────────────────
 _running   = [False]
 _hist_run  = [False]
@@ -902,6 +913,26 @@ async def stats():
         "by_country": [dict(r) for r in db.execute("SELECT country,COUNT(*) n FROM incidents GROUP BY country ORDER BY n DESC").fetchall()],
         "by_cat":     [dict(r) for r in db.execute("SELECT category,COUNT(*) n FROM incidents GROUP BY category ORDER BY n DESC").fetchall()],
         "by_source":  [dict(r) for r in db.execute("SELECT source,COUNT(*) n FROM incidents GROUP BY source ORDER BY n DESC").fetchall()],
+    })
+
+@app.get("/api/summary")
+async def get_summary():
+    total    = db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
+    geocoded = db.execute("SELECT COUNT(*) FROM incidents WHERE lat IS NOT NULL").fetchone()[0]
+    last7    = db.execute("SELECT COUNT(*) FROM incidents WHERE date >= date('now','-7 days')").fetchone()[0]
+    last30   = db.execute("SELECT COUNT(*) FROM incidents WHERE date >= date('now','-30 days')").fetchone()[0]
+    prev30   = db.execute("SELECT COUNT(*) FROM incidents WHERE date >= date('now','-60 days') AND date < date('now','-30 days')").fetchone()[0]
+    by_country = [dict(r) for r in db.execute("SELECT country, COUNT(*) n FROM incidents GROUP BY country ORDER BY n DESC").fetchall()]
+    by_cat     = [dict(r) for r in db.execute("SELECT category, COUNT(*) n FROM incidents GROUP BY category ORDER BY n DESC").fetchall()]
+    top_locs   = [dict(r) for r in db.execute("SELECT location, country, COUNT(*) n FROM incidents GROUP BY location ORDER BY n DESC LIMIT 10").fetchall()]
+    return JSONResponse({
+        "total": total, "geocoded": geocoded,
+        "last7": last7, "last30": last30, "prev30": prev30,
+        "trend": "up" if last30 > prev30 else "down" if last30 < prev30 else "flat",
+        "by_country": by_country, "by_cat": by_cat, "top_locs": top_locs,
+        "last_crawl": meta_get("last_crawl"),
+        "crawl_running": _running[0],
+        "sources": [dict(r) for r in db.execute("SELECT source, COUNT(*) n FROM incidents GROUP BY source ORDER BY n DESC LIMIT 20").fetchall()],
     })
 
 @app.get("/api/timeline")
