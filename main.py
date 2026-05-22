@@ -190,6 +190,15 @@ def geocode(location, country):
         res = r.json()
         if res:
             lat, lon = float(res[0]["lat"]), float(res[0]["lon"])
+            # Reject if coordinates land in a completely wrong country
+            if not _coords_in_country(country, lat, lon):
+                log.warning(f"Geocode '{location}'/{country} → ({lat:.2f},{lon:.2f}) outside bounds — using country center")
+                c = (country or "").lower()
+                lat, lon = CITY_FALLBACK.get(c, (None, None))
+                if lat is None:
+                    db.execute("INSERT OR REPLACE INTO geocache VALUES (?,NULL,NULL)", (key,))
+                    db.commit()
+                    return None, None
             db.execute("INSERT OR REPLACE INTO geocache VALUES (?,?,?)", (key,lat,lon))
             db.commit()
             return lat, lon
@@ -615,6 +624,9 @@ def crawl_barrikade_range(start_id, stop_id):
             if not any(kw in text.lower() for kw in BARRIKADE_RELEVANCE_KWS):
                 time.sleep(0.1)
                 continue
+            if is_false_positive(text):
+                time.sleep(0.1)
+                continue
             ai = smart_classify(text)
             if ai:
                 if save_incident(ai, text, "barrikade.info", url, date_from_url(url)):
@@ -632,33 +644,107 @@ def crawl_barrikade_range(start_id, stop_id):
 
 # ── INDYMEDIA RSS + PAGE CRAWLER ──────────────────────────────────
 def crawl_indymedia_feed():
-    """Crawls active left-wing / alternative German-language sources
-    (de.indymedia.org has been offline since 2017 — replaced with live alternatives)."""
+    """Crawl de.indymedia.org RSS plus active German-language left-wing alternatives."""
     inserted = 0
-    alt_feeds = [
+    seen_urls: set = set()
+
+    # ── de.indymedia.org (use single-attempt, short timeout to avoid blocking) ──
+    for feed_url in [
+        "https://de.indymedia.org/RSS/newswire.xml",
+        "https://de.indymedia.org/RSS/features.xml",
+        "https://de.indymedia.org/taxonomy/term/20/all/feed",
+    ]:
+        try:
+            r = session.get(feed_url, timeout=8, allow_redirects=True)
+            r.raise_for_status()
+            items = parse_rss(r.text)
+            log.info(f"indymedia {feed_url.split('/')[-1]}: {len(items)} items")
+            for title, link, desc, pub in items:
+                if link in seen_urls: continue
+                seen_urls.add(link)
+                preview = (title + " " + desc).lower()
+                if is_false_positive(preview): continue
+                h = mk_hash(link, title + desc)
+                if is_seen(h): continue
+                full = get_text(link)
+                text = full if len(full) > 100 else f"{title}. {desc}"
+                if len(text) < 30: continue
+                ai = smart_classify(text)
+                if ai:
+                    d = parse_date(pub) or date_from_url(link)
+                    if save_incident(ai, text, "de.indymedia.org", link, d):
+                        inserted += 1
+                time.sleep(0.5)
+        except Exception as e:
+            log.warning(f"indymedia {feed_url.split('/')[-1]}: {e}")
+        time.sleep(0.3)
+
+    # ── Active alternative left-wing sources ─────────────────────
+    for source, url in [
         ("labournet.de",           "https://www.labournet.de/feed/"),
         ("perspektive-online.net", "https://perspektive-online.net/feed/"),
         ("klassegegenklasse.org",  "https://www.klassegegenklasse.org/feed/"),
         ("jungle.world",           "https://jungle.world/rss.xml"),
-    ]
-    for source, feed_url in alt_feeds:
+    ]:
         try:
-            n = crawl_rss_feed(source, feed_url, max_items=10)
+            n = crawl_rss_feed(source, url, max_items=8)
             inserted += n
-            if n: log.info(f"Alt-feed {source}: +{n}")
         except Exception as e:
-            log.warning(f"Alt-feed {source}: {e}")
+            log.warning(f"alt-feed {source}: {e}")
         time.sleep(0.4)
+
     return inserted
 
 # ── RSS FEEDS ─────────────────────────────────────────────────────
 RSS_KEYWORDS = [
-    "linksextrem","linksradikal","autonom","antifa","anarchi","schwarzer block","black bloc",
+    "linksextrem","linksradikal","antifa","anarchi","schwarzer block","black bloc",
     "brandanschlag","sabotage","molotow","farbbeutel","bekennerschreiben","militante",
     "besetzung","blockade","rigaer","rote flora","sachbeschädigung","in brand",
+    "autonome gruppe","autonome szene","autonome aktion","autonome linke",
     "verfassungsschutz extremis","linksradikal verhaftung","linksextrem anschlag",
-    "autonome gruppe","direkte aktion","barrikade",
+    "direkte aktion","barrikade","hausbesetzung","fahrzeugbrand","fahrzeuge in brand",
 ]
+
+# ── FALSE-POSITIVE FILTER ─────────────────────────────────────────
+# Reject articles that match RSS_KEYWORDS superficially but are NOT political extremism
+_FP = [
+    r'\bautonomes?\s+(fahren|fahrzeuge?|autos?\b|lkw|pkw|bus\b|roboter|drohnen?|flugzeug)',
+    r'\bself.?driving\b', r'\bautopilot\b',
+    r'\bautonomes?\s+(parken|laden|liefern)',
+    r'\bautonome[srm]?\s+(mobilitäts?|verkehrs?|transport)',
+    r'\belektroauto[s]?\b', r'\be-auto[s]?\b', r'\belektromobilit',
+    r'\bdigitale\s+revolution\b',
+    r'\bkünstliche\s+intelligenz\b',
+    r'\bki-?\s*(modell|system|assistent|tool|chip)',
+    r'\bmobilitäts?revolution\b', r'\benergie(wende|revolution)\b',
+    r'\bkrypto|bitcoin|blockchain\b',
+    r'\baktienmarkt|börsen?kurse?\b',
+    r'\blandwirtschaft.*sabotag|sabotag.*landwirtschaft',
+    r'\bautonomie\s+(schweiz|österreich|deutschland|region)',  # regional autonomy, not group
+]
+
+def is_false_positive(text):
+    t = text.lower()
+    return any(re.search(p, t) for p in _FP)
+
+# ── GEOCODE COUNTRY BOUNDS ────────────────────────────────────────
+# (min_lat, min_lon, max_lat, max_lon) — generous margins to avoid false rejections
+_CO_BOUNDS = {
+    "DE": (46.5, 5.5, 55.5, 15.5),
+    "AT": (46.2, 9.3, 49.2, 17.3),
+    "CH": (45.7, 5.8, 48.0, 10.7),
+    "FR": (41.2, -5.3, 51.2, 9.7),
+    "IT": (35.5,  6.5, 47.2, 18.6),
+    "GR": (34.5, 19.2, 42.0, 29.8),
+    "ES": (35.8, -9.5, 43.9,  4.4),
+    "UK": (49.7, -8.5, 61.0,  2.2),
+}
+
+def _coords_in_country(country, lat, lon):
+    if lat is None or lon is None: return True
+    b = _CO_BOUNDS.get(country)
+    if not b: return True
+    return b[0] <= lat <= b[2] and b[1] <= lon <= b[3]
 
 RSS_FEEDS = [
     # ── Sicherheit / Verfassungsschutz ─────────────────────────────
@@ -692,13 +778,22 @@ RSS_FEEDS = [
     ("barrikade.info",        "https://barrikade.info/feed"),
     ("belltower.news",        "https://www.belltower.news/feed/"),
     ("labournet.de",          "https://www.labournet.de/feed/"),
-    # ── Schweiz ────────────────────────────────────────────────────
+    # ── Schweiz (Deutschschweiz) ────────────────────────────────────
     ("nzz.ch",                "https://www.nzz.ch/recent.rss"),
     ("tagesanzeiger.ch",      "https://www.tagesanzeiger.ch/rss.xml"),
     ("watson.ch",             "https://www.watson.ch/rss"),
     ("20min.ch",              "https://api.20min.ch/rss/view/1"),
     ("blick.ch",              "https://www.blick.ch/news/rss.xml"),
     ("woz.ch",                "https://www.woz.ch/rss.xml"),
+    ("luzerner-zeitung.ch",   "https://www.luzernerzeitung.ch/rss"),
+    ("berner-zeitung.ch",     "https://www.bernerzeitung.ch/rss"),
+    ("tagblatt.ch",           "https://www.tagblatt.ch/rss"),          # St. Galler Tagblatt
+    ("bazonline.ch",          "https://www.bazonline.ch/rss"),          # Basler Zeitung
+    ("zueritoday.ch",         "https://www.zueritoday.ch/rss"),
+    # ── Schweiz (Romandie / Westschweiz) ───────────────────────────
+    ("rts.ch",                "https://www.rts.ch/rss/info.xml"),       # Radio Télévision Suisse
+    ("tdg.ch",                "https://www.tdg.ch/rss"),                # Tribune de Genève
+    ("24heures.ch",           "https://www.24heures.ch/rss"),
     # ── Österreich ─────────────────────────────────────────────────
     ("derstandard.at",        "https://www.derstandard.at/rss/inland"),
     ("diepresse.com",         "https://www.diepresse.com/rss/politik"),
@@ -772,6 +867,7 @@ def crawl_rss_feed(source, feed_url, max_items=15):
             if hits >= max_items: break
             preview = (title + " " + desc).lower()
             if not any(kw in preview for kw in RSS_KEYWORDS): continue
+            if is_false_positive(preview): continue  # e.g. "autonome Autos"
             hits += 1
             h = mk_hash(link, title+desc)
             if is_seen(h): continue
@@ -1232,8 +1328,8 @@ async def startup():
     if db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0] == 0:
         seed_historical_data()
     sched = BackgroundScheduler(daemon=True, timezone="Europe/Zurich")
-    # Main crawler: every 2 hours
-    sched.add_job(run_crawler, "interval", hours=2, id="main",
+    # Main crawler: every 12 hours (cost-efficient)
+    sched.add_job(run_crawler, "interval", hours=12, id="main",
                   next_run_time=datetime.now() + timedelta(seconds=20))
     # Auto-continue historical barrikade crawl every 45 min until complete
     sched.add_job(auto_hist, "interval", minutes=45, id="auto_hist",
