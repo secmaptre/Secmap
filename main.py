@@ -31,14 +31,17 @@ ADMIN_PASS = os.getenv("ADMIN_PASS", "changeme")
 
 # ── DATABASE ──────────────────────────────────────────────────────
 def get_db():
-    db_dir = os.path.dirname(DB_PATH)
-    if db_dir:
-        try:
-            os.makedirs(db_dir, exist_ok=True)
-        except OSError:
-            pass
-    c = sqlite3.connect(DB_PATH, check_same_thread=False)
+    path = DB_PATH
+    try:
+        c = sqlite3.connect(path, check_same_thread=False)
+    except Exception as e:
+        log.error(f"Cannot open DB at {path}: {e} — falling back to local lex_threat.db")
+        path = "lex_threat.db"
+        c = sqlite3.connect(path, check_same_thread=False)
     c.row_factory = sqlite3.Row
+    # Use DELETE journal mode — compatible with NFS/network filesystems (no WAL)
+    c.execute("PRAGMA journal_mode=DELETE")
+    c.execute("PRAGMA busy_timeout=5000")
     c.execute('''CREATE TABLE IF NOT EXISTS incidents (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         date TEXT, location TEXT, country TEXT, category TEXT,
@@ -53,9 +56,6 @@ def get_db():
     return c
 
 db = get_db()
-db.execute("PRAGMA journal_mode=WAL")
-db.execute("PRAGMA busy_timeout=5000")
-db.commit()
 
 def meta_get(k):
     r = db.execute("SELECT value FROM metadata WHERE key=?", (k,)).fetchone()
