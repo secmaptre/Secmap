@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <meta name="theme-color" content="#060c14">
-<title>SECMAP // LEX EUROPE · Threat Intelligence</title>
+<title>LEX EUROPE · Gewaltbereiter Linksextremismus</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -249,8 +249,8 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;bac
   <a class="brand" href="/">
     <span class="brand-icon">◈</span>
     <div>
-      <div class="brand-name">SECMAP</div>
-      <div class="brand-sub">LEX EUROPE · THREAT INTELLIGENCE</div>
+      <div class="brand-name">LEX EUROPE</div>
+      <div class="brand-sub">GEWALTBEREITER LINKSEXTREMISMUS</div>
     </div>
   </a>
   <div class="tb-div hide-mob"></div>
@@ -422,7 +422,7 @@ const LIGHT_TILES='https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.pn
 map=L.map('map',{center:[49.8,11],zoom:5,zoomControl:false,attributionControl:false});
 let tileL=L.tileLayer(DARK_TILES,{maxZoom:19,subdomains:'abcd'}).addTo(map);
 L.control.zoom({position:'bottomright'}).addTo(map);
-L.control.attribution({prefix:'SECMAP · © CartoDB · © OSM'}).addTo(map);
+L.control.attribution({prefix:'LEX EUROPE · © CartoDB · © OSM'}).addTo(map);
 map.on('mousemove',e=>{
   const el=document.getElementById('coord-lbl');
   if(el) el.textContent=`LAT ${e.latlng.lat.toFixed(4)} · LON ${e.latlng.lng.toFixed(4)}`;
@@ -453,7 +453,7 @@ function renderMarkers(list){
   cg.clearLayers();
   if(heatL){map.removeLayer(heatL);heatL=null;}
   if(heatMode){renderHeatmap(list);return;}
-  list.filter(i=>i.lat&&i.lon).forEach(i=>{
+  list.filter(i=>i.lat!=null&&i.lon!=null&&!isNaN(i.lat)&&!isNaN(i.lon)).forEach(i=>{
     const s=sev(i.category),c=col(i.category);
     const r=s==='h'?11:s==='m'?9:7;
     const m=L.marker([i.lat,i.lon],{
@@ -476,7 +476,7 @@ function renderMarkers(list){
 }
 
 function renderHeatmap(list){
-  const pts=list.filter(i=>i.lat&&i.lon).map(i=>{
+  const pts=list.filter(i=>i.lat!=null&&i.lon!=null&&!isNaN(i.lat)&&!isNaN(i.lon)).map(i=>{
     const w=SEV_H.has(i.category)?1.0:SEV_M.has(i.category)?.6:.3;
     return[i.lat,i.lon,w];
   });
@@ -504,7 +504,7 @@ function renderFeed(list){
 }
 
 function flyTo(lat,lon,id){
-  if(lat&&lon){
+  if(lat!=null&&lon!=null&&!isNaN(lat)&&!isNaN(lon)){
     map.flyTo([lat,lon],13,{duration:1.0,easeLinearity:.35});
     // On mobile, switch to map tab
     if(window.innerWidth<=800) mobTab('map');
