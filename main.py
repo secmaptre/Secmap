@@ -152,6 +152,29 @@ def get_db():
     )''')
     c.execute("CREATE INDEX IF NOT EXISTS idx_ewc_active ON early_warning_clusters(active)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_ewc_country ON early_warning_clusters(country)")
+
+    # ── FUNDING EDGES (Säule 3, MS-4) ──────────────────────────────
+    # Explizite Mehr-Hop-Kanten (Donor → Trägerverein → Sub-Empfänger →
+    # Vorstand). funding_records bleibt die kanonische Quelle der
+    # dokumentierten Direkt-Förderungen; funding_edges ergänzt nur die
+    # Brücken, für die der Tabellenstil ungeeignet ist. Datenpolicy §C3
+    # gilt: nur öffentliche Vereins-/Registerdaten, keine Personenprofile.
+    c.execute('''CREATE TABLE IF NOT EXISTS funding_edges (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        src_org TEXT NOT NULL,
+        dst_org TEXT NOT NULL,
+        amount REAL,
+        currency TEXT DEFAULT 'EUR',
+        year INTEGER,
+        source_url TEXT,
+        notes TEXT,
+        manual INTEGER DEFAULT 1,
+        hash TEXT UNIQUE,
+        timestamp TEXT
+    )''')
+    c.execute("CREATE INDEX IF NOT EXISTS idx_fe_src ON funding_edges(src_org)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_fe_dst ON funding_edges(dst_org)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_fe_year ON funding_edges(year)")
     c.commit()
     return c
 
@@ -2900,6 +2923,132 @@ async def funding_stats():
         "by_country":    by_country,
         "top_donors":    top_donors,
     })
+
+@app.get("/api/funding/graph")
+async def funding_graph(year_min: int = 0, year_max: int = 0,
+                        country: str = "", min_amount: float = 0,
+                        max_nodes: int = 120):
+    """
+    Säule 3 — Finanzfluss-Graph. Aggregiert funding_records zu Donor→
+    Recipient-Kanten und ergänzt explizite Mehr-Hop-Kanten aus funding_edges.
+    Liefert {nodes, links} im D3-Force-kompatiblen Format.
+    """
+    # Direct edges aus funding_records
+    q1 = ("SELECT donor_name AS src, recipient_org AS dst, "
+          "SUM(amount) AS amount, MAX(year) AS yr, COUNT(*) AS n, "
+          "MAX(source_url) AS src_url, MAX(country) AS country, "
+          "MAX(donor_type) AS dtype "
+          "FROM funding_records WHERE 1=1")
+    params = []
+    if year_min: q1 += " AND year >= ?"; params.append(year_min)
+    if year_max: q1 += " AND year <= ?"; params.append(year_max)
+    if country:  q1 += " AND country = ?"; params.append(country)
+    if min_amount: q1 += " AND amount >= ?"; params.append(min_amount)
+    q1 += " GROUP BY donor_name, recipient_org"
+    direct = [dict(r) for r in db.execute(q1, params).fetchall()]
+
+    # Multi-hop edges
+    edges = [dict(r) for r in db.execute(
+        "SELECT src_org AS src, dst_org AS dst, amount, year AS yr, "
+        "source_url AS src_url, notes FROM funding_edges"
+    ).fetchall()]
+
+    # Node aggregation
+    nodes = {}
+    def upsert_node(name, role):
+        if not name: return
+        if name not in nodes:
+            nodes[name] = {"id": name, "label": name, "in": 0, "out": 0,
+                           "amount_in": 0.0, "amount_out": 0.0, "type": role}
+        nodes[name]["type"] = role if nodes[name]["type"] == role else "intermediary"
+
+    links = []
+    for e in direct:
+        upsert_node(e["src"], "donor")
+        upsert_node(e["dst"], "recipient")
+        nodes[e["src"]]["out"] += e["n"];  nodes[e["src"]]["amount_out"] += (e["amount"] or 0)
+        nodes[e["dst"]]["in"]  += e["n"];  nodes[e["dst"]]["amount_in"]  += (e["amount"] or 0)
+        links.append({
+            "source": e["src"], "target": e["dst"],
+            "amount": e["amount"] or 0, "year": e["yr"],
+            "url":    e["src_url"] or "", "kind": "direct",
+            "country": e.get("country") or "", "donor_type": e.get("dtype") or "",
+        })
+    for e in edges:
+        upsert_node(e["src"], "donor")
+        upsert_node(e["dst"], "recipient")
+        nodes[e["src"]]["out"] += 1; nodes[e["src"]]["amount_out"] += (e["amount"] or 0)
+        nodes[e["dst"]]["in"]  += 1; nodes[e["dst"]]["amount_in"]  += (e["amount"] or 0)
+        links.append({
+            "source": e["src"], "target": e["dst"],
+            "amount": e["amount"] or 0, "year": e["yr"],
+            "url":    e["src_url"] or "", "kind": "edge",
+            "notes":  e.get("notes") or "",
+        })
+
+    # Cap node count by total connectivity if necessary.
+    if len(nodes) > max_nodes:
+        ranked = sorted(nodes.values(),
+                        key=lambda n: -(n["in"] + n["out"]))[:max_nodes]
+        keep = {n["id"] for n in ranked}
+        nodes = {k: v for k, v in nodes.items() if k in keep}
+        links = [l for l in links if l["source"] in keep and l["target"] in keep]
+
+    return JSONResponse({
+        "nodes": list(nodes.values()),
+        "links": links,
+        "node_count": len(nodes),
+        "link_count": len(links),
+    })
+
+
+@app.post("/admin/api/funding-edge")
+async def admin_add_funding_edge(request: Request, _=Depends(require_admin)):
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "message": "Ungültiges JSON"}, status_code=400)
+    src = (data.get("src_org") or "").strip()
+    dst = (data.get("dst_org") or "").strip()
+    if not src or not dst:
+        return JSONResponse({"ok": False, "message": "src_org und dst_org sind Pflicht"}, status_code=400)
+    if src == dst:
+        return JSONResponse({"ok": False, "message": "src_org darf nicht == dst_org sein"}, status_code=400)
+    amount = data.get("amount") or 0
+    year   = data.get("year")  or None
+    src_url = (data.get("source_url") or "").strip()
+    notes   = (data.get("notes") or "").strip()
+    h = hashlib.sha256(f"edge|{src.lower()}|{dst.lower()}|{year}".encode()).hexdigest()
+    try:
+        db.execute(
+            "INSERT OR IGNORE INTO funding_edges "
+            "(src_org,dst_org,amount,currency,year,source_url,notes,manual,hash,timestamp) "
+            "VALUES (?,?,?,?,?,?,?,1,?,datetime('now'))",
+            (src, dst, float(amount or 0), data.get("currency","EUR"),
+             year, src_url, notes, h)
+        )
+        db.commit()
+    except Exception as e:
+        return JSONResponse({"ok": False, "message": str(e)}, status_code=400)
+    return JSONResponse({"ok": True, "hash": h})
+
+
+@app.delete("/admin/api/funding-edge/{edge_id}")
+async def admin_delete_funding_edge(edge_id: int, _=Depends(require_admin)):
+    db.execute("DELETE FROM funding_edges WHERE id=?", (edge_id,))
+    db.commit()
+    return JSONResponse({"ok": True})
+
+
+@app.get("/api/funding/edges")
+async def list_funding_edges(limit: int = 200):
+    rows = db.execute(
+        "SELECT id, src_org, dst_org, amount, currency, year, "
+        "source_url, notes, timestamp FROM funding_edges "
+        "ORDER BY year DESC, timestamp DESC LIMIT ?", (limit,)
+    ).fetchall()
+    return JSONResponse([dict(r) for r in rows])
+
 
 @app.get("/api/funding/export-csv")
 async def funding_export_csv():

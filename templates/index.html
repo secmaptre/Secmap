@@ -573,6 +573,28 @@ body.mod-funding #mod-funding-view{display:grid !important;}
   border-radius:2px;background:transparent;color:var(--t1);cursor:pointer;transition:all .12s;}
 .fnd-chip.on,.fnd-chip:hover{border-color:var(--accent);color:var(--accent);background:var(--ag);}
 @media(max-width:900px){.fnd-charts{grid-template-columns:1fr;}}
+
+/* ── MS-4 — Funding-Graph (D3-Force) ── */
+.fnd-mode-graph .fnd-tablewrap,
+.fnd-mode-graph .fnd-loadmore,
+.fnd-mode-graph .fnd-charts{display:none !important;}
+.fnd-graph-legend{display:flex;align-items:center;gap:18px;padding:8px 4px;
+  font-family:var(--mono);font-size:9px;color:var(--t1);}
+.fnd-graph-legend .lg-dot{display:inline-block;width:9px;height:9px;
+  border-radius:50%;margin-right:6px;vertical-align:middle;}
+.lg-donor{background:#d99a2b;box-shadow:0 0 6px rgba(217,154,43,0.5);}
+.lg-intermediary{background:#6aa9c9;box-shadow:0 0 6px rgba(106,169,201,0.5);}
+.lg-recipient{background:#d4495d;box-shadow:0 0 6px rgba(212,73,93,0.5);}
+#fnd-graph svg .fg-link{stroke:rgba(160,188,212,0.22);stroke-width:0.6;}
+#fnd-graph svg .fg-link.edge{stroke-dasharray:3,2;stroke:rgba(217,154,43,0.45);}
+#fnd-graph svg .fg-link.hl{stroke:rgba(106,169,201,0.85);stroke-width:1.3;}
+#fnd-graph svg .fg-node{stroke:rgba(8,14,24,0.85);stroke-width:1;cursor:pointer;
+  transition:r .15s,stroke-width .15s;}
+#fnd-graph svg .fg-node:hover{stroke:var(--t0);stroke-width:2;}
+#fnd-graph svg .fg-label{font-family:var(--mono);font-size:8px;fill:var(--t2);
+  pointer-events:none;opacity:0;transition:opacity .15s;}
+#fnd-graph svg .fg-node.hl + .fg-label,
+#fnd-graph svg .fg-label.hl{opacity:1;fill:var(--t0);}
 @media(max-width:800px){
   #mod-funding-view{grid-template-columns:1fr;}
   .fnd-aside{position:fixed;top:var(--tbh);left:0;right:0;bottom:var(--mobnavh);
@@ -1032,10 +1054,29 @@ body.mod-funding #mod-funding-view{display:grid !important;}
       <div class="fnd-stat"><b id="fnd-h-orgs">—</b>ORGANISATIONEN</div>
       <div class="fnd-stat"><b id="fnd-h-donors">—</b>GEBER</div>
       <div class="fnd-stat amber"><b id="fnd-h-years">—</b>JAHRE</div>
+      <!-- MS-4 — Sub-Tabs: Tabelle / Graph -->
+      <div class="fnd-subtabs" style="margin-left:auto;display:flex;gap:6px">
+        <button class="gbtn on" id="fnd-tab-table" onclick="fndSwitchView('table')" data-i18n="fnd.view_table">Tabelle</button>
+        <button class="gbtn"    id="fnd-tab-graph" onclick="fndSwitchView('graph')" data-i18n="fnd.view_graph">Graph</button>
+      </div>
     </div>
 
     <div class="fnd-body">
-      <div class="fnd-tablewrap">
+      <!-- GRAPH VIEW (MS-4) -->
+      <div id="fnd-graph-wrap" style="display:none">
+        <div class="fnd-graph-legend">
+          <span><i class="lg-dot lg-donor"></i> <span data-i18n="fnd.legend_donor">Geber</span></span>
+          <span><i class="lg-dot lg-intermediary"></i> <span data-i18n="fnd.legend_intermediary">Träger</span></span>
+          <span><i class="lg-dot lg-recipient"></i> <span data-i18n="fnd.legend_recipient">Empfänger</span></span>
+          <span style="margin-left:auto;color:var(--t3);font-size:8px" id="fnd-graph-counts">—</span>
+        </div>
+        <div id="fnd-graph" style="position:relative;width:100%;height:560px;border:1px solid var(--pb);background:rgba(5,11,22,0.55);overflow:hidden">
+          <svg id="fnd-graph-svg" style="width:100%;height:100%;display:block"></svg>
+          <div id="fnd-graph-tooltip" style="position:absolute;display:none;pointer-events:none;background:rgba(8,14,24,0.95);border:1px solid var(--pb);padding:8px 10px;font-family:var(--mono);font-size:9px;color:var(--t0);max-width:280px;z-index:5;border-radius:2px;box-shadow:0 4px 16px rgba(0,0,0,0.4);"></div>
+        </div>
+      </div>
+
+      <div class="fnd-tablewrap" id="fnd-tablewrap">
         <table class="fnd-table" id="fnd-table">
           <thead>
             <tr>
@@ -1276,6 +1317,7 @@ body.mod-funding #mod-funding-view{display:grid !important;}
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
 <script>
 // ── CONSTANTS ──────────────────────────────────────────────────────
 const SEV_H=new Set(['Brandanschlag','Gewalt','Militante Aktion','Aufruf zu Gewalt']);
@@ -2620,7 +2662,12 @@ function supCopy(elId, btn){
 // ══════════════════════════════════════════════════════════════════
 function fndDebounce(){
   if(fndDebounceTimer) clearTimeout(fndDebounceTimer);
-  fndDebounceTimer=setTimeout(loadFunding, 220);
+  fndDebounceTimer=setTimeout(() => {
+    loadFunding();
+    // When the graph sub-tab is active, refresh it too so filter changes
+    // (year window, country, min amount) flow through immediately.
+    if(document.querySelector('.fnd-main.fnd-mode-graph')) loadFundingGraph();
+  }, 220);
 }
 
 function fndCollectFilters(){
@@ -2659,6 +2706,152 @@ function fndReset(){
   document.querySelector('#fnd-donor-chips .fnd-chip[data-val=""]').classList.add('on');
   fndFilters={search:'', country:'', donor_type:'', year_min:'', year_max:'', amount_min:'', sort:'year_desc'};
   loadFunding();
+}
+
+// ── MS-4 — FUNDING GRAPH (D3-Force) ────────────────────────────────
+let fndGraphSim = null;
+let fndGraphLoaded = false;
+
+function fndSwitchView(view){
+  const main = document.querySelector('.fnd-main');
+  if(!main) return;
+  main.classList.toggle('fnd-mode-graph', view === 'graph');
+  const wrap = document.getElementById('fnd-graph-wrap');
+  if(wrap) wrap.style.display = view === 'graph' ? 'block' : 'none';
+  document.getElementById('fnd-tab-table').classList.toggle('on', view !== 'graph');
+  document.getElementById('fnd-tab-graph').classList.toggle('on', view === 'graph');
+  if(view === 'graph' && !fndGraphLoaded){
+    fndGraphLoaded = true;
+    loadFundingGraph();
+  }
+}
+
+async function loadFundingGraph(){
+  if(typeof d3 === 'undefined'){
+    document.getElementById('fnd-graph-counts').textContent = 'd3.js failed to load';
+    return;
+  }
+  fndCollectFilters();
+  const qs = new URLSearchParams();
+  if(fndFilters.year_min)   qs.append('year_min',   fndFilters.year_min);
+  if(fndFilters.year_max)   qs.append('year_max',   fndFilters.year_max);
+  if(fndFilters.country)    qs.append('country',    fndFilters.country);
+  if(fndFilters.amount_min) qs.append('min_amount', fndFilters.amount_min);
+  try{
+    const data = await fetch('/api/funding/graph?' + qs.toString()).then(r=>r.json());
+    renderFundingGraph(data);
+  }catch(e){
+    document.getElementById('fnd-graph-counts').textContent = 'FEHLER BEIM LADEN';
+  }
+}
+
+function renderFundingGraph(data){
+  const svgEl = document.getElementById('fnd-graph-svg');
+  const tipEl = document.getElementById('fnd-graph-tooltip');
+  const cntEl = document.getElementById('fnd-graph-counts');
+  if(!svgEl) return;
+  const svg = d3.select(svgEl);
+  svg.selectAll('*').remove();
+  cntEl.textContent = `${data.node_count} ${t('fnd.legend_nodes','Knoten')} · ${data.link_count} ${t('fnd.legend_links','Kanten')}`;
+  if(!data.nodes || !data.nodes.length){
+    svg.append('text').attr('x','50%').attr('y','50%').attr('fill','var(--t3)')
+      .attr('text-anchor','middle').attr('font-family','var(--mono)').attr('font-size','11')
+      .text(t('fnd.graph_empty','Keine Daten für die aktiven Filter'));
+    return;
+  }
+  const w = svgEl.clientWidth, h = svgEl.clientHeight;
+  // Deep-copy node/link refs so D3 can mutate without polluting the API data.
+  const nodes = data.nodes.map(n => ({...n}));
+  const id2 = Object.fromEntries(nodes.map(n => [n.id, n]));
+  const links = data.links
+    .filter(l => id2[l.source] && id2[l.target])
+    .map(l => ({...l}));
+
+  const colorFor = (type) => type === 'donor' ? '#d99a2b'
+                          : type === 'intermediary' ? '#6aa9c9'
+                          : '#d4495d';
+  const totalFor = (n) => (n.amount_in || 0) + (n.amount_out || 0);
+  const totals   = nodes.map(totalFor);
+  const tMax     = Math.max(1, d3.max(totals) || 1);
+  const radius   = (n) => 4 + 12 * Math.sqrt(totalFor(n) / tMax);
+
+  const g_links = svg.append('g').attr('class','fg-links');
+  const g_nodes = svg.append('g').attr('class','fg-nodes');
+  const g_labels = svg.append('g').attr('class','fg-labels');
+
+  const link = g_links.selectAll('line').data(links).enter()
+    .append('line').attr('class', l => 'fg-link ' + (l.kind || 'direct'));
+  const node = g_nodes.selectAll('circle').data(nodes).enter()
+    .append('circle').attr('class','fg-node')
+    .attr('r',  d => radius(d))
+    .attr('fill', d => colorFor(d.type))
+    .call(d3.drag()
+      .on('start', (ev, d) => { if(!ev.active) sim.alphaTarget(0.25).restart(); d.fx=d.x; d.fy=d.y; })
+      .on('drag',  (ev, d) => { d.fx=ev.x; d.fy=ev.y; })
+      .on('end',   (ev, d) => { if(!ev.active) sim.alphaTarget(0); d.fx=null; d.fy=null; })
+    );
+  const label = g_labels.selectAll('text').data(nodes).enter()
+    .append('text').attr('class','fg-label').text(d => d.label);
+
+  function fmtEur(v){
+    if(!v) return '—';
+    if(v >= 1e6) return (v/1e6).toFixed(1).replace('.0','') + 'M';
+    if(v >= 1e3) return Math.round(v/1e3) + 'k';
+    return Math.round(v);
+  }
+  function showTip(ev, d){
+    const inSum  = fmtEur(d.amount_in);
+    const outSum = fmtEur(d.amount_out);
+    tipEl.style.display = 'block';
+    tipEl.innerHTML = `<b style="color:${colorFor(d.type)}">${d.label}</b>` +
+      `<br><span style="color:var(--t2)">${t('fnd.tt_role','Rolle')}:</span> ${d.type}` +
+      `<br><span style="color:var(--t2)">${t('fnd.tt_in','Eingehend')}:</span> €${inSum} (${d.in||0})` +
+      `<br><span style="color:var(--t2)">${t('fnd.tt_out','Ausgehend')}:</span> €${outSum} (${d.out||0})`;
+    const r = svgEl.getBoundingClientRect();
+    tipEl.style.left = (ev.clientX - r.left + 10) + 'px';
+    tipEl.style.top  = (ev.clientY - r.top  + 10) + 'px';
+  }
+  function hideTip(){ tipEl.style.display = 'none'; }
+
+  // Hover highlighting — fade out non-neighbours so the topology is readable.
+  function highlight(d){
+    const nbr = new Set([d.id]);
+    links.forEach(l => {
+      const sid = l.source.id || l.source, tid = l.target.id || l.target;
+      if(sid === d.id) nbr.add(tid);
+      if(tid === d.id) nbr.add(sid);
+    });
+    node.style('opacity', n => nbr.has(n.id) ? 1 : 0.18);
+    label.classed('hl', n => nbr.has(n.id));
+    link.classed('hl', l => {
+      const sid = l.source.id || l.source, tid = l.target.id || l.target;
+      return sid === d.id || tid === d.id;
+    }).style('opacity', l => {
+      const sid = l.source.id || l.source, tid = l.target.id || l.target;
+      return (sid === d.id || tid === d.id) ? 1 : 0.15;
+    });
+  }
+  function unhighlight(){
+    node.style('opacity', 1);
+    label.classed('hl', false);
+    link.classed('hl', false).style('opacity', 1);
+  }
+  node.on('mouseover', (ev, d) => { showTip(ev, d); highlight(d); })
+      .on('mousemove', (ev, d) => showTip(ev, d))
+      .on('mouseout',  () => { hideTip(); unhighlight(); });
+
+  const sim = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(70).strength(0.35))
+    .force('charge', d3.forceManyBody().strength(-120))
+    .force('center', d3.forceCenter(w/2, h/2))
+    .force('collide', d3.forceCollide().radius(d => radius(d) + 4))
+    .on('tick', () => {
+      link.attr('x1', l => l.source.x).attr('y1', l => l.source.y)
+          .attr('x2', l => l.target.x).attr('y2', l => l.target.y);
+      node.attr('cx', d => d.x).attr('cy', d => d.y);
+      label.attr('x', d => d.x + radius(d) + 3).attr('y', d => d.y + 3);
+    });
+  fndGraphSim = sim;
 }
 
 async function loadFunding(){

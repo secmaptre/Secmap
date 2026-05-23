@@ -85,6 +85,18 @@
   "detail.admin_delete": "Delete",
   "detail.evidence": "WARC SNAPSHOT",
 
+  "fnd.view_table": "Table",
+  "fnd.view_graph": "Graph",
+  "fnd.legend_donor": "Donor",
+  "fnd.legend_intermediary": "Intermediary",
+  "fnd.legend_recipient": "Recipient",
+  "fnd.legend_nodes": "Nodes",
+  "fnd.legend_links": "Links",
+  "fnd.tt_role": "Role",
+  "fnd.tt_in": "Inbound",
+  "fnd.tt_out": "Outbound",
+  "fnd.graph_empty": "No data matches the active filters",
+
   "tier.act": "T1 · Act",
   "tier.enable": "T2 · Enable",
   "tier.context": "T3 · Context",

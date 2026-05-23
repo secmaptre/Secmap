@@ -85,6 +85,18 @@
   "detail.admin_delete": "Löschen",
   "detail.evidence": "WARC-SNAPSHOT",
 
+  "fnd.view_table": "Tabelle",
+  "fnd.view_graph": "Graph",
+  "fnd.legend_donor": "Geber",
+  "fnd.legend_intermediary": "Träger",
+  "fnd.legend_recipient": "Empfänger",
+  "fnd.legend_nodes": "Knoten",
+  "fnd.legend_links": "Kanten",
+  "fnd.tt_role": "Rolle",
+  "fnd.tt_in": "Eingehend",
+  "fnd.tt_out": "Ausgehend",
+  "fnd.graph_empty": "Keine Daten für die aktiven Filter",
+
   "tier.act": "T1 · Tat",
   "tier.enable": "T2 · Förderung",
   "tier.context": "T3 · Kontext",
