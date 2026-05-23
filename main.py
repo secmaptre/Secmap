@@ -101,6 +101,27 @@ def get_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_fund_year    ON funding_records(year)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_fund_country ON funding_records(country)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_fund_donor   ON funding_records(donor_type)")
+
+    # ── EARLY-WARNING CLUSTERS (Säule 2, MS-3) ────────────────────
+    # Detected attack patterns: ≥3 incidents with the same target_type in
+    # the same country over a rolling 6-week window. Lets operators of
+    # likely targets subscribe to /api/early-warning.{rss,json} without us
+    # ever holding a recipient list (DSGVO-Hygiene per Concept §C2/§C3).
+    c.execute('''CREATE TABLE IF NOT EXISTS early_warning_clusters (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cluster_key TEXT UNIQUE NOT NULL,
+        country TEXT NOT NULL,
+        target_type TEXT NOT NULL,
+        count INTEGER NOT NULL,
+        first_seen TEXT,
+        last_seen TEXT,
+        incident_ids TEXT,
+        sample_titles TEXT,
+        detected_at TEXT,
+        active INTEGER DEFAULT 1
+    )''')
+    c.execute("CREATE INDEX IF NOT EXISTS idx_ewc_active ON early_warning_clusters(active)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_ewc_country ON early_warning_clusters(country)")
     c.commit()
     return c
 
@@ -2162,6 +2183,175 @@ async def index(request: Request):
         "fiat_info":   os.getenv("FIAT_INFO",   ""),
     })
 
+# ── EARLY-WARNING CLUSTER DETECTION (Säule 2 — MS-3) ──────────────
+EWC_WINDOW_DAYS = 42      # 6 weeks
+EWC_THRESHOLD   = 3       # ≥ 3 incidents to flag a cluster
+EWC_TIERS       = ("act", "enable")
+
+def detect_clusters():
+    """
+    Group recent T1/T2 incidents by (country, target_type). Any group with
+    ≥ EWC_THRESHOLD hits in the last EWC_WINDOW_DAYS becomes an active
+    cluster. Idempotent — re-scan can demote a cluster to active=0 when
+    the wave dies down, and can revive it when a new attack lands.
+    """
+    cutoff = (datetime.now() - timedelta(days=EWC_WINDOW_DAYS)).strftime("%Y-%m-%d")
+    rows = db.execute(
+        "SELECT id, date, country, target_type, category, location, summary, description "
+        "FROM incidents "
+        "WHERE tier IN ({}) AND target_type != '' AND date >= ? "
+        "ORDER BY date DESC".format(",".join("?"*len(EWC_TIERS))),
+        list(EWC_TIERS) + [cutoff]
+    ).fetchall()
+    groups = {}
+    for r in rows:
+        country = (r["country"] or "Andere").strip() or "Andere"
+        tt      = (r["target_type"] or "").strip()
+        if not tt:
+            continue
+        key = f"{country}|{tt}"
+        groups.setdefault(key, []).append(r)
+
+    now_iso = datetime.now().isoformat(timespec="seconds")
+    seen_keys = set()
+    for key, items in groups.items():
+        if len(items) < EWC_THRESHOLD:
+            continue
+        seen_keys.add(key)
+        country, tt = key.split("|", 1)
+        first_seen = min((it["date"] for it in items if it["date"]), default="")
+        last_seen  = max((it["date"] for it in items if it["date"]), default="")
+        ids        = json.dumps([it["id"] for it in items])
+        titles     = json.dumps([
+            (it["summary"] or it["location"] or "—")[:140]
+            for it in items[:3]
+        ], ensure_ascii=False)
+        db.execute(
+            "INSERT INTO early_warning_clusters "
+            "(cluster_key,country,target_type,count,first_seen,last_seen,"
+            " incident_ids,sample_titles,detected_at,active) "
+            "VALUES (?,?,?,?,?,?,?,?,?,1) "
+            "ON CONFLICT(cluster_key) DO UPDATE SET "
+            "count=excluded.count,first_seen=excluded.first_seen,"
+            "last_seen=excluded.last_seen,incident_ids=excluded.incident_ids,"
+            "sample_titles=excluded.sample_titles,detected_at=excluded.detected_at,"
+            "active=1",
+            (key, country, tt, len(items), first_seen, last_seen, ids, titles, now_iso)
+        )
+    # Stale clusters: still in the table but no longer meet the threshold
+    # in the current window — flag inactive (keep history for trend lines).
+    existing = db.execute(
+        "SELECT cluster_key FROM early_warning_clusters WHERE active=1"
+    ).fetchall()
+    for r in existing:
+        if r["cluster_key"] not in seen_keys:
+            db.execute(
+                "UPDATE early_warning_clusters SET active=0 WHERE cluster_key=?",
+                (r["cluster_key"],)
+            )
+    db.commit()
+    n_active = db.execute(
+        "SELECT COUNT(*) FROM early_warning_clusters WHERE active=1"
+    ).fetchone()[0]
+    log.info(f"detect_clusters: {n_active} active clusters (threshold ≥{EWC_THRESHOLD} / {EWC_WINDOW_DAYS}d)")
+    return n_active
+
+
+@app.get("/api/early-warning.json")
+async def early_warning_json():
+    """Active Frühwarn-Cluster — JSON-Feed für Betreiber & Forschung."""
+    rows = db.execute(
+        "SELECT cluster_key,country,target_type,count,first_seen,last_seen,"
+        "incident_ids,sample_titles,detected_at "
+        "FROM early_warning_clusters WHERE active=1 "
+        "ORDER BY count DESC, last_seen DESC"
+    ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        try: d["incident_ids"]  = json.loads(d["incident_ids"]  or "[]")
+        except Exception: d["incident_ids"] = []
+        try: d["sample_titles"] = json.loads(d["sample_titles"] or "[]")
+        except Exception: d["sample_titles"] = []
+        out.append(d)
+    return JSONResponse({
+        "window_days": EWC_WINDOW_DAYS,
+        "threshold":   EWC_THRESHOLD,
+        "active":      len(out),
+        "clusters":    out,
+        "asof":        datetime.now().isoformat(timespec="seconds"),
+    })
+
+
+@app.get("/api/early-warning.rss")
+async def early_warning_rss(request: Request):
+    """
+    RSS 2.0 feed der aktiven Frühwarn-Cluster. Betreiber potenziell ziel-
+    gefährdeter Infrastruktur (Bahn, Energie, Polizei …) abonnieren das
+    selbst — wir versenden bewusst nichts proaktiv (DSGVO-Hygiene §C3).
+    """
+    rows = db.execute(
+        "SELECT cluster_key,country,target_type,count,first_seen,last_seen,"
+        "sample_titles,detected_at "
+        "FROM early_warning_clusters WHERE active=1 "
+        "ORDER BY last_seen DESC"
+    ).fetchall()
+    base = str(request.base_url).rstrip("/")
+    items = []
+    for r in rows:
+        try:
+            titles = json.loads(r["sample_titles"] or "[]")
+        except Exception:
+            titles = []
+        body = (
+            f"{r['count']} Anschläge auf Ziel-Typ „{r['target_type']}" + "“"
+            f" in {r['country']} zwischen {r['first_seen']} und {r['last_seen']}.\n"
+        )
+        if titles:
+            body += "Beispiele:\n" + "\n".join(f"- {t}" for t in titles)
+        items.append(
+            "<item>"
+            f"<title>{_xml_esc(r['target_type'])} · {_xml_esc(r['country'])} — {r['count']} Anschläge / 6 Wochen</title>"
+            f"<link>{base}/api/early-warning.json</link>"
+            f"<guid isPermaLink=\"false\">ewc-{_xml_esc(r['cluster_key'])}-{_xml_esc(r['last_seen'] or '')}</guid>"
+            f"<pubDate>{_rfc822(r['detected_at'] or r['last_seen'])}</pubDate>"
+            f"<description>{_xml_esc(body)}</description>"
+            "</item>"
+        )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<rss version="2.0">\n<channel>\n'
+        '<title>LEX EUROPE — Frühwarn-Cluster</title>\n'
+        f'<link>{base}/api/early-warning.json</link>\n'
+        '<description>Aktive Anschlags-Cluster (≥3 gleichartige Ziele in 6 Wochen)</description>\n'
+        '<language>de-DE</language>\n'
+        + "\n".join(items) +
+        '\n</channel>\n</rss>\n'
+    )
+    return StreamingResponse(iter([xml]), media_type="application/rss+xml; charset=utf-8")
+
+
+def _xml_esc(s):
+    return (str(s or "")
+            .replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+            .replace('"',"&quot;").replace("'","&apos;"))
+
+def _rfc822(s):
+    """Best-effort ISO/date → RFC822 string for RSS pubDate."""
+    if not s: return ""
+    try:
+        d = datetime.fromisoformat(s.replace("Z","").split("+")[0])
+        return d.strftime("%a, %d %b %Y %H:%M:%S +0000")
+    except Exception:
+        return ""
+
+
+@app.post("/admin/api/detect-clusters")
+async def admin_detect_clusters(_=Depends(require_admin)):
+    n = detect_clusters()
+    return JSONResponse({"ok": True, "active_clusters": n})
+
+
 @app.get("/api/effectiveness")
 async def get_effectiveness():
     """
@@ -2170,8 +2360,7 @@ async def get_effectiveness():
       - prosec_gap_pct: % der T1-Vorfälle Severity ≥ 4 ohne öffentliches
         Verfahren nach 180 Tagen (Säule 1).
       - cluster_active:  Anzahl aktiver Frühwarn-Cluster (≥ 3 gleichartige
-        Anschläge in 6 Wochen). MS-3 wird das echte Backend liefern; bis
-        dahin liefert dieser Endpoint -1 als „noch nicht verfügbar".
+        Anschläge in 6 Wochen). Aus early_warning_clusters (MS-3).
       - funding_year_eur: Summe der dokumentierten Förderung im laufenden
         Jahr (Säule 3). Sobald wir einen recipient_tier-Marker haben, wird
         das auf T1/T2-Empfänger eingeschränkt.
@@ -2204,11 +2393,15 @@ async def get_effectiveness():
         (yr,)
     ).fetchone()[0] or 0
 
+    cluster_active = db.execute(
+        "SELECT COUNT(*) FROM early_warning_clusters WHERE active=1"
+    ).fetchone()[0]
+
     return JSONResponse({
         "prosec_gap_pct":  prosec_gap_pct,
         "prosec_gap_n":    gap,
         "prosec_gap_base": elig,
-        "cluster_active":  -1,          # MS-3 liefert echten Wert
+        "cluster_active":  cluster_active,
         "funding_year_eur": int(funding_eur),
         "funding_year":    yr,
         "evidence_pct":    -1,          # MS-5 liefert echten Wert
@@ -3022,6 +3215,12 @@ async def startup():
     backfill_summaries_and_flags()
     # Always attempt to seed funding (idempotent — no-op if already present).
     seed_funding_data()
+    # Säule 2 — populate the Frühwarn-Cluster table on boot so the footer
+    # counter and /api/early-warning.{rss,json} have data immediately.
+    try:
+        detect_clusters()
+    except Exception as e:
+        log.warning(f"detect_clusters at startup failed: {e}")
     sched = BackgroundScheduler(daemon=True, timezone="Europe/Zurich")
     # Main crawler: every 12 hours (cost-efficient)
     sched.add_job(run_crawler, "interval", hours=12, id="main",
@@ -3029,6 +3228,9 @@ async def startup():
     # Auto-continue historical barrikade crawl every 45 min until complete
     sched.add_job(auto_hist, "interval", minutes=45, id="auto_hist",
                   next_run_time=datetime.now() + timedelta(seconds=90))
+    # Re-detect Frühwarn-Cluster weekly. Cheap query — runs in milliseconds.
+    sched.add_job(detect_clusters, "interval", days=7, id="early_warning",
+                  next_run_time=datetime.now() + timedelta(hours=6))
     sched.start()
     log.info(f"LEX EUROPE — {len(RSS_FEEDS)} RSS + {len(GNEWS_Q)} GNews — crawl in 20s | hist auto-continue every 45min")
 
