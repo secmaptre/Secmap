@@ -2162,6 +2162,46 @@ async def index(request: Request):
         "fiat_info":   os.getenv("FIAT_INFO",   ""),
     })
 
+@app.get("/api/accountability")
+async def get_accountability():
+    """
+    Säule 1 — Strafverfolgungs-Druck: aggregate which T1-tier incidents have
+    a documented prosec_status and which sit silent for ≥180 days at
+    severity≥4 (the "Gap"). Returns:
+      total_t1, with_case, gap_count, by_status[], gap_rows[]
+    """
+    rows = db.execute(
+        "SELECT id,date,location,country,category,severity_score,"
+        "tier,prosec_status,case_ref,url,source,last_status_check "
+        "FROM incidents WHERE tier='act' ORDER BY date DESC"
+    ).fetchall()
+    rows = [dict(r) for r in rows]
+    total_t1   = len(rows)
+    with_case  = sum(1 for r in rows if (r.get("case_ref") or "").strip())
+    today      = datetime.now().date()
+    gap_rows = []
+    by_status = {}
+    for r in rows:
+        st = (r.get("prosec_status") or "unknown")
+        by_status[st] = by_status.get(st, 0) + 1
+        # Gap heuristic: T1 sev≥4 with no case_ref, status unknown/none, and
+        # incident date is ≥180 days old. These are the politically active
+        # cases that should have triggered a public investigation by now.
+        if (r.get("severity_score") or 0) >= 4 and st in ("unknown","none") and not (r.get("case_ref") or "").strip():
+            try:
+                d = datetime.fromisoformat(r["date"]).date()
+                if (today - d).days >= 180:
+                    gap_rows.append(r)
+            except Exception:
+                pass
+    return JSONResponse({
+        "total_t1":   total_t1,
+        "with_case":  with_case,
+        "gap_count":  len(gap_rows),
+        "by_status":  [{"status": k, "count": v} for k, v in sorted(by_status.items(), key=lambda x: -x[1])],
+        "gap_rows":   gap_rows[:200],
+    })
+
 @app.get("/api/incidents")
 async def get_incidents(
     country: str = "", category: str = "", date_from: str = "",
@@ -2610,8 +2650,16 @@ async def admin_inline_update(inc_id: int, request: Request, _=Depends(require_a
         data = await request.json()
     except Exception:
         return JSONResponse({"ok": False, "message": "Ungültiges JSON"}, status_code=400)
-    allowed = {"description","summary","location","country","category","severity_score","date","url"}
+    allowed = {"description","summary","location","country","category","severity_score","date","url",
+               # Strategic Concept v3 — Säule 1 (Strafverfolgungs-Druck) + Säule 2 (Frühwarn-Routing)
+               "tier","target_type","prosec_status","case_ref","last_status_check"}
     fields = {k: v for k, v in data.items() if k in allowed}
+    # Validate tier + prosec_status values to keep the columns clean.
+    if "tier" in fields and fields["tier"] not in ("act","enable","context"):
+        return JSONResponse({"ok": False, "message": "tier muss act|enable|context sein"}, status_code=400)
+    _allowed_prosec = {"unknown","none","investigating","charged","trial","convicted","acquitted","dismissed"}
+    if "prosec_status" in fields and fields["prosec_status"] not in _allowed_prosec:
+        return JSONResponse({"ok": False, "message": f"prosec_status muss eines von {sorted(_allowed_prosec)} sein"}, status_code=400)
     if not fields:
         return JSONResponse({"ok": False, "message": "Keine erlaubten Felder"}, status_code=400)
     # Run PII redaction on text fields before saving — admin shouldn't be

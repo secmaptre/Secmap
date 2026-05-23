@@ -400,6 +400,65 @@ body.mod-funding #mod-funding-view{display:grid !important;}
 .icard.is-context{opacity:.55;}
 .icard.is-context:hover{opacity:.92;}
 
+/* ── TIER FILTER CHIPS (Fedpol 3-tier) ── */
+.tier-chips{display:inline-flex;gap:3px;margin-left:6px;}
+.tchip{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:1.5px;
+  padding:4px 8px;border-radius:2px;background:transparent;color:var(--t3);
+  border:1px solid var(--pb);cursor:pointer;transition:background .15s,color .15s,border-color .15s;}
+.tchip:hover{color:var(--t1);}
+.tchip.on.t1{color:var(--red);border-color:var(--red);background:rgba(255,51,85,0.10);
+  box-shadow:0 0 6px rgba(255,51,85,0.18) inset;}
+.tchip.on.t2{color:var(--amber);border-color:var(--amber);background:rgba(240,165,0,0.10);
+  box-shadow:0 0 6px rgba(240,165,0,0.18) inset;}
+.tchip.on.t3{color:var(--t1);border-color:var(--t2);background:rgba(160,188,212,0.07);}
+
+/* T2 enable tier-chip on incident cards */
+.tier-pill{display:inline-block;font-family:var(--mono);font-size:7px;font-weight:700;
+  letter-spacing:1.5px;padding:2px 6px;border-radius:2px;margin-right:5px;vertical-align:middle;}
+.tier-pill.t2{background:rgba(240,165,0,0.16);color:var(--amber);
+  border:1px solid rgba(240,165,0,0.42);text-shadow:0 0 5px rgba(240,165,0,0.35);}
+.tier-pill.t3{background:rgba(120,140,160,0.10);color:var(--t2);
+  border:1px solid rgba(160,188,212,0.18);}
+
+/* ── CONTEXT AUFKLAPP (T3 collapsed group) ── */
+.ctx-group{margin-top:8px;border-top:1px dashed rgba(160,188,212,0.18);padding-top:8px;}
+.ctx-hdr{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:9px;
+  font-weight:600;letter-spacing:1.2px;color:var(--t2);cursor:pointer;padding:6px 4px;
+  user-select:none;transition:color .15s;}
+.ctx-hdr:hover{color:var(--t0);}
+.ctx-hdr .ctx-arr{font-size:10px;transition:transform .2s;}
+.ctx-group.open .ctx-hdr .ctx-arr{transform:rotate(90deg);}
+.ctx-hdr .ctx-cnt{margin-left:auto;font-family:var(--mono);font-size:8px;color:var(--t3);}
+.ctx-list{display:none;}
+.ctx-group.open .ctx-list{display:block;}
+/* T3 cards: smaller, no severity color border, muted */
+.ctx-list .icard{border-left:2px solid rgba(160,188,212,0.25) !important;
+  padding:6px 8px;margin:4px 0;background:rgba(255,255,255,0.015);}
+.ctx-list .icard .idesc{font-size:9px;line-height:1.35;opacity:.85;}
+.ctx-list .icard .icard-hd{font-size:8px;}
+
+/* ── VERFOLGUNG (prosec status) tab ── */
+#prosec-panel{display:none;padding:8px 10px;font-family:var(--mono);font-size:9px;color:var(--t1);}
+.prosec-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;}
+.prosec-stat{padding:8px 10px;border:1px solid var(--pb);border-radius:3px;background:rgba(0,200,255,0.03);}
+.prosec-stat .ps-lbl{font-size:7px;letter-spacing:1.5px;color:var(--t3);margin-bottom:3px;}
+.prosec-stat .ps-val{font-size:18px;font-weight:700;color:var(--t0);}
+.prosec-stat.gap{border-color:rgba(255,51,85,0.42);background:rgba(255,51,85,0.06);}
+.prosec-stat.gap .ps-val{color:var(--red);}
+.prosec-tbl{width:100%;border-collapse:collapse;font-size:9px;}
+.prosec-tbl th{text-align:left;padding:4px 6px;color:var(--t3);
+  border-bottom:1px solid var(--pb);font-weight:600;letter-spacing:1px;font-size:8px;}
+.prosec-tbl td{padding:5px 6px;border-bottom:1px solid rgba(160,188,212,0.08);
+  vertical-align:top;color:var(--t1);}
+.prosec-tbl tr:hover td{background:rgba(0,200,255,0.04);}
+.prosec-tbl tr.gap-row td{color:var(--red);background:rgba(255,51,85,0.04);}
+.prosec-status-badge{display:inline-block;font-size:7px;letter-spacing:1.5px;
+  padding:2px 5px;border-radius:2px;border:1px solid currentColor;}
+.ps-unknown,.ps-none{color:var(--red);background:rgba(255,51,85,0.08);}
+.ps-investigating,.ps-charged,.ps-trial{color:var(--amber);background:rgba(240,165,0,0.08);}
+.ps-convicted{color:var(--green);background:rgba(0,232,122,0.08);}
+.ps-acquitted,.ps-dismissed{color:var(--t2);background:rgba(160,188,212,0.06);}
+
 /* ── LANGUAGE SWITCHER (topbar) ── */
 .tb-lang{display:inline-flex;gap:0;margin-right:6px;flex-shrink:0;
   border:1px solid var(--pb);border-radius:3px;overflow:hidden;}
@@ -772,18 +831,27 @@ body.mod-funding #mod-funding-view{display:grid !important;}
     <div class="sort-toggle" style="margin-left:auto" id="feed-sort-ctrl">
       <button class="sort-btn on" id="sort-date" onclick="sortFeed('date')" title="Nach Datum"><span data-i18n="feed.sort_date">DATUM</span> ↓</button>
       <button class="sort-btn" id="sort-sev" onclick="sortFeed('severity')" title="Nach Schwere"><span data-i18n="feed.sort_severity">SCHWERE</span> ↓</button>
-      <button class="sort-btn" id="toggle-context" onclick="toggleContext()" title="Kontext-Vorfälle (Demos, Verhaftungen) einblenden" data-i18n="feed.toggle_context_show">+ KONTEXT</button>
+      <div class="tier-chips" id="tier-chips" role="group" aria-label="Tier-Filter">
+        <button class="tchip on t1" data-tier="act"     onclick="toggleTier('act')"     title="T1 — Verüben (Brand, Sabotage, Gewalt)"        data-i18n="tier.act.short">T1</button>
+        <button class="tchip on t2" data-tier="enable"  onclick="toggleTier('enable')"  title="T2 — Fördern (Aufruf, Mobilisierung)"          data-i18n="tier.enable.short">T2</button>
+        <button class="tchip on t3" data-tier="context" onclick="toggleTier('context')" title="T3 — Kontext (Demo, Repression, Verhaftung)"   data-i18n="tier.context.short">T3</button>
+      </div>
     </div>
   </div>
   <div class="tab-nav">
     <button class="tab-btn on" id="tab-feed" onclick="switchTab('feed')" data-i18n="feed.tab_feed">FEED</button>
     <button class="tab-btn" id="tab-akteure" onclick="switchTab('akteure')" data-i18n="feed.tab_actors">AKTEURE</button>
+    <button class="tab-btn" id="tab-verfolgung" onclick="switchTab('verfolgung')" title="Strafverfolgungs-Status (Säule 1)" data-i18n="feed.tab_prosec">VERFOLGUNG</button>
   </div>
   <div class="pbody" id="feed">
     <div class="ifempty" data-i18n="feed.loading">LADE DATENSÄTZE…</div>
   </div>
   <div class="pbody" id="actor-panel" style="display:none">
     <div class="ifempty-actors" data-i18n="feed.actors_loading">LADE AKTEURE…</div>
+  </div>
+  <div class="pbody" id="prosec-panel" style="display:none">
+    <div class="prosec-stats" id="prosec-stats"></div>
+    <div id="prosec-tbl-wrap"><div class="ifempty" data-i18n="prosec.loading">LADE VERFOLGUNGS-DATEN…</div></div>
   </div>
 </aside>
 
@@ -1200,7 +1268,13 @@ let detailItem=null;
 let chartInstances={};
 // Active module ("incidents" or "funding") and feed-context toggle.
 let activeModule='incidents';
-let showContext=false;
+// Fedpol 3-tier filter — all three tiers on by default per Policy v3
+// (Demo/Repression are part of the Lagebild). T3 cards collapse into an
+// accordion that starts closed so the high-signal cards stay above the fold.
+// Mutating the set re-renders the feed AND the map markers.
+let activeTiers = new Set(['act','enable','context']);
+let ctxOpen = false;            // T3 aufklapp state in the feed
+let showContext=true;           // legacy alias — kept for compatibility
 // Funding-tracker state.
 let fndAll=[], fndVis=[], fndFilters={search:'', country:'', donor_type:'', year_min:'', year_max:'', amount_min:'', sort:'year_desc'};
 let fndShown=50, fndDebounceTimer=null, fndLoaded=false;
@@ -1322,25 +1396,54 @@ function animCount(el,to){
 }
 
 // ── MARKER RENDER ──────────────────────────────────────────────────
+// Markers respect the active tier set: T1 = full colour, T2 = amber ring,
+// T3 = small grey dot (so context entries stay visible but do not compete
+// with real violent acts for attention).
 function renderMarkers(list){
   cg.clearLayers();
   if(heatL){map.removeLayer(heatL);heatL=null;}
   if(heatMode){renderHeatmap(list);return;}
-  list.filter(i=>i.lat!=null&&i.lon!=null&&!isNaN(i.lat)&&!isNaN(i.lon)).forEach(i=>{
-    const s=sev(i.category),c=col(i.category);
-    const r=s==='h'?11:s==='m'?9:7;
-    const m=L.marker([i.lat,i.lon],{
-      icon:L.divIcon({
-        html:`<div class="mrkr" data-id="${i.id}" style="width:${r}px;height:${r}px;border-radius:50%;background:${c};border:1.5px solid rgba(255,255,255,.2);opacity:.88;box-shadow:${s==='h'?`0 0 7px ${c}88`:s==='m'?`0 0 4px ${c}66`:'none'};cursor:pointer;transition:transform .15s,opacity .15s"></div>`,
-        className:'',iconSize:[r*2,r*2],iconAnchor:[r,r]
-      }),
-      sv:s,inc:i
+  list
+    .filter(i=>i.lat!=null&&i.lon!=null&&!isNaN(i.lat)&&!isNaN(i.lon))
+    .filter(i=>activeTiers.has(tierOf(i)))
+    .forEach(i=>{
+      const s=sev(i.category),c=col(i.category);
+      const tg = tierOf(i);
+      let r, bg, ring, op, glow;
+      if(tg==='context'){
+        // T3 — muted grey dot.
+        r = 4;
+        bg = '#7a8a99';
+        ring = '1px solid rgba(255,255,255,0.18)';
+        op = 0.45;
+        glow = 'none';
+      }else if(tg==='enable'){
+        // T2 — colour by category but with an amber ring (Fördern).
+        r = s==='h'?10:s==='m'?9:7;
+        bg = c;
+        ring = '1.5px solid #d99a2b';
+        op = 0.92;
+        glow = `0 0 6px rgba(217,154,43,0.55)`;
+      }else{
+        // T1 — full visual weight.
+        r = s==='h'?11:s==='m'?9:7;
+        bg = c;
+        ring = '1.5px solid rgba(255,255,255,.2)';
+        op = 0.88;
+        glow = s==='h'?`0 0 7px ${c}88`:s==='m'?`0 0 4px ${c}66`:'none';
+      }
+      const m=L.marker([i.lat,i.lon],{
+        icon:L.divIcon({
+          html:`<div class="mrkr mrkr-${tg}" data-id="${i.id}" style="width:${r*2}px;height:${r*2}px;border-radius:50%;background:${bg};border:${ring};opacity:${op};box-shadow:${glow};cursor:pointer;transition:transform .15s,opacity .15s"></div>`,
+          className:'',iconSize:[r*2,r*2],iconAnchor:[r,r]
+        }),
+        sv:s,inc:i
+      });
+      m.on('click',()=>openDetail(i));
+      m.on('mouseover',()=>{const d=m.getElement()?.querySelector('.mrkr');if(d)d.style.transform='scale(1.5)';});
+      m.on('mouseout', ()=>{const d=m.getElement()?.querySelector('.mrkr');if(d)d.style.transform='scale(1)';});
+      cg.addLayer(m);
     });
-    m.on('click',()=>openDetail(i));
-    m.on('mouseover',()=>{const d=m.getElement()?.querySelector('.mrkr');if(d)d.style.transform='scale(1.5)';});
-    m.on('mouseout',()=>{const d=m.getElement()?.querySelector('.mrkr');if(d)d.style.transform='scale(1)';});
-    cg.addLayer(m);
-  });
 }
 
 function renderHeatmap(list){
@@ -1467,7 +1570,7 @@ async function detAdminDelete(){
 
 async function detAdminEdit(){
   if(!detailItem || !isAdmin) return;
-  // Minimal inline editor: prompt for the four most important fields.
+  // Minimal inline editor: prompt for the most important fields.
   // Heavyweight editor lives in /admin; this is the quick "fix this one row"
   // path so admins don't context-switch when they spot a bad entry on the map.
   const i = detailItem;
@@ -1477,16 +1580,35 @@ async function detAdminEdit(){
   if(newCountry === null) return;
   const newLocation = prompt('Ort:', i.location || '');
   if(newLocation === null) return;
+  // Säule 1 (Strafverfolgungs-Druck) — Status + Aktenzeichen pflegen.
+  const newProsec = prompt(
+    'Strafverfolgungs-Status (unknown|none|investigating|charged|trial|convicted|acquitted|dismissed):',
+    i.prosec_status || 'unknown'
+  );
+  if(newProsec === null) return;
+  const newCaseRef = prompt('Aktenzeichen (z. B. „1 BJs 7/23-2", leer = keines):', i.case_ref || '');
+  if(newCaseRef === null) return;
+  const today = new Date().toISOString().slice(0,10);
   try{
     const r = await fetch('/api/admin/incident/'+i.id, {
       method:'PUT', credentials:'same-origin',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({summary:newSummary, country:newCountry, location:newLocation})
+      body: JSON.stringify({
+        summary: newSummary, country: newCountry, location: newLocation,
+        prosec_status: (newProsec||'unknown').trim().toLowerCase(),
+        case_ref: (newCaseRef||'').trim(),
+        last_status_check: today,
+      })
     });
-    if(!r.ok){ showToast('Bearbeiten fehlgeschlagen'); return; }
+    if(!r.ok){
+      let msg='Bearbeiten fehlgeschlagen';
+      try{ const j=await r.json(); if(j && j.message) msg=j.message; }catch(_){}
+      showToast(msg);
+      return;
+    }
     showToast('Aktualisiert — Daten werden neu geladen');
     setTimeout(()=>loadData(), 400);
-    detClose();
+    closeDetail();
   }catch(e){ showToast('Netzwerkfehler'); }
 }
 
@@ -1511,25 +1633,27 @@ function sortFeed(mode){
 function renderFeed(list){
   const el=document.getElementById('feed');
   const rcEl=document.getElementById('rcount');
-  // Show CONTEXT (non-primary) incidents only when the toggle is on.
-  let view=list;
-  if(!showContext){
-    const prim=list.filter(i=>i.is_primary===1||i.is_primary===true);
-    view = prim.length ? prim : list;  // graceful fallback if no flags yet
+  // Partition by Fedpol tier. T1/T2 render at the top; T3 collapses into an
+  // accordion that's opt-in via the T3 chip in the sort bar.
+  const wantT3 = activeTiers.has('context');
+  const main = list.filter(i=>activeTiers.has(tierOf(i)) && tierOf(i)!=='context');
+  const ctx  = wantT3 ? list.filter(i=>tierOf(i)==='context') : [];
+  animCount(rcEl, main.length + ctx.length);
+  if(!main.length && !ctx.length){
+    el.innerHTML='<div class="ifempty">'+t('feed.empty','KEINE VORFÄLLE GEFUNDEN')+'</div>';
+    return;
   }
-  animCount(rcEl,view.length);
-  if(!view.length){el.innerHTML='<div class="ifempty">'+t('feed.empty','KEINE VORFÄLLE GEFUNDEN')+'</div>';return;}
-  const sorted=sortedFeed(view);
+  const lbl_new   = t('feed.badge_new','NEU');
+  const lbl_geo   = t('feed.badge_no_geo','? ORT');
+  const lbl_hr    = t('feed.badge_high_risk','HIGH RISK');
+  const lbl_ctx   = t('feed.badge_context','KONTEXT');
+  const lbl_unk   = t('feed.location_unknown','? STANDORT UNBEKANNT');
+  const lbl_t2    = t('tier.enable.short','T2');
+  const lbl_t3    = t('tier.context.short','T3');
+  const lbl_ctxhd = t('feed.ctx_group','Kontext-Einträge');
   const now=new Date();
-  const lbl_new = t('feed.badge_new','NEU');
-  const lbl_geo = t('feed.badge_no_geo','? ORT');
-  const lbl_hr  = t('feed.badge_high_risk','HIGH RISK');
-  const lbl_ctx = t('feed.badge_context','KONTEXT');
-  const lbl_unk = t('feed.location_unknown','? STANDORT UNBEKANNT');
-  el.innerHTML=sorted.slice(0,300).map(i=>{
+  function card(i, asContext){
     const c=col(i.category),s=sev(i.category);
-    // Prefer the AI summary (2-3 short German sentences). Fall back to a
-    // truncated description only if no summary is available.
     const summ=(i.summary||'').trim();
     const raw=summ || cleanDesc(i.description||'');
     const d=raw.substring(0,200);
@@ -1538,14 +1662,18 @@ function renderFeed(list){
     const newBadge=isNew?`<span class="neu-badge">${lbl_new}</span>`:'';
     const geoBadge=noGeo?`<span class="nogeo-badge">${lbl_geo}</span>`:'';
     const sc=i.severity_score||0;
-    const scBadge=sc>0?`<span class="sev-score" style="background:${SEV_BG[sc]||'transparent'};color:${SEV_COL[sc]||'var(--t2)'};border:1px solid ${SEV_COL[sc]||'var(--t3)'}44">${sc}</span>`:'';
-    const hr = (i.is_high_risk===1||i.is_high_risk===true);
-    const isCtx = !(i.is_primary===1||i.is_primary===true);
+    const scBadge=(sc>0 && !asContext)?`<span class="sev-score" style="background:${SEV_BG[sc]||'transparent'};color:${SEV_COL[sc]||'var(--t2)'};border:1px solid ${SEV_COL[sc]||'var(--t3)'}44">${sc}</span>`:'';
+    const tg = tierOf(i);
+    const hr = (i.is_high_risk===1||i.is_high_risk===true) && !asContext;
     const hrBadge = hr ? `<span class="hr-badge">${lbl_hr}</span>` : '';
-    const ctxBadge = isCtx ? `<span class="ctx-badge">${lbl_ctx}</span>` : '';
-    return `<div class="icard${isCtx?' is-context':''}" id="ic-${i.id}" onclick="openDetailById(${i.id})" style="border-left-color:${c}">
+    const tierPill = tg==='enable'
+      ? `<span class="tier-pill t2">${lbl_t2}</span>`
+      : (asContext ? `<span class="tier-pill t3">${lbl_t3}</span>` : '');
+    const ctxBadge = asContext ? `<span class="ctx-badge">${lbl_ctx}</span>` : '';
+    const borderClr = asContext ? 'rgba(160,188,212,0.25)' : c;
+    return `<div class="icard${asContext?' is-context':''}" id="ic-${i.id}" onclick="openDetailById(${i.id})" style="border-left-color:${borderClr}">
       <div class="icard-hd">
-        ${hrBadge}${ctxBadge}
+        ${hrBadge}${ctxBadge}${tierPill}
         <span class="ibadge s${s}">${i.category}</span>
         ${scBadge}${newBadge}${geoBadge}
         <span class="idate">${i.date||'—'}</span>
@@ -1553,7 +1681,27 @@ function renderFeed(list){
       <div class="iloc">${noGeo?`<span style="color:var(--t3)">${lbl_unk}</span>`:i.location+'&nbsp;·&nbsp;<span style="opacity:.6">'+i.country+'</span>'}</div>
       <div class="idesc">${d}${d.length>=200?'…':''}</div>
     </div>`;
-  }).join('');
+  }
+  const mainSorted = sortedFeed(main).slice(0, 300).map(i=>card(i,false)).join('');
+  let ctxHtml = '';
+  if(ctx.length){
+    const ctxSorted = sortedFeed(ctx).slice(0, 200).map(i=>card(i,true)).join('');
+    ctxHtml = `<div class="ctx-group${ctxOpen?' open':''}" id="ctx-group">
+      <div class="ctx-hdr" onclick="toggleCtxGroup()">
+        <span class="ctx-arr">▶</span>
+        <span>${lbl_ctxhd}</span>
+        <span class="ctx-cnt">${ctx.length}</span>
+      </div>
+      <div class="ctx-list">${ctxSorted}</div>
+    </div>`;
+  }
+  el.innerHTML = mainSorted + ctxHtml;
+}
+
+function toggleCtxGroup(){
+  ctxOpen = !ctxOpen;
+  const g = document.getElementById('ctx-group');
+  if(g) g.classList.toggle('open', ctxOpen);
 }
 
 function openDetailById(id){
@@ -2056,17 +2204,81 @@ function setSevMin(n){
 // ── RIGHT PANEL TABS ───────────────────────────────────────────────
 function switchTab(tab){
   activeRTab=tab;
-  ['feed','akteure'].forEach(t=>{
-    document.getElementById(`tab-${t}`).classList.toggle('on',t===tab);
+  ['feed','akteure','verfolgung'].forEach(t=>{
+    const btn=document.getElementById(`tab-${t}`);
+    if(btn) btn.classList.toggle('on',t===tab);
   });
   document.getElementById('feed').style.display=tab==='feed'?'':'none';
   document.getElementById('actor-panel').style.display=tab==='akteure'?'':'none';
+  document.getElementById('prosec-panel').style.display=tab==='verfolgung'?'':'none';
   document.getElementById('feed-sort-ctrl').style.display=tab==='feed'?'':'none';
   const titleEl=document.getElementById('rp-title');
-  if(titleEl) titleEl.textContent=tab==='feed'?'THREAT FEED':'AKTEURE & GRUPPEN';
+  if(titleEl){
+    if(tab==='feed')         titleEl.textContent=t('feed.title','THREAT FEED');
+    else if(tab==='akteure') titleEl.textContent=t('feed.actors_title','AKTEURE & GRUPPEN');
+    else                     titleEl.textContent=t('prosec.title','STRAFVERFOLGUNG');
+  }
   const rcEl=document.getElementById('rcount');
   if(tab==='akteure'){rcEl.textContent='';loadActors();}
+  else if(tab==='verfolgung'){rcEl.textContent='';loadAccountability();}
   else{animCount(rcEl,vis.length);}
+}
+
+// ── ACCOUNTABILITY (Säule 1 — Strafverfolgungs-Druck) ─────────────
+async function loadAccountability(){
+  const wrap = document.getElementById('prosec-tbl-wrap');
+  const stats= document.getElementById('prosec-stats');
+  try{
+    const d = await fetch('/api/accountability').then(r=>r.json());
+    const lblTotal = t('prosec.stat_total','T1-Vorfälle');
+    const lblCase  = t('prosec.stat_case','mit Verfahren');
+    const lblGap   = t('prosec.stat_gap','Strafverfolgungs-Gap');
+    stats.innerHTML = `
+      <div class="prosec-stat"><div class="ps-lbl">${lblTotal}</div><div class="ps-val">${d.total_t1}</div></div>
+      <div class="prosec-stat"><div class="ps-lbl">${lblCase}</div><div class="ps-val">${d.with_case}</div></div>
+      <div class="prosec-stat gap"><div class="ps-lbl">${lblGap}</div><div class="ps-val">${d.gap_count}</div></div>
+    `;
+    renderProsecTable(d, wrap);
+  }catch(e){
+    wrap.innerHTML='<div class="ifempty">'+t('prosec.error','FEHLER BEIM LADEN')+'</div>';
+  }
+}
+
+function renderProsecTable(data, wrap){
+  const rows = data.gap_rows || [];
+  // Always include a broader recent list, not just the gap-rows, so admins
+  // can flip status forward without having to leave the tab.
+  const allT1 = (Array.isArray(all) ? all : []).filter(i=>tierOf(i)==='act')
+    .sort((a,b)=>(b.date||'')>(a.date||'')?1:-1).slice(0,200);
+  if(!allT1.length){
+    wrap.innerHTML='<div class="ifempty">'+t('prosec.empty','KEINE T1-VORFÄLLE')+'</div>';
+    return;
+  }
+  const gapSet = new Set(rows.map(r=>r.id));
+  const head = `<thead><tr>
+    <th>${t('prosec.col_date','DATUM')}</th>
+    <th>${t('prosec.col_loc','ORT')}</th>
+    <th>${t('prosec.col_cat','KATEGORIE')}</th>
+    <th>${t('prosec.col_sev','SEV')}</th>
+    <th>${t('prosec.col_status','STATUS')}</th>
+    <th>${t('prosec.col_case','AKTENZEICHEN')}</th>
+  </tr></thead>`;
+  const body = allT1.map(r=>{
+    const st = (r.prosec_status || 'unknown');
+    const stCls = 'ps-'+st;
+    const gap  = gapSet.has(r.id) ? ' class="gap-row"' : '';
+    const cref = (r.case_ref || '').trim();
+    const loc  = `${r.location||'—'}${r.country?` <span style="opacity:.6">·${r.country}</span>`:''}`;
+    return `<tr${gap}>
+      <td>${r.date||'—'}</td>
+      <td>${loc}</td>
+      <td>${r.category||'—'}</td>
+      <td style="text-align:center">${r.severity_score||''}</td>
+      <td><span class="prosec-status-badge ${stCls}">${st}</span></td>
+      <td>${cref ? cref : '<span style="color:var(--t3)">—</span>'}</td>
+    </tr>`;
+  }).join('');
+  wrap.innerHTML = `<table class="prosec-tbl">${head}<tbody>${body}</tbody></table>`;
 }
 
 // ── ACTOR TRACKING ─────────────────────────────────────────────────
@@ -2219,14 +2431,29 @@ function switchModule(name){
 // ══════════════════════════════════════════════════════════════════
 // FEED CONTEXT TOGGLE
 // ══════════════════════════════════════════════════════════════════
-function toggleContext(){
-  showContext=!showContext;
-  const btn=document.getElementById('toggle-context');
-  btn.classList.toggle('on', showContext);
-  btn.textContent = showContext
-    ? t('feed.toggle_context_hide', '✓ KONTEXT')
-    : t('feed.toggle_context_show', '+ KONTEXT');
+// Replaced by toggleTier — kept as a no-op shim so any external bookmarklets
+// or saved sessions don't error out.
+function toggleContext(){ toggleTier('context'); }
+
+// ── TIER FILTER (T1/T2/T3) ────────────────────────────────────────
+function toggleTier(tier){
+  if(activeTiers.has(tier)) activeTiers.delete(tier);
+  else activeTiers.add(tier);
+  // Don't let the user end up with an empty feed by accident — re-enable T1.
+  if(activeTiers.size === 0) activeTiers.add('act');
+  document.querySelectorAll('.tchip').forEach(b=>{
+    b.classList.toggle('on', activeTiers.has(b.getAttribute('data-tier')));
+  });
+  showContext = activeTiers.has('context');
   if(typeof vis !== 'undefined' && vis) renderFeed(vis);
+  if(typeof renderMarkers === 'function' && vis) renderMarkers(vis);
+}
+
+function tierOf(i){
+  const tg = (i.tier || '').toLowerCase();
+  if(tg === 'act' || tg === 'enable' || tg === 'context') return tg;
+  // Backward-compat: derive from is_primary for pre-MS-1 rows.
+  return (i.is_primary===1 || i.is_primary===true) ? 'act' : 'context';
 }
 
 // ══════════════════════════════════════════════════════════════════
