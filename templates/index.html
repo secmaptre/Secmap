@@ -421,6 +421,17 @@ body.mod-funding #mod-funding-view{display:grid !important;}
   box-shadow:0 0 6px rgba(240,165,0,0.18) inset;}
 .tchip.on.t3{color:var(--t1);border-color:var(--t2);background:rgba(160,188,212,0.07);}
 
+/* Akteurs-Tier-Pill (MS-7) — vor dem Namen im Actor-Panel */
+.actor-tier{display:inline-block;font-family:var(--mono);font-size:7px;font-weight:700;
+  letter-spacing:1.2px;padding:1px 5px;border-radius:2px;vertical-align:middle;
+  flex-shrink:0;}
+.actor-tier.t1{background:rgba(212,73,93,0.16);color:var(--red);
+  border:1px solid rgba(212,73,93,0.42);}
+.actor-tier.t2{background:rgba(217,154,43,0.16);color:var(--amber);
+  border:1px solid rgba(217,154,43,0.42);}
+.actor-tier.t3-actor{background:rgba(160,188,212,0.08);color:var(--t2);
+  border:1px solid rgba(160,188,212,0.20);}
+
 /* T2 enable tier-chip on incident cards */
 .tier-pill{display:inline-block;font-family:var(--mono);font-size:7px;font-weight:700;
   letter-spacing:1.5px;padding:2px 6px;border-radius:2px;margin-right:5px;vertical-align:middle;}
@@ -2356,18 +2367,32 @@ async function loadActors(){
 }
 
 function renderActors(data,el){
-  if(!data||!data.length){el.innerHTML='<div class="ifempty-actors">KEINE AKTEURSDATEN</div>';return;}
+  if(!data||!data.length){el.innerHTML='<div class="ifempty-actors">'+t('feed.actors_empty','KEINE AKTEURSDATEN')+'</div>';return;}
   const max=Math.max(...data.map(a=>a.count),1);
+  // Fedpol Akteurs-Tier (MS-7) — short label per tier, rendered as a pill
+  // in front of the actor name. Defaults to "endorse" if absent.
+  const pillFor = (tg) => {
+    const tier = (tg || 'endorse').toLowerCase();
+    const cls  = tier === 'act' ? 't1'
+               : tier === 'enable' ? 't2'
+               : 't3-actor';
+    const lbl  = tier === 'act'    ? t('actor.tier_act','TAT')
+              : tier === 'enable' ? t('actor.tier_enable','FÖRDER')
+              :                     t('actor.tier_endorse','BEFÜRW');
+    return `<span class="actor-tier ${cls}" title="Fedpol: ${tier}">${lbl}</span>`;
+  };
   el.innerHTML=data.map(a=>{
     const w=Math.round(a.count/max*100);
     const nm=a.name||a.actor||'?';
+    const lastLbl = t('feed.actor_last_seen','ZULETZT');
     return `<div class="actor-entry" onclick="filterActor('${nm.replace(/'/g,"\\'")}')">
       <div class="actor-hd">
+        ${pillFor(a.tier)}
         <span class="actor-name">${nm}</span>
         <span class="actor-cnt">${a.count}</span>
       </div>
       <div class="actor-bar"><div class="actor-bar-fill" style="width:${w}%"></div></div>
-      ${a.last_seen?`<div style="font-family:var(--mono);font-size:8px;color:var(--t3);margin-top:3px">ZULETZT: ${a.last_seen}</div>`:''}
+      ${a.last_seen?`<div style="font-family:var(--mono);font-size:8px;color:var(--t3);margin-top:3px">${lastLbl}: ${a.last_seen}</div>`:''}
     </div>`;
   }).join('');
 }

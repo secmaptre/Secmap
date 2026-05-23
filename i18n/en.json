@@ -71,6 +71,12 @@
   "eff.funding": "€",
   "eff.evidence": "EVI",
 
+  "actor.tier_act": "ACT",
+  "actor.tier_enable": "ENABLE",
+  "actor.tier_endorse": "ENDORSE",
+  "feed.actors_empty": "NO ACTOR DATA",
+  "feed.actor_last_seen": "LAST SEEN",
+
   "tier.act": "T1 · Act",
   "tier.enable": "T2 · Enable",
   "tier.context": "T3 · Context",

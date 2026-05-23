@@ -71,6 +71,12 @@
   "eff.funding": "€",
   "eff.evidence": "EVI",
 
+  "actor.tier_act": "TAT",
+  "actor.tier_enable": "FÖRDER",
+  "actor.tier_endorse": "BEFÜRW",
+  "feed.actors_empty": "KEINE AKTEURSDATEN",
+  "feed.actor_last_seen": "ZULETZT",
+
   "tier.act": "T1 · Tat",
   "tier.enable": "T2 · Förderung",
   "tier.context": "T3 · Kontext",

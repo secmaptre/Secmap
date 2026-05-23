@@ -403,25 +403,35 @@ def score_severity(category, text=""):
     return base
 
 # ── ACTOR / GROUP TRACKING ────────────────────────────────────────
+# Each entry: (display name, regex patterns, fedpol_tier).
+# Tier mapping is intentionally conservative (Concept §C3 #2 — keine
+# Vorverurteilung). Only attribute "act" where public record clearly
+# connects the name to concrete violent acts (claim letters or convictions);
+# "enable" for groups that organise support/propaganda for the milieu;
+# "endorse" for scene/neighbourhood labels and movements that explicitly
+# disavow violence themselves but are part of the broader endorsement layer.
 KNOWN_ACTORS = [
-    ("Rote Flora",         [r"rote\s+flora"]),
-    ("Rigaer 94",          [r"rigaer\s*(?:94|straße|str\.)", r"liebig\s*34"]),
-    ("Ende Gelände",       [r"ende\s+gel[äa]nde"]),
-    ("Schwarzer Block",    [r"schwarzer\s+block", r"black\s+bloc"]),
-    ("Rev. Zellen",        [r"revolutionäre\s+zellen", r"\brz\b"]),
-    ("Letzte Generation",  [r"letzte\s+generation"]),
-    ("Lina E. Netzwerk",   [r"\blina\s+e[\.\b]", r"hammerbande"]),
-    ("Rote Hilfe",         [r"rote\s+hilfe"]),
-    ("Antifa Leipzig",     [r"antifa\s+leipzig", r"connewitz"]),
-    ("Autonome Gruppe",    [r"eine?\s+autonome\s+gruppe", r"autonome\s+zelle"]),
-    ("Junge Welt Umfeld",  [r"junge\s+welt\s+gruppe"]),
-    ("Interventionist Left",[r"interventionistische\s+linke", r"\bil\b.*linke"]),
+    ("Rote Flora",          [r"rote\s+flora"],                                "endorse"),
+    ("Rigaer 94",           [r"rigaer\s*(?:94|straße|str\.)", r"liebig\s*34"], "endorse"),
+    ("Ende Gelände",        [r"ende\s+gel[äa]nde"],                            "endorse"),
+    ("Schwarzer Block",     [r"schwarzer\s+block", r"black\s+bloc"],           "act"),
+    ("Rev. Zellen",         [r"revolutionäre\s+zellen", r"\brz\b"],            "act"),
+    ("Letzte Generation",   [r"letzte\s+generation"],                          "endorse"),
+    ("Lina E. Netzwerk",    [r"\blina\s+e[\.\b]", r"hammerbande"],             "act"),
+    ("Rote Hilfe",          [r"rote\s+hilfe"],                                 "enable"),
+    ("Antifa Leipzig",      [r"antifa\s+leipzig", r"connewitz"],               "endorse"),
+    ("Autonome Gruppe",     [r"eine?\s+autonome\s+gruppe", r"autonome\s+zelle"], "act"),
+    ("Junge Welt Umfeld",   [r"junge\s+welt\s+gruppe"],                        "enable"),
+    ("Interventionist Left",[r"interventionistische\s+linke", r"\bil\b.*linke"], "endorse"),
 ]
+
+ACTOR_TIER = {name: tier for name, _patterns, tier in KNOWN_ACTORS}
 
 def extract_actors(text):
     found = []
     t = (text or "").lower()
-    for name, patterns in KNOWN_ACTORS:
+    for entry in KNOWN_ACTORS:
+        name, patterns = entry[0], entry[1]
         if any(re.search(p, t) for p in patterns):
             found.append(name)
     return ",".join(found)
@@ -2617,7 +2627,13 @@ async def get_actors():
             a = a.strip()
             if not a: continue
             if a not in actor_map:
-                actor_map[a] = {"name": a, "count": 0, "high": 0, "last_seen": ""}
+                actor_map[a] = {
+                    "name": a, "count": 0, "high": 0, "last_seen": "",
+                    # MS-7 — Fedpol Akteurs-Tier: act|enable|endorse, fallback
+                    # endorse for actors not in KNOWN_ACTORS (we don't impute
+                    # active perpetration to unknown labels).
+                    "tier": ACTOR_TIER.get(a, "endorse"),
+                }
             actor_map[a]["count"] += row["n"]
             actor_map[a]["high"]  += row["hi"]
             if (row["last_seen"] or "") > actor_map[a]["last_seen"]:
