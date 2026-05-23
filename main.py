@@ -175,6 +175,31 @@ def get_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_fe_src ON funding_edges(src_org)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_fe_dst ON funding_edges(dst_org)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_fe_year ON funding_edges(year)")
+
+    # ── API TOKENS + AUDIT (Säule 4 — MS-6) ────────────────────────
+    # Authenticated /api/v1/* endpoint for LEA / academic users. Tokens
+    # are scoped (default „incidents:read") and revocable. Every request
+    # that authenticates writes an api_audit row — that's how token misuse
+    # gets surfaced and how we justify the access policy to data subjects.
+    c.execute('''CREATE TABLE IF NOT EXISTS api_tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        token TEXT UNIQUE NOT NULL,
+        label TEXT NOT NULL,
+        scopes TEXT DEFAULT 'incidents:read',
+        created_at TEXT,
+        last_used TEXT,
+        revoked INTEGER DEFAULT 0
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS api_audit (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        token_id INTEGER,
+        endpoint TEXT NOT NULL,
+        query TEXT,
+        ip TEXT,
+        timestamp TEXT
+    )''')
+    c.execute("CREATE INDEX IF NOT EXISTS idx_audit_token ON api_audit(token_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_audit_ts    ON api_audit(timestamp)")
     c.commit()
     return c
 
@@ -2550,6 +2575,208 @@ async def cite_incident(inc_id: int, format: str = "bibtex"):
         )
         mt = "application/x-bibtex; charset=utf-8"
     return StreamingResponse(iter([body]), media_type=mt)
+
+
+# ── LEA/RESEARCH API v1 (Säule 4 — MS-6) ──────────────────────────
+def require_api_token(scope: str = "incidents:read"):
+    """
+    FastAPI dependency that authenticates an Authorization: Bearer <token>
+    header against the api_tokens table, scoped to `scope`. Logs the call
+    in api_audit. Raises 401 on missing/invalid/revoked, 403 on scope
+    mismatch.
+    """
+    def _dep(request: Request):
+        auth = request.headers.get("authorization") or ""
+        if not auth.lower().startswith("bearer "):
+            raise HTTPException(401, "Missing Bearer token")
+        token = auth.split(" ", 1)[1].strip()
+        row = db.execute(
+            "SELECT id, scopes, revoked, label FROM api_tokens WHERE token=?",
+            (token,)
+        ).fetchone()
+        if not row or row["revoked"]:
+            raise HTTPException(401, "Invalid or revoked token")
+        if scope not in (row["scopes"] or "").split(","):
+            raise HTTPException(403, f"Token missing scope: {scope}")
+        # Touch last_used and write the audit trail. The 'ip' field is the
+        # source IP as seen by FastAPI (X-Forwarded-For-aware via Render).
+        now = datetime.now().isoformat(timespec="seconds")
+        ip  = (request.headers.get("x-forwarded-for") or
+               (request.client.host if request.client else "")).split(",")[0].strip()
+        db.execute("UPDATE api_tokens SET last_used=? WHERE id=?", (now, row["id"]))
+        db.execute(
+            "INSERT INTO api_audit (token_id, endpoint, query, ip, timestamp) "
+            "VALUES (?,?,?,?,?)",
+            (row["id"], str(request.url.path), str(request.url.query), ip, now)
+        )
+        db.commit()
+        return {"id": row["id"], "label": row["label"], "scopes": row["scopes"]}
+    return _dep
+
+
+@app.get("/api/v1/incidents")
+async def v1_incidents(
+    limit: int = 500,
+    country: str = "",
+    tier: str = "",
+    severity_min: int = 0,
+    date_from: str = "",
+    date_to: str = "",
+    _tok=Depends(require_api_token("incidents:read")),
+):
+    """
+    Authenticated full-fidelity incident export — same fields as
+    /api/incidents plus evidence_path/sha/ts. Designed for LEA and
+    academic users who need verifiable, citation-quality data.
+    """
+    q = ("SELECT id,date,location,country,category,description,summary,url,"
+         "source,lat,lon,severity_score,actors,confidence,"
+         "is_primary,is_high_risk,tier,target_type,"
+         "prosec_status,case_ref,last_status_check,"
+         "evidence_path,evidence_sha,evidence_ts,timestamp "
+         "FROM incidents WHERE 1=1")
+    p = []
+    if country:      q += " AND country=?";       p.append(country)
+    if tier:         q += " AND tier=?";          p.append(tier)
+    if severity_min: q += " AND severity_score >= ?"; p.append(severity_min)
+    if date_from:    q += " AND date >= ?";        p.append(date_from)
+    if date_to:      q += " AND date <= ?";        p.append(date_to)
+    q += " ORDER BY date DESC LIMIT ?"
+    p.append(min(max(limit, 1), 5000))
+    rows = [dict(r) for r in db.execute(q, p).fetchall()]
+    return JSONResponse({
+        "count":  len(rows),
+        "incidents": rows,
+        "asof":   datetime.now().isoformat(timespec="seconds"),
+    })
+
+
+@app.get("/api/v1/audit")
+async def v1_audit(
+    limit: int = 200,
+    _tok=Depends(require_api_token("audit:read")),
+):
+    """Self-audit endpoint — token holder can see their own call history."""
+    rows = db.execute(
+        "SELECT endpoint, query, ip, timestamp FROM api_audit "
+        "WHERE token_id=? ORDER BY timestamp DESC LIMIT ?",
+        (_tok["id"], min(max(limit, 1), 1000))
+    ).fetchall()
+    return JSONResponse({"count": len(rows), "calls": [dict(r) for r in rows]})
+
+
+@app.get("/api/v1/docs", response_class=HTMLResponse)
+async def v1_docs():
+    """Minimal static docs page in English — what the API offers, how to
+    authenticate, link to the policy lines (Concept §C3)."""
+    return HTMLResponse(_V1_DOCS_HTML)
+
+
+_V1_DOCS_HTML = """<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><title>LEX EUROPE — API v1 docs</title>
+<style>
+body{font-family:ui-monospace,Menlo,Consolas,monospace;background:#0a121e;color:#cfd6dd;
+  max-width:880px;margin:30px auto;padding:0 24px;line-height:1.55;font-size:14px}
+h1,h2{font-family:ui-sans-serif,system-ui,sans-serif;color:#e8edf2;letter-spacing:0.5px}
+h1{font-size:22px;border-bottom:1px solid #1c2937;padding-bottom:8px}
+h2{font-size:16px;margin-top:28px;color:#6aa9c9;text-transform:uppercase;letter-spacing:1.5px;font-size:12px}
+code,pre{background:#0f1a28;color:#a8c2d8;border:1px solid #1c2937;border-radius:3px;
+  padding:1px 6px;font-size:12px}
+pre{padding:10px 14px;overflow-x:auto;white-space:pre}
+a{color:#6aa9c9}
+.tag{display:inline-block;background:#1c2937;color:#6aa9c9;padding:1px 6px;
+  border-radius:2px;font-size:10px;letter-spacing:1px;margin-right:6px}
+.note{border-left:2px solid #d99a2b;background:rgba(217,154,43,0.08);padding:10px 14px;margin:14px 0}
+</style></head><body>
+
+<h1>LEX EUROPE — API v1</h1>
+<p>Authenticated, full-fidelity access to the LEX EUROPE incident corpus for
+law-enforcement agencies, academic researchers, and journalists. All endpoints
+require a personal API token; every call is logged in <code>api_audit</code>.</p>
+
+<div class="note"><b>Policy line.</b> The dataset never includes personal
+profiles of private individuals (no names, addresses, employers, family
+relationships). Tier classification follows Fedpol Art. 19 Abs. 2 Bst. e NDG
+(act / enable / context). Citations of single records should include the
+<code>evidence_sha</code> hash so verification is reproducible.</div>
+
+<h2>Authentication</h2>
+<pre>Authorization: Bearer &lt;your-token&gt;</pre>
+<p>Tokens are issued by the operator. Missing token → <code>401</code>. Revoked
+or wrong scope → <code>401</code> / <code>403</code>.</p>
+
+<h2>GET /api/v1/incidents</h2>
+<p><span class="tag">scope</span><code>incidents:read</code></p>
+<p>Returns up to <code>limit</code> incidents (default 500, max 5000) with all
+classification, severity, tier, prosecution-status, and WARC-evidence fields.</p>
+<p>Query parameters:</p>
+<ul>
+  <li><code>limit</code> — int, max 5000</li>
+  <li><code>country</code> — DE/AT/CH/FR/IT/...</li>
+  <li><code>tier</code> — <code>act</code> | <code>enable</code> | <code>context</code></li>
+  <li><code>severity_min</code> — 1..5</li>
+  <li><code>date_from</code>, <code>date_to</code> — ISO yyyy-mm-dd</li>
+</ul>
+
+<pre>curl -H "Authorization: Bearer $TOKEN" \\
+     "https://&lt;host&gt;/api/v1/incidents?tier=act&amp;severity_min=4&amp;date_from=2024-01-01"</pre>
+
+<h2>GET /api/v1/audit</h2>
+<p><span class="tag">scope</span><code>audit:read</code></p>
+<p>Returns the token holder's own call history — every request is timestamped
+and IP-stamped, so misuse is auditable on the operator side as well as on the
+researcher side.</p>
+
+<h2>GET /api/early-warning.json / .rss</h2>
+<p>Unauthenticated. Returns active target-type clusters (≥3 same-target attacks
+in 6 weeks). See <a href="/api/early-warning.json">/api/early-warning.json</a>.</p>
+
+<h2>GET /api/incident/&lt;id&gt;/cite</h2>
+<p>Unauthenticated. <code>format=bibtex|ris|chicago</code>. Embeds the
+<code>evidence_sha256</code> and capture timestamp in the citation note so the
+underlying WARC snapshot is reproducibly verifiable.</p>
+
+</body></html>
+"""
+
+
+@app.post("/admin/api/tokens")
+async def admin_create_token(request: Request, _=Depends(require_admin)):
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "message": "Ungültiges JSON"}, status_code=400)
+    label = (data.get("label") or "").strip()
+    if not label:
+        return JSONResponse({"ok": False, "message": "label ist Pflicht"}, status_code=400)
+    scopes = (data.get("scopes") or "incidents:read").strip()
+    token  = secrets.token_urlsafe(32)
+    now    = datetime.now().isoformat(timespec="seconds")
+    db.execute(
+        "INSERT INTO api_tokens (token,label,scopes,created_at,revoked) VALUES (?,?,?,?,0)",
+        (token, label, scopes, now)
+    )
+    db.commit()
+    # Token is returned ONLY here — never again. Operator must hand it to
+    # the researcher / LEA contact over a secure channel.
+    return JSONResponse({"ok": True, "token": token, "label": label, "scopes": scopes})
+
+
+@app.delete("/admin/api/tokens/{token_id}")
+async def admin_revoke_token(token_id: int, _=Depends(require_admin)):
+    db.execute("UPDATE api_tokens SET revoked=1 WHERE id=?", (token_id,))
+    db.commit()
+    return JSONResponse({"ok": True})
+
+
+@app.get("/admin/api/tokens")
+async def admin_list_tokens(_=Depends(require_admin)):
+    rows = db.execute(
+        "SELECT id, label, scopes, created_at, last_used, revoked "
+        "FROM api_tokens ORDER BY id DESC"
+    ).fetchall()
+    return JSONResponse([dict(r) for r in rows])
 
 
 @app.get("/api/effectiveness")
