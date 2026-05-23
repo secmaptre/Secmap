@@ -3621,6 +3621,71 @@ async def get_funding(
     p.append(max(1, min(limit, 2000)))
     return JSONResponse([dict(r) for r in db.execute(q, p).fetchall()])
 
+# ── REGION EXTRACTION (Säule 3, MS-4 polish) ──────────────────────
+# Leitet aus donor_name eine grobe Region ab — Stadt > Land/Kanton > Bund.
+# Keine externe Geodaten-Lib; einfache Keyword-Heuristik reicht für die
+# kuratierten Seed-Geber, weil die Namens-Konventionen einheitlich sind.
+_REGION_PATTERNS = [
+    # (region_label, level, country, regex on donor_name lowercase)
+    ("Wien",         "Stadt",     "AT", re.compile(r"\bwien\b|\bma\s*\d+\b")),
+    ("Berlin",       "Land",      "DE", re.compile(r"\bberlin\b|\bberlinovo\b|\bsenstadt\b|\bsenat\s+berlin\b")),
+    ("Hamburg",      "Land",      "DE", re.compile(r"\bhamburg\b|\bfhh\b|\bbürgerschaft\s+hamburg\b")),
+    ("München",      "Stadt",     "DE", re.compile(r"\bmünchen\b|\blandeshauptstadt münchen\b|\bbayer.{0,4}haupt")),
+    ("Leipzig",      "Stadt",     "DE", re.compile(r"\bleipzig\b")),
+    ("Frankfurt",    "Stadt",     "DE", re.compile(r"\bfrankfurt\b")),
+    ("Köln",         "Stadt",     "DE", re.compile(r"\bköln\b|\bk[öo]ln\b")),
+    ("Dortmund",     "Stadt",     "DE", re.compile(r"\bdortmund\b")),
+    ("Hessen",       "Land",      "DE", re.compile(r"\bhessen\b|\bsozialminist.*hessen")),
+    ("Bayern",       "Land",      "DE", re.compile(r"\bbayer")),
+    ("Sachsen",      "Land",      "DE", re.compile(r"\bsachsen\b|\bfreistaat sachsen\b")),
+    ("NRW",          "Land",      "DE", re.compile(r"\bnrw\b|\bnordrhein|\bmkffi\b")),
+    ("Bund DE",      "Bund",      "DE", re.compile(r"\bbmfsfj\b|\bbmbf\b|\bbpb\b|\bbundes(?:zentrale|regierung|ministerium|amt)")),
+    ("Bern",         "Stadt",     "CH", re.compile(r"\bbern\b")),
+    ("Zürich",       "Stadt",     "CH", re.compile(r"\bzürich\b|\bzuerich\b")),
+    ("Basel",        "Stadt",     "CH", re.compile(r"\bbasel\b")),
+    ("Kanton CH",    "Kanton",    "CH", re.compile(r"\bkanton\b")),
+    ("BKA AT",       "Bund",      "AT", re.compile(r"\bbka\s+österreich\b|\bbundeskanzleramt\b")),
+    ("EU-Kommission","EU",        "EU", re.compile(r"\beuropäische kommission\b|\beu kommission\b|\bcerv\b|\berasmus")),
+    ("USA-Stiftung", "Stiftung",  "US", re.compile(r"\bclimate emergency fund\b|\busa\b")),
+    ("Rosa-Luxemburg-Stiftung","Stiftung","DE", re.compile(r"\brosa[- ]luxemburg")),
+    ("Heinrich-Böll-Stiftung","Stiftung","DE", re.compile(r"\bheinrich[- ]böll\b|\bboell\b")),
+    ("Migros-Kulturprozent","Stiftung","CH", re.compile(r"\bmigros\b|\bengagement-migros\b")),
+]
+
+def funding_region(donor_name: str, country: str):
+    """Return (region_label, level) or fallback ('Übrige '+country, 'Andere')."""
+    n = (donor_name or "").lower()
+    for label, level, _co, rx in _REGION_PATTERNS:
+        if rx.search(n):
+            return (label, level)
+    return (f"Übrige {country or '—'}", "Andere")
+
+
+@app.get("/api/funding/by-region")
+async def funding_by_region(year_min: int = 0, year_max: int = 0,
+                            country: str = "", min_amount: float = 0):
+    """Aggregate funding by extracted region — bar-chart data for the
+    Funding-View region panel. Respects the same filter set as the table."""
+    q = "SELECT donor_name, country, amount, year FROM funding_records WHERE 1=1"
+    p = []
+    if year_min:   q += " AND year >= ?";   p.append(year_min)
+    if year_max:   q += " AND year <= ?";   p.append(year_max)
+    if country:    q += " AND country = ?"; p.append(country)
+    if min_amount: q += " AND amount >= ?"; p.append(min_amount)
+    rows = db.execute(q, p).fetchall()
+    agg = {}
+    for r in rows:
+        label, level = funding_region(r["donor_name"] or "", r["country"] or "")
+        key = (label, level, r["country"] or "—")
+        if key not in agg:
+            agg[key] = {"region": label, "level": level, "country": key[2],
+                        "count": 0, "amount": 0.0}
+        agg[key]["count"]  += 1
+        agg[key]["amount"] += r["amount"] or 0
+    out = sorted(agg.values(), key=lambda x: -x["amount"])
+    return JSONResponse({"regions": out, "asof": datetime.now().isoformat(timespec="seconds")})
+
+
 @app.get("/api/funding/stats")
 async def funding_stats():
     """Aggregated stats for the funding-view charts."""
