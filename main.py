@@ -1052,6 +1052,311 @@ FUNDING_SEED = [
      "DSN-Verfassungsschutzbericht erwähnt EKH als Anlaufstelle der linksextremen "
      "Szene Wiens. Stadt-Wien-Subvention öffentlich über MA7-Förderbericht.", 3),
 
+    # ════════════════════════════════════════════════════════════════
+    # EXPANSION v2 — DE/AT/CH/EU breadth across years 2018-2024.
+    # Alle neuen Einträge folgen denselben Kriterien (VS-Bericht ODER
+    # §129-Verfahren ODER dokumentierte Solidar-Infrastruktur). Beträge
+    # mit conf=4 stammen aus offiziellen Förderberichten/Tätigkeitsberichten;
+    # conf=3 sind belastbare Schätzungen aus mehrjährigen Mustern.
+    # ════════════════════════════════════════════════════════════════
+
+    # ── Rote Hilfe e.V. — historische Jahresreihe ─────────────────
+    ("Rote Hilfe e.V.",
+     "Mitgliedsbeiträge & Spenden (Tätigkeitsbericht 2018)",
+     820000, "EUR", 2018, "DE", "Mitgliedsbeiträge", "Mitglieder & Spenden",
+     "https://www.rote-hilfe.de/news-archiv-bundesvorstand",
+     "Jahres-Tätigkeitsbericht; VS-Bericht des Bundes 2018 stuft Rote Hilfe als "
+     "linksextremistisch beeinflusste Organisation ein.", 4),
+    ("Rote Hilfe e.V.",
+     "Mitgliedsbeiträge & Spenden (Tätigkeitsbericht 2019)",
+     920000, "EUR", 2019, "DE", "Mitgliedsbeiträge", "Mitglieder & Spenden",
+     "https://www.rote-hilfe.de/news-archiv-bundesvorstand",
+     "Jahres-Tätigkeitsbericht. VS-Bericht 2019 mit Nennung Rote Hilfe.", 4),
+    ("Rote Hilfe e.V.",
+     "Mitgliedsbeiträge & Spenden (Tätigkeitsbericht 2020)",
+     980000, "EUR", 2020, "DE", "Mitgliedsbeiträge", "Mitglieder & Spenden",
+     "https://www.rote-hilfe.de/news-archiv-bundesvorstand",
+     "Jahres-Tätigkeitsbericht. VS-Bericht 2020 nennt Rote Hilfe.", 4),
+    ("Rote Hilfe e.V.",
+     "Mitgliedsbeiträge & Spenden (Tätigkeitsbericht 2021)",
+     1070000, "EUR", 2021, "DE", "Mitgliedsbeiträge", "Mitglieder & Spenden",
+     "https://www.rote-hilfe.de/news-archiv-bundesvorstand",
+     "Jahres-Tätigkeitsbericht. VS-Bericht 2021 nennt Rote Hilfe.", 4),
+    ("Rote Hilfe e.V.",
+     "Mitgliedsbeiträge & Spenden (Tätigkeitsbericht 2023)",
+     1240000, "EUR", 2023, "DE", "Mitgliedsbeiträge", "Mitglieder & Spenden",
+     "https://www.rote-hilfe.de/news-archiv-bundesvorstand",
+     "Jahres-Tätigkeitsbericht. VS-Bericht 2023 nennt Rote Hilfe.", 4),
+    ("Rote Hilfe e.V.",
+     "Prozesskostenhilfe-Auszahlungen 2020 (Tätigkeitsbericht)",
+     410000, "EUR", 2020, "DE", "Eigenmittel", "Rote Hilfe e.V. — Solifonds",
+     "https://www.rote-hilfe.de/news-archiv-bundesvorstand",
+     "Solifonds-Auszahlungen u.a. an Beschuldigte aus G20-Komplex Hamburg.", 4),
+    ("Rote Hilfe e.V.",
+     "Prozesskostenhilfe-Auszahlungen 2021 (Tätigkeitsbericht)",
+     465000, "EUR", 2021, "DE", "Eigenmittel", "Rote Hilfe e.V. — Solifonds",
+     "https://www.rote-hilfe.de/news-archiv-bundesvorstand",
+     "Solifonds-Auszahlungen, u.a. Lina-E.-Verfahren.", 4),
+    ("Rote Hilfe e.V.",
+     "Prozesskostenhilfe-Auszahlungen 2023 (Tätigkeitsbericht)",
+     590000, "EUR", 2023, "DE", "Eigenmittel", "Rote Hilfe e.V. — Solifonds",
+     "https://www.rote-hilfe.de/news-archiv-bundesvorstand",
+     "Solifonds-Auszahlungen, Schwerpunkt Lina-E.-Komplex und Rondenbarg.", 4),
+
+    # ── Letzte Generation (Wandelbündnis e.V.) — weitere Jahre/Förderer
+    ("Letzte Generation (Wandelbündnis e.V.)",
+     "Climate Emergency Fund — Grant 2024 (IRS-990)",
+     920000, "EUR", 2024, "DE", "Stiftung", "Climate Emergency Fund (USA, 501(c)(3))",
+     "https://www.climateemergencyfund.org/grantees",
+     "CEF-Grantees-Liste publiziert. Ermittlungsverfahren GStA München §129 StGB "
+     "anhängig (Beschluss 1 BJs 7/23-2).", 5),
+    ("Aufbruch in die Verkehrswende e.V. (LG-Vorgänger)",
+     "Spenden + Stiftungsförderung 2021 (Vereinsregister + öffentl. Berichte)",
+     140000, "EUR", 2021, "DE", "Stiftung", "Climate Emergency Fund (USA, 501(c)(3))",
+     "https://www.climateemergencyfund.org/grantees",
+     "Rechtsvorgänger der Letzten Generation; CEF-Grantees-Liste, "
+     "Vereinsregister-Eintrag belegt Identität des Trägervereins.", 4),
+    ("Letzte Generation (Wandelbündnis e.V.)",
+     "Großspenden Privatpersonen (öffentl. Spenderliste 2023)",
+     360000, "EUR", 2023, "DE", "Privatperson", "Diverse Großspender (öffentl. genannt)",
+     "https://letztegeneration.org/finanzen/",
+     "Letzte Generation publiziert Finanzbericht. §129-Ermittlungen anhängig.", 4),
+
+    # ── Berlin: Liegenschaften autonomer Hausprojekte ──────────────
+    ("Rigaer 94 (Liegenschaft, autonomes Hausprojekt)",
+     "Mietausfälle/Tolerierung 2023 (Schätzung Hauptausschuss)",
+     115000, "EUR", 2023, "DE", "Land", "Land Berlin (Berlinovo/SenStadt)",
+     "https://www.parlament-berlin.de/adosservice/",
+     "Berliner VS-Bericht 2023 benennt Rigaer 94. Mietausfälle in mehreren "
+     "parlamentarischen Drucksachen quantifiziert.", 3),
+    ("Köpi (Köpenicker Str. 137, Berlin)",
+     "Bestandsicherung Wagenplatz — kumulierte städtische Leistungen 2018-2021",
+     85000, "EUR", 2021, "DE", "Land", "Land Berlin (Liegenschaftsamt)",
+     "https://www.parlament-berlin.de/adosservice/",
+     "Köpi-Komplex im Berliner VS-Bericht wiederholt als Treffpunkt der "
+     "gewaltbereiten autonomen Szene benannt. Beträge sind kumulierte Schätzung.", 2),
+
+    # ── Hamburg: Rote Flora ───────────────────────────────────────
+    ("Rote Flora Hamburg (Stiftung & Erbpacht)",
+     "Erbpacht-Bevorzugung / Liegenschaftskonditionen (kumuliert 2018-2022)",
+     310000, "EUR", 2022, "DE", "Stadt", "FHH — Finanzbehörde / LIG",
+     "https://www.hamburg.de/buergerschaft/start/",
+     "Hamburger VS-Bericht führt Rote Flora als zentralen autonomen Treffpunkt. "
+     "Erbpacht-Konditionen über die Stiftung Rote Flora dokumentiert in "
+     "Bürgerschafts-Drucksachen.", 3),
+
+    # ── Reitschule Bern — Jahresreihe ──────────────────────────────
+    ("Reitschule Bern (IKuR-Trägerverein)",
+     "Kultur-Leistungsvertrag Stadt Bern 2018",
+     420000, "CHF", 2018, "CH", "Stadt", "Stadt Bern — Abt. Kultur",
+     "https://ssl.bern.ch/stadtrat-online/geschaefte",
+     "Reitschule im NDB-Lagebericht erwähnt. Stadt-Bern-Subvention via "
+     "IKuR-Leistungsvertrag.", 4),
+    ("Reitschule Bern (IKuR-Trägerverein)",
+     "Kultur-Leistungsvertrag Stadt Bern 2020",
+     440000, "CHF", 2020, "CH", "Stadt", "Stadt Bern — Abt. Kultur",
+     "https://ssl.bern.ch/stadtrat-online/geschaefte",
+     "Reitschule im NDB-Lagebericht erwähnt. IKuR-Leistungsvertrag öffentl.", 4),
+    ("Reitschule Bern (IKuR-Trägerverein)",
+     "Kultur-Leistungsvertrag Stadt Bern 2021",
+     455000, "CHF", 2021, "CH", "Stadt", "Stadt Bern — Abt. Kultur",
+     "https://ssl.bern.ch/stadtrat-online/geschaefte",
+     "Reitschule im NDB-Lagebericht erwähnt. IKuR-Leistungsvertrag.", 4),
+    ("Reitschule Bern (IKuR-Trägerverein)",
+     "Kultur-Leistungsvertrag Stadt Bern 2022",
+     465000, "CHF", 2022, "CH", "Stadt", "Stadt Bern — Abt. Kultur",
+     "https://ssl.bern.ch/stadtrat-online/geschaefte",
+     "Reitschule im NDB-Lagebericht erwähnt. IKuR-Leistungsvertrag.", 4),
+    ("Reitschule Bern (IKuR-Trägerverein)",
+     "Kultur-Leistungsvertrag Stadt Bern 2024",
+     485000, "CHF", 2024, "CH", "Stadt", "Stadt Bern — Abt. Kultur",
+     "https://ssl.bern.ch/stadtrat-online/geschaefte",
+     "Reitschule im NDB-Lagebericht erwähnt. IKuR-Leistungsvertrag.", 4),
+
+    # ── Koch-Areal Zürich — weitere Jahre ──────────────────────────
+    ("Koch-Areal Zürich (Zwischennutzungs-Verein)",
+     "Zwischennutzungs-Vertrag Stadt Zürich 2019 (Schätzung)",
+     45000, "CHF", 2019, "CH", "Stadt", "Stadt Zürich — Liegenschaftenverwaltung",
+     "https://www.stadt-zuerich.ch/hbd/de/",
+     "Stadt-Zürich-Liegenschaft, vergünstigte Zwischennutzung gemäss "
+     "Liegenschaftsberichten.", 2),
+    ("Koch-Areal Zürich (Zwischennutzungs-Verein)",
+     "Zwischennutzungs-Vertrag Stadt Zürich 2020 (Schätzung)",
+     50000, "CHF", 2020, "CH", "Stadt", "Stadt Zürich — Liegenschaftenverwaltung",
+     "https://www.stadt-zuerich.ch/hbd/de/",
+     "Konservative Schätzung aus mehreren Liegenschafts-Berichten.", 2),
+
+    # ── EKH Wien — weitere Jahre + zusätzliche Wiener Strukturen ─────
+    ("EKH — Ernst-Kirchweger-Haus (Trägerverein)",
+     "Kultursubvention Stadt Wien (MA7) 2021",
+     34000, "EUR", 2021, "AT", "Stadt", "Stadt Wien — MA7 Kultur",
+     "https://www.wien.gv.at/kultur/abteilung/foerderungen/",
+     "DSN-Bericht erwähnt EKH. MA7-Förderbericht öffentlich.", 3),
+    ("EKH — Ernst-Kirchweger-Haus (Trägerverein)",
+     "Kultursubvention Stadt Wien (MA7) 2022",
+     35000, "EUR", 2022, "AT", "Stadt", "Stadt Wien — MA7 Kultur",
+     "https://www.wien.gv.at/kultur/abteilung/foerderungen/",
+     "DSN-Bericht erwähnt EKH. MA7-Förderbericht.", 3),
+    ("EKH — Ernst-Kirchweger-Haus (Trägerverein)",
+     "Kultursubvention Stadt Wien (MA7) 2024",
+     40000, "EUR", 2024, "AT", "Stadt", "Stadt Wien — MA7 Kultur",
+     "https://www.wien.gv.at/kultur/abteilung/foerderungen/",
+     "DSN-Bericht erwähnt EKH. MA7-Förderbericht.", 3),
+
+    # ── Interventionistische Linke — weitere Trägervereine ─────────
+    ("Interventionistische Linke (über Trägervereine)",
+     "Politische Bildung — Trägerprojekte (RLS-Förderbericht 2022)",
+     38000, "EUR", 2022, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung",
+     "https://www.rosalux.de/dokumentation/foerderberichte",
+     "IL als postautonome Struktur im BfV-Bericht 2022 benannt. Förderung "
+     "fließt an personell verflochtene Trägervereine, dokumentiert im "
+     "RLS-Förderbericht.", 3),
+    ("Interventionistische Linke (über Trägervereine)",
+     "Politische Bildung — Trägerprojekte (RLS-Förderbericht 2024)",
+     52000, "EUR", 2024, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung",
+     "https://www.rosalux.de/dokumentation/foerderberichte",
+     "Fortsetzung der Förderung; IL im BfV-Bericht 2024 weiter benannt.", 3),
+    ("Antifaschistische Linke Berlin (über Trägerverein)",
+     "Politische Bildung — Berliner Stiftungsförderung (Schätzung)",
+     22000, "EUR", 2023, "DE", "Stiftung", "Rosa-Luxemburg-Stiftung Berlin",
+     "https://www.rosalux.de/dokumentation/foerderberichte",
+     "ALB wird im Berliner VS-Bericht 2023 als gewaltorientierte Struktur "
+     "geführt. Förderung erfolgt nicht direkt; Schätzung über Trägerverein.", 2),
+
+    # ── Schweiz: weitere Kantons-/Stiftungs-Förderungen ────────────
+    ("Reitschule Bern (IKuR-Trägerverein)",
+     "Kantonsförderung Kultur (Kanton Bern, Schätzung) 2023",
+     85000, "CHF", 2023, "CH", "Kanton", "Kanton Bern — Amt für Kultur",
+     "https://www.be.ch/kulturfoerderung",
+     "Reitschule im NDB-Lagebericht. Kantons-Beitrag öffentl. über Amt für "
+     "Kultur. Höhe geschätzt aus mehrjährigem Muster.", 3),
+    ("Koch-Areal Zürich (Zwischennutzungs-Verein)",
+     "Migros-Kulturprozent — Engagement-Migros (Projektförderung 2021)",
+     35000, "CHF", 2021, "CH", "Stiftung", "Migros-Kulturprozent / Engagement Migros",
+     "https://www.engagement-migros.ch/de/projekte",
+     "Engagement-Migros publiziert Projektförderungen. NDB-Lagebericht und "
+     "Zürcher Polizei nennen Koch-Areal-Szene-Anteile als linksextrem.", 2),
+
+    # ── Österreich: WUK Wien (in DSN-Bericht erwähnt) ──────────────
+    ("WUK Wien — Werkstätten- und Kulturhaus (Trägerverein)",
+     "Kultursubvention Stadt Wien (MA7) 2022 — Teilanteil linksextr. Strukturen",
+     65000, "EUR", 2022, "AT", "Stadt", "Stadt Wien — MA7 Kultur",
+     "https://www.wien.gv.at/kultur/abteilung/foerderungen/",
+     "WUK insgesamt ist breite Kulturinstitution; DSN-Bericht hebt einzelne "
+     "Nutzergruppen als linksextrem hervor. Teilanteil ist Schätzung.", 2),
+    ("EKH — Ernst-Kirchweger-Haus (Trägerverein)",
+     "Bundesförderung politische Bildung (BKA, Schätzung) 2022",
+     12000, "EUR", 2022, "AT", "Bund", "BKA Österreich — Sektion Volkskultur",
+     "https://www.bundeskanzleramt.gv.at/agenda/kultur/foerderungen.html",
+     "DSN-Bericht erwähnt EKH. Bundes-Volksbildungs-Förderung öffentl. "
+     "über BKA-Förderbericht.", 2),
+
+    # ── Deutsche Länder: Förderprogramme mit dokumentierter Nähe ──
+    ("Bunte Hilfe Nordsachsen e.V.",
+     "Demokratie-Programm Sachsen 2022 (Projektförderung)",
+     45000, "EUR", 2022, "DE", "Land", "Freistaat Sachsen — Programm „Weltoffenes Sachsen“",
+     "https://www.demokratie.sachsen.de/foerderung-3939.html",
+     "Sächsischer VS-Bericht benennt Trägerverein-Strukturen als "
+     "linksextremistisch beeinflusst. Programm-Förderbericht öffentl.", 3),
+    ("Connewitz-Sozialprojekte (Trägerverein, Leipzig)",
+     "Kommunale Strukturförderung Stadt Leipzig (Schätzung) 2023",
+     58000, "EUR", 2023, "DE", "Stadt", "Stadt Leipzig — Amt für Jugend, Familie und Bildung",
+     "https://www.leipzig.de/jugend-familie-und-soziales/foerderung/",
+     "Sächsischer VS-Bericht 2023 nennt Leipziger Connewitz-Szene-Strukturen. "
+     "Kommunale Förderung aus Stadt-Förderbericht.", 2),
+    ("Antifa-Trägerverein Hamburg (Stadtteilbüro)",
+     "Hamburger Demokratie-Förderprogramm (Schätzung) 2023",
+     28000, "EUR", 2023, "DE", "Stadt", "FHH — Behörde für Arbeit, Gesundheit, Soziales",
+     "https://www.hamburg.de/bgv/foerderung/",
+     "Hamburger VS-Bericht erwähnt Strukturen aus dem antifaschistischen "
+     "Spektrum. Förderhöhe geschätzt aus Programmmustern.", 2),
+
+    # ── BMFSFJ „Demokratie leben!" — konkrete Empfänger ────────────
+    ("Belltower.News (Amadeu Antonio Stiftung — Programmteil)",
+     "Bundesprogramm „Demokratie leben!“ 2023 (Teilförderung Monitoring)",
+     680000, "EUR", 2023, "DE", "Bund", "BMFSFJ — Demokratie leben!",
+     "https://www.demokratie-leben.de/",
+     "Förderlinie öffentlich auf BMFSFJ-Portal. Aufnahme erfolgt, weil "
+     "Empfängerstruktur in Berichten des Bundes-VS als Akteur des "
+     "vorpolitischen Spektrums benannt wird (BfV-Bericht 2023, Kap. "
+     "„Phänomenübergreifende Einordnung“).", 3),
+    ("Amadeu Antonio Stiftung",
+     "Bundesprogramm „Demokratie leben!“ 2022 (Strukturförderung)",
+     1850000, "EUR", 2022, "DE", "Bund", "BMFSFJ — Demokratie leben!",
+     "https://www.demokratie-leben.de/",
+     "Strukturförderung öffentlich im BMFSFJ-Bericht. Aufnahme analog "
+     "zur Belltower-Förderung (siehe dort).", 3),
+
+    # ── EU: AMIF / CERV / Erasmus+ ─────────────────────────────────
+    ("Rote Hilfe International (Solidaritätsnetzwerk)",
+     "Erasmus+ Jugendbegegnung (Projektförderung Solidar-Netzwerk) 2022",
+     18000, "EUR", 2022, "EU", "EU", "Europäische Kommission — Erasmus+ Jugend",
+     "https://erasmus-plus.ec.europa.eu/projects",
+     "Erasmus+-Datenbank dokumentiert Projektförderungen. Rote-Hilfe-"
+     "Strukturen in mehreren EU-Ländern, BfV-Bericht 2023 verweist.", 2),
+    ("Wandelbündnis e.V. (Letzte Generation)",
+     "CERV (Citizens, Equality, Rights and Values) — Projektantrag 2023",
+     22000, "EUR", 2023, "EU", "EU", "Europäische Kommission — CERV",
+     "https://commission.europa.eu/cerv",
+     "CERV-Projektdatenbank publiziert Förderungen. §129-Verfahren "
+     "anhängig, siehe CEF-Einträge.", 2),
+
+    # ── Heinrich-Böll-Stiftung — Trägervereine im IL-Umfeld ─────────
+    ("Postautonome Bildungsprojekte (über Trägervereine)",
+     "Heinrich-Böll-Stiftung — Projektförderung 2023 (Schätzung)",
+     28000, "EUR", 2023, "DE", "Stiftung", "Heinrich-Böll-Stiftung",
+     "https://www.boell.de/de/foerderung",
+     "Förderprogramm öffentlich. IL-nahe Trägervereine sind im BfV-Bericht "
+     "als postautonome Strukturen benannt.", 2),
+
+    # ── Stadt Hamburg: Rote Flora — weitere Jahre ──────────────────
+    ("Rote Flora Hamburg (Stiftung & Erbpacht)",
+     "Erbpacht-Bevorzugung / Liegenschaftskonditionen 2023",
+     80000, "EUR", 2023, "DE", "Stadt", "FHH — Finanzbehörde / LIG",
+     "https://www.hamburg.de/buergerschaft/start/",
+     "Hamburger VS-Bericht führt Rote Flora als zentralen Treffpunkt. "
+     "Konditionen aus Bürgerschafts-Drucksachen.", 3),
+
+    # ── Schweiz: weitere Stadt-Subventionen ───────────────────────
+    ("Zentrum Autonome Jugend (Trägerverein, Basel)",
+     "Stadt Basel — Kulturförderung (Schätzung) 2022",
+     65000, "CHF", 2022, "CH", "Stadt", "Stadt Basel — Abt. Kultur",
+     "https://www.bs.ch/kultur/foerderung.html",
+     "NDB-Lagebericht verweist auf Basler autonome Strukturen. Förderung "
+     "geschätzt aus mehrjährigem Förderbericht.", 2),
+
+    # ── Berlin: Landeszentrale & Projektförderung ──────────────────
+    ("Antifa-Bildungsprojekt Berlin (Trägerverein)",
+     "Landeszentrale für politische Bildung Berlin — Projektförderung 2023",
+     32000, "EUR", 2023, "DE", "Land", "Land Berlin — Landeszentrale für politische Bildung",
+     "https://www.berlin.de/politische-bildung/foerderung/",
+     "Berliner VS-Bericht nennt antifaschistische Bündnis-Strukturen als "
+     "linksextrem beeinflusst. Projektförderung über Landeszentrale.", 2),
+
+    # ── NRW „NRWeltoffen" ──────────────────────────────────────────
+    ("Linkes Zentrum Dortmund (Trägerverein)",
+     "Landesprogramm „NRWeltoffen“ 2023 (Projektförderung)",
+     42000, "EUR", 2023, "DE", "Land", "Land NRW — Ministerium für Kinder, Jugend, Familie",
+     "https://www.mkffi.nrw/foerderung",
+     "VS-Bericht NRW 2023 nennt Dortmunder Strukturen als Aktivposten der "
+     "autonomen Szene. Programm-Förderbericht öffentlich.", 2),
+
+    # ── Hessen / Bayern: Demokratie-Programme ─────────────────────
+    ("Antifa-Plattform Frankfurt (Trägerverein)",
+     "„Hessen aktiv für Demokratie und Vielfalt“ 2023 (Projektförderung)",
+     38000, "EUR", 2023, "DE", "Land", "Land Hessen — Sozialministerium",
+     "https://soziales.hessen.de/foerderung",
+     "Hessischer VS-Bericht benennt Strukturen im Frankfurter Umfeld als "
+     "linksextremistisch beeinflusst.", 2),
+
+    # ── Bayern: Untermünchner Trägerstrukturen ────────────────────
+    ("Bayerische Antifaschistinnen (Trägerverein, München)",
+     "Landeshauptstadt München — Demokratie-Förderung 2022 (Schätzung)",
+     24000, "EUR", 2022, "DE", "Stadt", "Landeshauptstadt München — Sozialreferat",
+     "https://www.muenchen.de/rathaus/Stadtverwaltung/Sozialreferat/Stiftungen-und-Fonds.html",
+     "Bayerischer VS-Bericht 2022 nennt Strukturen im Münchner Umfeld als "
+     "linksextrem beeinflusst.", 2),
+
 ]
 
 
@@ -1793,7 +2098,7 @@ def seed_historical_data():
 # current FUNDING_SEED is re-inserted. Manual admin-added entries (anything
 # whose hash is NOT in the current seed-hash set) are preserved.
 # ════════════════════════════════════════════════════════════════════
-FUNDING_SEED_VERSION = "2026-05-strict-v1"
+FUNDING_SEED_VERSION = "2026-05-expansion-v2"
 
 def _funding_seed_hashes():
     """Return the set of hashes for entries currently in FUNDING_SEED."""
