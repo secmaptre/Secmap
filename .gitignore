@@ -4,3 +4,6 @@ __pycache__/
 *.db-wal
 *.db-shm
 .env
+# MS-5 — WARC snapshots are local artifacts; on render.com they live on the
+# persistent disk and are never committed.
+/evidence/

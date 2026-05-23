@@ -400,6 +400,85 @@ body.mod-funding #mod-funding-view{display:grid !important;}
 .icard.is-context{opacity:.55;}
 .icard.is-context:hover{opacity:.92;}
 
+/* ── WIRKUNGS-COUNTER (Concept §C5, status footer) ── */
+.eff-sep{border-left:1px dashed rgba(160,188,212,0.18);padding-left:12px;margin-left:4px;}
+.sv.eff{font-weight:700;letter-spacing:0.3px;color:var(--t0);}
+.sv.eff-gap{color:var(--red);text-shadow:0 0 5px rgba(212,73,93,0.35);}
+.sv.eff-cluster{color:var(--amber);}
+.sv.eff-funding{color:var(--accent);}
+.sv.eff-evidence{color:var(--green);}
+.sv.eff.pending{color:var(--t3);font-weight:400;text-shadow:none;}
+
+/* ── TIER FILTER CHIPS (Fedpol 3-tier) ── */
+.tier-chips{display:inline-flex;gap:3px;margin-left:6px;}
+.tchip{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:1.5px;
+  padding:4px 8px;border-radius:2px;background:transparent;color:var(--t3);
+  border:1px solid var(--pb);cursor:pointer;transition:background .15s,color .15s,border-color .15s;}
+.tchip:hover{color:var(--t1);}
+.tchip.on.t1{color:var(--red);border-color:var(--red);background:rgba(255,51,85,0.10);
+  box-shadow:0 0 6px rgba(255,51,85,0.18) inset;}
+.tchip.on.t2{color:var(--amber);border-color:var(--amber);background:rgba(240,165,0,0.10);
+  box-shadow:0 0 6px rgba(240,165,0,0.18) inset;}
+.tchip.on.t3{color:var(--t1);border-color:var(--t2);background:rgba(160,188,212,0.07);}
+
+/* Akteurs-Tier-Pill (MS-7) — vor dem Namen im Actor-Panel */
+.actor-tier{display:inline-block;font-family:var(--mono);font-size:7px;font-weight:700;
+  letter-spacing:1.2px;padding:1px 5px;border-radius:2px;vertical-align:middle;
+  flex-shrink:0;}
+.actor-tier.t1{background:rgba(212,73,93,0.16);color:var(--red);
+  border:1px solid rgba(212,73,93,0.42);}
+.actor-tier.t2{background:rgba(217,154,43,0.16);color:var(--amber);
+  border:1px solid rgba(217,154,43,0.42);}
+.actor-tier.t3-actor{background:rgba(160,188,212,0.08);color:var(--t2);
+  border:1px solid rgba(160,188,212,0.20);}
+
+/* T2 enable tier-chip on incident cards */
+.tier-pill{display:inline-block;font-family:var(--mono);font-size:7px;font-weight:700;
+  letter-spacing:1.5px;padding:2px 6px;border-radius:2px;margin-right:5px;vertical-align:middle;}
+.tier-pill.t2{background:rgba(240,165,0,0.16);color:var(--amber);
+  border:1px solid rgba(240,165,0,0.42);text-shadow:0 0 5px rgba(240,165,0,0.35);}
+.tier-pill.t3{background:rgba(120,140,160,0.10);color:var(--t2);
+  border:1px solid rgba(160,188,212,0.18);}
+
+/* ── CONTEXT AUFKLAPP (T3 collapsed group) ── */
+.ctx-group{margin-top:8px;border-top:1px dashed rgba(160,188,212,0.18);padding-top:8px;}
+.ctx-hdr{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:9px;
+  font-weight:600;letter-spacing:1.2px;color:var(--t2);cursor:pointer;padding:6px 4px;
+  user-select:none;transition:color .15s;}
+.ctx-hdr:hover{color:var(--t0);}
+.ctx-hdr .ctx-arr{font-size:10px;transition:transform .2s;}
+.ctx-group.open .ctx-hdr .ctx-arr{transform:rotate(90deg);}
+.ctx-hdr .ctx-cnt{margin-left:auto;font-family:var(--mono);font-size:8px;color:var(--t3);}
+.ctx-list{display:none;}
+.ctx-group.open .ctx-list{display:block;}
+/* T3 cards: smaller, no severity color border, muted */
+.ctx-list .icard{border-left:2px solid rgba(160,188,212,0.25) !important;
+  padding:6px 8px;margin:4px 0;background:rgba(255,255,255,0.015);}
+.ctx-list .icard .idesc{font-size:9px;line-height:1.35;opacity:.85;}
+.ctx-list .icard .icard-hd{font-size:8px;}
+
+/* ── VERFOLGUNG (prosec status) tab ── */
+#prosec-panel{display:none;padding:8px 10px;font-family:var(--mono);font-size:9px;color:var(--t1);}
+.prosec-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;}
+.prosec-stat{padding:8px 10px;border:1px solid var(--pb);border-radius:3px;background:rgba(0,200,255,0.03);}
+.prosec-stat .ps-lbl{font-size:7px;letter-spacing:1.5px;color:var(--t3);margin-bottom:3px;}
+.prosec-stat .ps-val{font-size:18px;font-weight:700;color:var(--t0);}
+.prosec-stat.gap{border-color:rgba(255,51,85,0.42);background:rgba(255,51,85,0.06);}
+.prosec-stat.gap .ps-val{color:var(--red);}
+.prosec-tbl{width:100%;border-collapse:collapse;font-size:9px;}
+.prosec-tbl th{text-align:left;padding:4px 6px;color:var(--t3);
+  border-bottom:1px solid var(--pb);font-weight:600;letter-spacing:1px;font-size:8px;}
+.prosec-tbl td{padding:5px 6px;border-bottom:1px solid rgba(160,188,212,0.08);
+  vertical-align:top;color:var(--t1);}
+.prosec-tbl tr:hover td{background:rgba(0,200,255,0.04);}
+.prosec-tbl tr.gap-row td{color:var(--red);background:rgba(255,51,85,0.04);}
+.prosec-status-badge{display:inline-block;font-size:7px;letter-spacing:1.5px;
+  padding:2px 5px;border-radius:2px;border:1px solid currentColor;}
+.ps-unknown,.ps-none{color:var(--red);background:rgba(255,51,85,0.08);}
+.ps-investigating,.ps-charged,.ps-trial{color:var(--amber);background:rgba(240,165,0,0.08);}
+.ps-convicted{color:var(--green);background:rgba(0,232,122,0.08);}
+.ps-acquitted,.ps-dismissed{color:var(--t2);background:rgba(160,188,212,0.06);}
+
 /* ── LANGUAGE SWITCHER (topbar) ── */
 .tb-lang{display:inline-flex;gap:0;margin-right:6px;flex-shrink:0;
   border:1px solid var(--pb);border-radius:3px;overflow:hidden;}
@@ -494,6 +573,28 @@ body.mod-funding #mod-funding-view{display:grid !important;}
   border-radius:2px;background:transparent;color:var(--t1);cursor:pointer;transition:all .12s;}
 .fnd-chip.on,.fnd-chip:hover{border-color:var(--accent);color:var(--accent);background:var(--ag);}
 @media(max-width:900px){.fnd-charts{grid-template-columns:1fr;}}
+
+/* ── MS-4 — Funding-Graph (D3-Force) ── */
+.fnd-mode-graph .fnd-tablewrap,
+.fnd-mode-graph .fnd-loadmore,
+.fnd-mode-graph .fnd-charts{display:none !important;}
+.fnd-graph-legend{display:flex;align-items:center;gap:18px;padding:8px 4px;
+  font-family:var(--mono);font-size:9px;color:var(--t1);}
+.fnd-graph-legend .lg-dot{display:inline-block;width:9px;height:9px;
+  border-radius:50%;margin-right:6px;vertical-align:middle;}
+.lg-donor{background:#d99a2b;box-shadow:0 0 6px rgba(217,154,43,0.5);}
+.lg-intermediary{background:#6aa9c9;box-shadow:0 0 6px rgba(106,169,201,0.5);}
+.lg-recipient{background:#d4495d;box-shadow:0 0 6px rgba(212,73,93,0.5);}
+#fnd-graph svg .fg-link{stroke:rgba(160,188,212,0.22);stroke-width:0.6;}
+#fnd-graph svg .fg-link.edge{stroke-dasharray:3,2;stroke:rgba(217,154,43,0.45);}
+#fnd-graph svg .fg-link.hl{stroke:rgba(106,169,201,0.85);stroke-width:1.3;}
+#fnd-graph svg .fg-node{stroke:rgba(8,14,24,0.85);stroke-width:1;cursor:pointer;
+  transition:r .15s,stroke-width .15s;}
+#fnd-graph svg .fg-node:hover{stroke:var(--t0);stroke-width:2;}
+#fnd-graph svg .fg-label{font-family:var(--mono);font-size:8px;fill:var(--t2);
+  pointer-events:none;opacity:0;transition:opacity .15s;}
+#fnd-graph svg .fg-node.hl + .fg-label,
+#fnd-graph svg .fg-label.hl{opacity:1;fill:var(--t0);}
 @media(max-width:800px){
   #mod-funding-view{grid-template-columns:1fr;}
   .fnd-aside{position:fixed;top:var(--tbh);left:0;right:0;bottom:var(--mobnavh);
@@ -772,18 +873,27 @@ body.mod-funding #mod-funding-view{display:grid !important;}
     <div class="sort-toggle" style="margin-left:auto" id="feed-sort-ctrl">
       <button class="sort-btn on" id="sort-date" onclick="sortFeed('date')" title="Nach Datum"><span data-i18n="feed.sort_date">DATUM</span> ↓</button>
       <button class="sort-btn" id="sort-sev" onclick="sortFeed('severity')" title="Nach Schwere"><span data-i18n="feed.sort_severity">SCHWERE</span> ↓</button>
-      <button class="sort-btn" id="toggle-context" onclick="toggleContext()" title="Kontext-Vorfälle (Demos, Verhaftungen) einblenden" data-i18n="feed.toggle_context_show">+ KONTEXT</button>
+      <div class="tier-chips" id="tier-chips" role="group" aria-label="Tier-Filter">
+        <button class="tchip on t1" data-tier="act"     onclick="toggleTier('act')"     title="T1 — Verüben (Brand, Sabotage, Gewalt)"        data-i18n="tier.act.short">T1</button>
+        <button class="tchip on t2" data-tier="enable"  onclick="toggleTier('enable')"  title="T2 — Fördern (Aufruf, Mobilisierung)"          data-i18n="tier.enable.short">T2</button>
+        <button class="tchip on t3" data-tier="context" onclick="toggleTier('context')" title="T3 — Kontext (Demo, Repression, Verhaftung)"   data-i18n="tier.context.short">T3</button>
+      </div>
     </div>
   </div>
   <div class="tab-nav">
     <button class="tab-btn on" id="tab-feed" onclick="switchTab('feed')" data-i18n="feed.tab_feed">FEED</button>
     <button class="tab-btn" id="tab-akteure" onclick="switchTab('akteure')" data-i18n="feed.tab_actors">AKTEURE</button>
+    <button class="tab-btn" id="tab-verfolgung" onclick="switchTab('verfolgung')" title="Strafverfolgungs-Status (Säule 1)" data-i18n="feed.tab_prosec">VERFOLGUNG</button>
   </div>
   <div class="pbody" id="feed">
     <div class="ifempty" data-i18n="feed.loading">LADE DATENSÄTZE…</div>
   </div>
   <div class="pbody" id="actor-panel" style="display:none">
     <div class="ifempty-actors" data-i18n="feed.actors_loading">LADE AKTEURE…</div>
+  </div>
+  <div class="pbody" id="prosec-panel" style="display:none">
+    <div class="prosec-stats" id="prosec-stats"></div>
+    <div id="prosec-tbl-wrap"><div class="ifempty" data-i18n="prosec.loading">LADE VERFOLGUNGS-DATEN…</div></div>
   </div>
 </aside>
 
@@ -803,11 +913,14 @@ body.mod-funding #mod-funding-view{display:grid !important;}
     <div id="det-desc"></div>
     <div id="det-conf-row" style="margin-top:12px"></div>
     <div id="det-actions">
-      <button class="det-act" onclick="detFlyTo()">Auf Karte zeigen</button>
+      <button class="det-act" onclick="detFlyTo()" data-i18n="detail.show_on_map">Auf Karte zeigen</button>
+      <!-- MS-5: Zitations-Export (BibTeX / RIS / Chicago) -->
+      <button class="det-act" id="det-cite" onclick="detCite()" title="Quelle zitieren (BibTeX / RIS / Chicago)" data-i18n="detail.cite">Zitieren</button>
       <!-- Admin-only quick controls — JS injects these when an admin cookie/session is detected -->
-      <button class="det-act det-admin" id="det-admin-edit"   style="display:none" onclick="detAdminEdit()">Bearbeiten</button>
-      <button class="det-act det-admin det-danger" id="det-admin-delete" style="display:none" onclick="detAdminDelete()">Löschen</button>
+      <button class="det-act det-admin" id="det-admin-edit"   style="display:none" onclick="detAdminEdit()" data-i18n="detail.admin_edit">Bearbeiten</button>
+      <button class="det-act det-admin det-danger" id="det-admin-delete" style="display:none" onclick="detAdminDelete()" data-i18n="detail.admin_delete">Löschen</button>
     </div>
+    <div id="det-evidence" style="margin-top:8px;display:none;font-family:var(--mono);font-size:8px;color:var(--t3);"></div>
     <a id="det-src" href="#" target="_blank" rel="noopener"></a>
   </div>
 </aside>
@@ -941,10 +1054,29 @@ body.mod-funding #mod-funding-view{display:grid !important;}
       <div class="fnd-stat"><b id="fnd-h-orgs">—</b>ORGANISATIONEN</div>
       <div class="fnd-stat"><b id="fnd-h-donors">—</b>GEBER</div>
       <div class="fnd-stat amber"><b id="fnd-h-years">—</b>JAHRE</div>
+      <!-- MS-4 — Sub-Tabs: Tabelle / Graph -->
+      <div class="fnd-subtabs" style="margin-left:auto;display:flex;gap:6px">
+        <button class="gbtn on" id="fnd-tab-table" onclick="fndSwitchView('table')" data-i18n="fnd.view_table">Tabelle</button>
+        <button class="gbtn"    id="fnd-tab-graph" onclick="fndSwitchView('graph')" data-i18n="fnd.view_graph">Graph</button>
+      </div>
     </div>
 
     <div class="fnd-body">
-      <div class="fnd-tablewrap">
+      <!-- GRAPH VIEW (MS-4) -->
+      <div id="fnd-graph-wrap" style="display:none">
+        <div class="fnd-graph-legend">
+          <span><i class="lg-dot lg-donor"></i> <span data-i18n="fnd.legend_donor">Geber</span></span>
+          <span><i class="lg-dot lg-intermediary"></i> <span data-i18n="fnd.legend_intermediary">Träger</span></span>
+          <span><i class="lg-dot lg-recipient"></i> <span data-i18n="fnd.legend_recipient">Empfänger</span></span>
+          <span style="margin-left:auto;color:var(--t3);font-size:8px" id="fnd-graph-counts">—</span>
+        </div>
+        <div id="fnd-graph" style="position:relative;width:100%;height:560px;border:1px solid var(--pb);background:rgba(5,11,22,0.55);overflow:hidden">
+          <svg id="fnd-graph-svg" style="width:100%;height:100%;display:block"></svg>
+          <div id="fnd-graph-tooltip" style="position:absolute;display:none;pointer-events:none;background:rgba(8,14,24,0.95);border:1px solid var(--pb);padding:8px 10px;font-family:var(--mono);font-size:9px;color:var(--t0);max-width:280px;z-index:5;border-radius:2px;box-shadow:0 4px 16px rgba(0,0,0,0.4);"></div>
+        </div>
+      </div>
+
+      <div class="fnd-tablewrap" id="fnd-tablewrap">
         <table class="fnd-table" id="fnd-table">
           <thead>
             <tr>
@@ -1117,6 +1249,23 @@ body.mod-funding #mod-funding-view{display:grid !important;}
   <div class="si"><span class="sk">DB</span><span class="sv" id="s-db">—</span></div>
   <svg id="tl-svg" viewBox="0 0 400 14" preserveAspectRatio="none"></svg>
   <span id="coord-lbl">LAT — · LON —</span>
+  <!-- Wirkungs-Counter (Concept §C5) — bewusst öffentlich. -->
+  <div class="si eff-sep" title="Strafverfolgungs-Lücke: % T1 Sev≥4 ohne Verfahren nach 180 Tagen">
+    <span class="sk" data-i18n="eff.gap">GAP</span>
+    <span class="sv eff eff-gap" id="eff-gap">—</span>
+  </div>
+  <div class="si" title="Aktive Frühwarn-Cluster (≥ 3 gleichartige Anschläge / 6 Wochen)">
+    <span class="sk" data-i18n="eff.cluster">WARN</span>
+    <span class="sv eff eff-cluster" id="eff-cluster">—</span>
+  </div>
+  <div class="si" title="Dokumentierte Förderung (laufendes Jahr)">
+    <span class="sk" data-i18n="eff.funding">€</span>
+    <span class="sv eff eff-funding" id="eff-funding">—</span>
+  </div>
+  <div class="si" title="Evidence-Coverage: % Einträge mit WARC + Timestamp">
+    <span class="sk" data-i18n="eff.evidence">EVI</span>
+    <span class="sv eff eff-evidence" id="eff-evidence">—</span>
+  </div>
   <div class="si"><span class="sk">CRAWLER</span><span class="sv" id="s-cr">—</span></div>
   <div id="thr-lvl"></div>
 </footer>
@@ -1168,6 +1317,7 @@ body.mod-funding #mod-funding-view{display:grid !important;}
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
 <script>
 // ── CONSTANTS ──────────────────────────────────────────────────────
 const SEV_H=new Set(['Brandanschlag','Gewalt','Militante Aktion','Aufruf zu Gewalt']);
@@ -1200,7 +1350,13 @@ let detailItem=null;
 let chartInstances={};
 // Active module ("incidents" or "funding") and feed-context toggle.
 let activeModule='incidents';
-let showContext=false;
+// Fedpol 3-tier filter — all three tiers on by default per Policy v3
+// (Demo/Repression are part of the Lagebild). T3 cards collapse into an
+// accordion that starts closed so the high-signal cards stay above the fold.
+// Mutating the set re-renders the feed AND the map markers.
+let activeTiers = new Set(['act','enable','context']);
+let ctxOpen = false;            // T3 aufklapp state in the feed
+let showContext=true;           // legacy alias — kept for compatibility
 // Funding-tracker state.
 let fndAll=[], fndVis=[], fndFilters={search:'', country:'', donor_type:'', year_min:'', year_max:'', amount_min:'', sort:'year_desc'};
 let fndShown=50, fndDebounceTimer=null, fndLoaded=false;
@@ -1262,6 +1418,11 @@ async function setLang(lang){
 function runBoot(){
   setLang(detectLang());     // load i18n before first render
   loadData(); loadTrends(); loadTimeline();
+  loadEffectiveness();        // Wirkungs-Counter im Status-Footer (§C5)
+  // Refresh every 5 min — counters change slowly (status edits, new
+  // funding entries, new incidents) and a polling interval avoids racey
+  // stale numbers when the operator leaves the tab open.
+  setInterval(loadEffectiveness, 5 * 60 * 1000);
   // Admin-Status einmal abfragen; das Cookie ist httpOnly, daher Server-Roundtrip.
   checkAdmin().then(()=>{ if(detailItem) showDetAdminButtons(); });
 }
@@ -1322,25 +1483,54 @@ function animCount(el,to){
 }
 
 // ── MARKER RENDER ──────────────────────────────────────────────────
+// Markers respect the active tier set: T1 = full colour, T2 = amber ring,
+// T3 = small grey dot (so context entries stay visible but do not compete
+// with real violent acts for attention).
 function renderMarkers(list){
   cg.clearLayers();
   if(heatL){map.removeLayer(heatL);heatL=null;}
   if(heatMode){renderHeatmap(list);return;}
-  list.filter(i=>i.lat!=null&&i.lon!=null&&!isNaN(i.lat)&&!isNaN(i.lon)).forEach(i=>{
-    const s=sev(i.category),c=col(i.category);
-    const r=s==='h'?11:s==='m'?9:7;
-    const m=L.marker([i.lat,i.lon],{
-      icon:L.divIcon({
-        html:`<div class="mrkr" data-id="${i.id}" style="width:${r}px;height:${r}px;border-radius:50%;background:${c};border:1.5px solid rgba(255,255,255,.2);opacity:.88;box-shadow:${s==='h'?`0 0 7px ${c}88`:s==='m'?`0 0 4px ${c}66`:'none'};cursor:pointer;transition:transform .15s,opacity .15s"></div>`,
-        className:'',iconSize:[r*2,r*2],iconAnchor:[r,r]
-      }),
-      sv:s,inc:i
+  list
+    .filter(i=>i.lat!=null&&i.lon!=null&&!isNaN(i.lat)&&!isNaN(i.lon))
+    .filter(i=>activeTiers.has(tierOf(i)))
+    .forEach(i=>{
+      const s=sev(i.category),c=col(i.category);
+      const tg = tierOf(i);
+      let r, bg, ring, op, glow;
+      if(tg==='context'){
+        // T3 — muted grey dot.
+        r = 4;
+        bg = '#7a8a99';
+        ring = '1px solid rgba(255,255,255,0.18)';
+        op = 0.45;
+        glow = 'none';
+      }else if(tg==='enable'){
+        // T2 — colour by category but with an amber ring (Fördern).
+        r = s==='h'?10:s==='m'?9:7;
+        bg = c;
+        ring = '1.5px solid #d99a2b';
+        op = 0.92;
+        glow = `0 0 6px rgba(217,154,43,0.55)`;
+      }else{
+        // T1 — full visual weight.
+        r = s==='h'?11:s==='m'?9:7;
+        bg = c;
+        ring = '1.5px solid rgba(255,255,255,.2)';
+        op = 0.88;
+        glow = s==='h'?`0 0 7px ${c}88`:s==='m'?`0 0 4px ${c}66`:'none';
+      }
+      const m=L.marker([i.lat,i.lon],{
+        icon:L.divIcon({
+          html:`<div class="mrkr mrkr-${tg}" data-id="${i.id}" style="width:${r*2}px;height:${r*2}px;border-radius:50%;background:${bg};border:${ring};opacity:${op};box-shadow:${glow};cursor:pointer;transition:transform .15s,opacity .15s"></div>`,
+          className:'',iconSize:[r*2,r*2],iconAnchor:[r,r]
+        }),
+        sv:s,inc:i
+      });
+      m.on('click',()=>openDetail(i));
+      m.on('mouseover',()=>{const d=m.getElement()?.querySelector('.mrkr');if(d)d.style.transform='scale(1.5)';});
+      m.on('mouseout', ()=>{const d=m.getElement()?.querySelector('.mrkr');if(d)d.style.transform='scale(1)';});
+      cg.addLayer(m);
     });
-    m.on('click',()=>openDetail(i));
-    m.on('mouseover',()=>{const d=m.getElement()?.querySelector('.mrkr');if(d)d.style.transform='scale(1.5)';});
-    m.on('mouseout',()=>{const d=m.getElement()?.querySelector('.mrkr');if(d)d.style.transform='scale(1)';});
-    cg.addLayer(m);
-  });
 }
 
 function renderHeatmap(list){
@@ -1410,9 +1600,46 @@ function openDetail(i){
     srcEl.style.display='none';
   }
 
+  // MS-5 — Quellensicherung anzeigen, falls vorhanden. Macht den
+  // tamper-evidenten Anker sichtbar (SHA-256 + Zeitstempel der Erfassung).
+  const evEl = document.getElementById('det-evidence');
+  if(i.evidence_path && evEl){
+    const sha8 = (i.evidence_sha || '').substring(0, 12);
+    evEl.style.display = 'block';
+    evEl.innerHTML = `<span style="color:var(--t2)">${t('detail.evidence','WARC-SNAPSHOT')}:</span> ` +
+      `<span style="color:var(--green)">${i.evidence_ts || ''}</span> · ` +
+      `<span title="${i.evidence_sha}">sha256:${sha8}…</span>`;
+  } else if(evEl){
+    evEl.style.display = 'none';
+    evEl.innerHTML = '';
+  }
+
   document.getElementById('detail').classList.add('det-open');
   document.getElementById('right').classList.add('detail-push');
   hlFeed(i.id);
+}
+
+// MS-5 — Citation-Export (BibTeX / RIS / Chicago).
+async function detCite(){
+  if(!detailItem) return;
+  const fmt = prompt(t('detail.cite_prompt','Format: bibtex | ris | chicago'), 'bibtex');
+  if(!fmt) return;
+  const f = fmt.trim().toLowerCase();
+  if(!['bibtex','ris','chicago'].includes(f)){ showToast('Unbekanntes Format'); return; }
+  try{
+    const r = await fetch(`/api/incident/${detailItem.id}/cite?format=${encodeURIComponent(f)}`);
+    if(!r.ok){ showToast('Citation fehlgeschlagen'); return; }
+    const text = await r.text();
+    try{
+      await navigator.clipboard.writeText(text);
+      showToast(t('detail.cite_copied','Zitation in die Zwischenablage kopiert'));
+    }catch(_){
+      // Fallback: open in new tab so the user can copy manually.
+      const blob = new Blob([text], {type:'text/plain'});
+      const url  = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    }
+  }catch(e){ showToast('Netzwerkfehler'); }
 }
 
 function closeDetail(){
@@ -1467,7 +1694,7 @@ async function detAdminDelete(){
 
 async function detAdminEdit(){
   if(!detailItem || !isAdmin) return;
-  // Minimal inline editor: prompt for the four most important fields.
+  // Minimal inline editor: prompt for the most important fields.
   // Heavyweight editor lives in /admin; this is the quick "fix this one row"
   // path so admins don't context-switch when they spot a bad entry on the map.
   const i = detailItem;
@@ -1477,16 +1704,35 @@ async function detAdminEdit(){
   if(newCountry === null) return;
   const newLocation = prompt('Ort:', i.location || '');
   if(newLocation === null) return;
+  // Säule 1 (Strafverfolgungs-Druck) — Status + Aktenzeichen pflegen.
+  const newProsec = prompt(
+    'Strafverfolgungs-Status (unknown|none|investigating|charged|trial|convicted|acquitted|dismissed):',
+    i.prosec_status || 'unknown'
+  );
+  if(newProsec === null) return;
+  const newCaseRef = prompt('Aktenzeichen (z. B. „1 BJs 7/23-2", leer = keines):', i.case_ref || '');
+  if(newCaseRef === null) return;
+  const today = new Date().toISOString().slice(0,10);
   try{
     const r = await fetch('/api/admin/incident/'+i.id, {
       method:'PUT', credentials:'same-origin',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({summary:newSummary, country:newCountry, location:newLocation})
+      body: JSON.stringify({
+        summary: newSummary, country: newCountry, location: newLocation,
+        prosec_status: (newProsec||'unknown').trim().toLowerCase(),
+        case_ref: (newCaseRef||'').trim(),
+        last_status_check: today,
+      })
     });
-    if(!r.ok){ showToast('Bearbeiten fehlgeschlagen'); return; }
+    if(!r.ok){
+      let msg='Bearbeiten fehlgeschlagen';
+      try{ const j=await r.json(); if(j && j.message) msg=j.message; }catch(_){}
+      showToast(msg);
+      return;
+    }
     showToast('Aktualisiert — Daten werden neu geladen');
     setTimeout(()=>loadData(), 400);
-    detClose();
+    closeDetail();
   }catch(e){ showToast('Netzwerkfehler'); }
 }
 
@@ -1511,25 +1757,27 @@ function sortFeed(mode){
 function renderFeed(list){
   const el=document.getElementById('feed');
   const rcEl=document.getElementById('rcount');
-  // Show CONTEXT (non-primary) incidents only when the toggle is on.
-  let view=list;
-  if(!showContext){
-    const prim=list.filter(i=>i.is_primary===1||i.is_primary===true);
-    view = prim.length ? prim : list;  // graceful fallback if no flags yet
+  // Partition by Fedpol tier. T1/T2 render at the top; T3 collapses into an
+  // accordion that's opt-in via the T3 chip in the sort bar.
+  const wantT3 = activeTiers.has('context');
+  const main = list.filter(i=>activeTiers.has(tierOf(i)) && tierOf(i)!=='context');
+  const ctx  = wantT3 ? list.filter(i=>tierOf(i)==='context') : [];
+  animCount(rcEl, main.length + ctx.length);
+  if(!main.length && !ctx.length){
+    el.innerHTML='<div class="ifempty">'+t('feed.empty','KEINE VORFÄLLE GEFUNDEN')+'</div>';
+    return;
   }
-  animCount(rcEl,view.length);
-  if(!view.length){el.innerHTML='<div class="ifempty">'+t('feed.empty','KEINE VORFÄLLE GEFUNDEN')+'</div>';return;}
-  const sorted=sortedFeed(view);
+  const lbl_new   = t('feed.badge_new','NEU');
+  const lbl_geo   = t('feed.badge_no_geo','? ORT');
+  const lbl_hr    = t('feed.badge_high_risk','HIGH RISK');
+  const lbl_ctx   = t('feed.badge_context','KONTEXT');
+  const lbl_unk   = t('feed.location_unknown','? STANDORT UNBEKANNT');
+  const lbl_t2    = t('tier.enable.short','T2');
+  const lbl_t3    = t('tier.context.short','T3');
+  const lbl_ctxhd = t('feed.ctx_group','Kontext-Einträge');
   const now=new Date();
-  const lbl_new = t('feed.badge_new','NEU');
-  const lbl_geo = t('feed.badge_no_geo','? ORT');
-  const lbl_hr  = t('feed.badge_high_risk','HIGH RISK');
-  const lbl_ctx = t('feed.badge_context','KONTEXT');
-  const lbl_unk = t('feed.location_unknown','? STANDORT UNBEKANNT');
-  el.innerHTML=sorted.slice(0,300).map(i=>{
+  function card(i, asContext){
     const c=col(i.category),s=sev(i.category);
-    // Prefer the AI summary (2-3 short German sentences). Fall back to a
-    // truncated description only if no summary is available.
     const summ=(i.summary||'').trim();
     const raw=summ || cleanDesc(i.description||'');
     const d=raw.substring(0,200);
@@ -1538,14 +1786,18 @@ function renderFeed(list){
     const newBadge=isNew?`<span class="neu-badge">${lbl_new}</span>`:'';
     const geoBadge=noGeo?`<span class="nogeo-badge">${lbl_geo}</span>`:'';
     const sc=i.severity_score||0;
-    const scBadge=sc>0?`<span class="sev-score" style="background:${SEV_BG[sc]||'transparent'};color:${SEV_COL[sc]||'var(--t2)'};border:1px solid ${SEV_COL[sc]||'var(--t3)'}44">${sc}</span>`:'';
-    const hr = (i.is_high_risk===1||i.is_high_risk===true);
-    const isCtx = !(i.is_primary===1||i.is_primary===true);
+    const scBadge=(sc>0 && !asContext)?`<span class="sev-score" style="background:${SEV_BG[sc]||'transparent'};color:${SEV_COL[sc]||'var(--t2)'};border:1px solid ${SEV_COL[sc]||'var(--t3)'}44">${sc}</span>`:'';
+    const tg = tierOf(i);
+    const hr = (i.is_high_risk===1||i.is_high_risk===true) && !asContext;
     const hrBadge = hr ? `<span class="hr-badge">${lbl_hr}</span>` : '';
-    const ctxBadge = isCtx ? `<span class="ctx-badge">${lbl_ctx}</span>` : '';
-    return `<div class="icard${isCtx?' is-context':''}" id="ic-${i.id}" onclick="openDetailById(${i.id})" style="border-left-color:${c}">
+    const tierPill = tg==='enable'
+      ? `<span class="tier-pill t2">${lbl_t2}</span>`
+      : (asContext ? `<span class="tier-pill t3">${lbl_t3}</span>` : '');
+    const ctxBadge = asContext ? `<span class="ctx-badge">${lbl_ctx}</span>` : '';
+    const borderClr = asContext ? 'rgba(160,188,212,0.25)' : c;
+    return `<div class="icard${asContext?' is-context':''}" id="ic-${i.id}" onclick="openDetailById(${i.id})" style="border-left-color:${borderClr}">
       <div class="icard-hd">
-        ${hrBadge}${ctxBadge}
+        ${hrBadge}${ctxBadge}${tierPill}
         <span class="ibadge s${s}">${i.category}</span>
         ${scBadge}${newBadge}${geoBadge}
         <span class="idate">${i.date||'—'}</span>
@@ -1553,7 +1805,27 @@ function renderFeed(list){
       <div class="iloc">${noGeo?`<span style="color:var(--t3)">${lbl_unk}</span>`:i.location+'&nbsp;·&nbsp;<span style="opacity:.6">'+i.country+'</span>'}</div>
       <div class="idesc">${d}${d.length>=200?'…':''}</div>
     </div>`;
-  }).join('');
+  }
+  const mainSorted = sortedFeed(main).slice(0, 300).map(i=>card(i,false)).join('');
+  let ctxHtml = '';
+  if(ctx.length){
+    const ctxSorted = sortedFeed(ctx).slice(0, 200).map(i=>card(i,true)).join('');
+    ctxHtml = `<div class="ctx-group${ctxOpen?' open':''}" id="ctx-group">
+      <div class="ctx-hdr" onclick="toggleCtxGroup()">
+        <span class="ctx-arr">▶</span>
+        <span>${lbl_ctxhd}</span>
+        <span class="ctx-cnt">${ctx.length}</span>
+      </div>
+      <div class="ctx-list">${ctxSorted}</div>
+    </div>`;
+  }
+  el.innerHTML = mainSorted + ctxHtml;
+}
+
+function toggleCtxGroup(){
+  ctxOpen = !ctxOpen;
+  const g = document.getElementById('ctx-group');
+  if(g) g.classList.toggle('open', ctxOpen);
 }
 
 function openDetailById(id){
@@ -2056,17 +2328,115 @@ function setSevMin(n){
 // ── RIGHT PANEL TABS ───────────────────────────────────────────────
 function switchTab(tab){
   activeRTab=tab;
-  ['feed','akteure'].forEach(t=>{
-    document.getElementById(`tab-${t}`).classList.toggle('on',t===tab);
+  ['feed','akteure','verfolgung'].forEach(t=>{
+    const btn=document.getElementById(`tab-${t}`);
+    if(btn) btn.classList.toggle('on',t===tab);
   });
   document.getElementById('feed').style.display=tab==='feed'?'':'none';
   document.getElementById('actor-panel').style.display=tab==='akteure'?'':'none';
+  document.getElementById('prosec-panel').style.display=tab==='verfolgung'?'':'none';
   document.getElementById('feed-sort-ctrl').style.display=tab==='feed'?'':'none';
   const titleEl=document.getElementById('rp-title');
-  if(titleEl) titleEl.textContent=tab==='feed'?'THREAT FEED':'AKTEURE & GRUPPEN';
+  if(titleEl){
+    if(tab==='feed')         titleEl.textContent=t('feed.title','THREAT FEED');
+    else if(tab==='akteure') titleEl.textContent=t('feed.actors_title','AKTEURE & GRUPPEN');
+    else                     titleEl.textContent=t('prosec.title','STRAFVERFOLGUNG');
+  }
   const rcEl=document.getElementById('rcount');
   if(tab==='akteure'){rcEl.textContent='';loadActors();}
+  else if(tab==='verfolgung'){rcEl.textContent='';loadAccountability();}
   else{animCount(rcEl,vis.length);}
+}
+
+// ── WIRKUNGS-COUNTER (Concept §C5) ─────────────────────────────────
+// Updates the status-footer widget. Pending counters (cluster, evidence)
+// stay greyed out until MS-3 / MS-5 wire them up.
+function formatEur(n){
+  if(n == null || isNaN(n)) return '—';
+  if(n >= 1e9)  return (n/1e9).toFixed(1).replace('.0','') + 'B';
+  if(n >= 1e6)  return (n/1e6).toFixed(1).replace('.0','') + 'M';
+  if(n >= 1e3)  return (n/1e3).toFixed(0) + 'k';
+  return String(n);
+}
+function setEff(id, value, pending){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.textContent = value;
+  el.classList.toggle('pending', !!pending);
+}
+async function loadEffectiveness(){
+  try{
+    const d = await fetch('/api/effectiveness').then(r=>r.json());
+    // Strafverfolgungs-Lücke
+    if(d.prosec_gap_base > 0){
+      setEff('eff-gap', `${d.prosec_gap_pct}% (${d.prosec_gap_n}/${d.prosec_gap_base})`, false);
+    }else{
+      setEff('eff-gap', '—', true);
+    }
+    // Cluster (MS-3 pending → -1)
+    setEff('eff-cluster', d.cluster_active < 0 ? '—' : String(d.cluster_active), d.cluster_active < 0);
+    // Funding (current year)
+    setEff('eff-funding', '€' + formatEur(d.funding_year_eur) + ' · ' + d.funding_year, false);
+    // Evidence (MS-5 pending → -1)
+    setEff('eff-evidence', d.evidence_pct < 0 ? '—' : (d.evidence_pct + '%'), d.evidence_pct < 0);
+  }catch(e){ /* keep last values */ }
+}
+
+// ── ACCOUNTABILITY (Säule 1 — Strafverfolgungs-Druck) ─────────────
+async function loadAccountability(){
+  const wrap = document.getElementById('prosec-tbl-wrap');
+  const stats= document.getElementById('prosec-stats');
+  try{
+    const d = await fetch('/api/accountability').then(r=>r.json());
+    const lblTotal = t('prosec.stat_total','T1-Vorfälle');
+    const lblCase  = t('prosec.stat_case','mit Verfahren');
+    const lblGap   = t('prosec.stat_gap','Strafverfolgungs-Gap');
+    stats.innerHTML = `
+      <div class="prosec-stat"><div class="ps-lbl">${lblTotal}</div><div class="ps-val">${d.total_t1}</div></div>
+      <div class="prosec-stat"><div class="ps-lbl">${lblCase}</div><div class="ps-val">${d.with_case}</div></div>
+      <div class="prosec-stat gap"><div class="ps-lbl">${lblGap}</div><div class="ps-val">${d.gap_count}</div></div>
+    `;
+    renderProsecTable(d, wrap);
+  }catch(e){
+    wrap.innerHTML='<div class="ifempty">'+t('prosec.error','FEHLER BEIM LADEN')+'</div>';
+  }
+}
+
+function renderProsecTable(data, wrap){
+  const rows = data.gap_rows || [];
+  // Always include a broader recent list, not just the gap-rows, so admins
+  // can flip status forward without having to leave the tab.
+  const allT1 = (Array.isArray(all) ? all : []).filter(i=>tierOf(i)==='act')
+    .sort((a,b)=>(b.date||'')>(a.date||'')?1:-1).slice(0,200);
+  if(!allT1.length){
+    wrap.innerHTML='<div class="ifempty">'+t('prosec.empty','KEINE T1-VORFÄLLE')+'</div>';
+    return;
+  }
+  const gapSet = new Set(rows.map(r=>r.id));
+  const head = `<thead><tr>
+    <th>${t('prosec.col_date','DATUM')}</th>
+    <th>${t('prosec.col_loc','ORT')}</th>
+    <th>${t('prosec.col_cat','KATEGORIE')}</th>
+    <th>${t('prosec.col_sev','SEV')}</th>
+    <th>${t('prosec.col_status','STATUS')}</th>
+    <th>${t('prosec.col_case','AKTENZEICHEN')}</th>
+  </tr></thead>`;
+  const body = allT1.map(r=>{
+    const st = (r.prosec_status || 'unknown');
+    const stCls = 'ps-'+st;
+    const gap  = gapSet.has(r.id) ? ' class="gap-row"' : '';
+    const cref = (r.case_ref || '').trim();
+    const loc  = `${r.location||'—'}${r.country?` <span style="opacity:.6">·${r.country}</span>`:''}`;
+    return `<tr${gap}>
+      <td>${r.date||'—'}</td>
+      <td>${loc}</td>
+      <td>${r.category||'—'}</td>
+      <td style="text-align:center">${r.severity_score||''}</td>
+      <td><span class="prosec-status-badge ${stCls}">${st}</span></td>
+      <td>${cref ? cref : '<span style="color:var(--t3)">—</span>'}</td>
+    </tr>`;
+  }).join('');
+  wrap.innerHTML = `<table class="prosec-tbl">${head}<tbody>${body}</tbody></table>`;
 }
 
 // ── ACTOR TRACKING ─────────────────────────────────────────────────
@@ -2079,18 +2449,32 @@ async function loadActors(){
 }
 
 function renderActors(data,el){
-  if(!data||!data.length){el.innerHTML='<div class="ifempty-actors">KEINE AKTEURSDATEN</div>';return;}
+  if(!data||!data.length){el.innerHTML='<div class="ifempty-actors">'+t('feed.actors_empty','KEINE AKTEURSDATEN')+'</div>';return;}
   const max=Math.max(...data.map(a=>a.count),1);
+  // Fedpol Akteurs-Tier (MS-7) — short label per tier, rendered as a pill
+  // in front of the actor name. Defaults to "endorse" if absent.
+  const pillFor = (tg) => {
+    const tier = (tg || 'endorse').toLowerCase();
+    const cls  = tier === 'act' ? 't1'
+               : tier === 'enable' ? 't2'
+               : 't3-actor';
+    const lbl  = tier === 'act'    ? t('actor.tier_act','TAT')
+              : tier === 'enable' ? t('actor.tier_enable','FÖRDER')
+              :                     t('actor.tier_endorse','BEFÜRW');
+    return `<span class="actor-tier ${cls}" title="Fedpol: ${tier}">${lbl}</span>`;
+  };
   el.innerHTML=data.map(a=>{
     const w=Math.round(a.count/max*100);
     const nm=a.name||a.actor||'?';
+    const lastLbl = t('feed.actor_last_seen','ZULETZT');
     return `<div class="actor-entry" onclick="filterActor('${nm.replace(/'/g,"\\'")}')">
       <div class="actor-hd">
+        ${pillFor(a.tier)}
         <span class="actor-name">${nm}</span>
         <span class="actor-cnt">${a.count}</span>
       </div>
       <div class="actor-bar"><div class="actor-bar-fill" style="width:${w}%"></div></div>
-      ${a.last_seen?`<div style="font-family:var(--mono);font-size:8px;color:var(--t3);margin-top:3px">ZULETZT: ${a.last_seen}</div>`:''}
+      ${a.last_seen?`<div style="font-family:var(--mono);font-size:8px;color:var(--t3);margin-top:3px">${lastLbl}: ${a.last_seen}</div>`:''}
     </div>`;
   }).join('');
 }
@@ -2219,14 +2603,29 @@ function switchModule(name){
 // ══════════════════════════════════════════════════════════════════
 // FEED CONTEXT TOGGLE
 // ══════════════════════════════════════════════════════════════════
-function toggleContext(){
-  showContext=!showContext;
-  const btn=document.getElementById('toggle-context');
-  btn.classList.toggle('on', showContext);
-  btn.textContent = showContext
-    ? t('feed.toggle_context_hide', '✓ KONTEXT')
-    : t('feed.toggle_context_show', '+ KONTEXT');
+// Replaced by toggleTier — kept as a no-op shim so any external bookmarklets
+// or saved sessions don't error out.
+function toggleContext(){ toggleTier('context'); }
+
+// ── TIER FILTER (T1/T2/T3) ────────────────────────────────────────
+function toggleTier(tier){
+  if(activeTiers.has(tier)) activeTiers.delete(tier);
+  else activeTiers.add(tier);
+  // Don't let the user end up with an empty feed by accident — re-enable T1.
+  if(activeTiers.size === 0) activeTiers.add('act');
+  document.querySelectorAll('.tchip').forEach(b=>{
+    b.classList.toggle('on', activeTiers.has(b.getAttribute('data-tier')));
+  });
+  showContext = activeTiers.has('context');
   if(typeof vis !== 'undefined' && vis) renderFeed(vis);
+  if(typeof renderMarkers === 'function' && vis) renderMarkers(vis);
+}
+
+function tierOf(i){
+  const tg = (i.tier || '').toLowerCase();
+  if(tg === 'act' || tg === 'enable' || tg === 'context') return tg;
+  // Backward-compat: derive from is_primary for pre-MS-1 rows.
+  return (i.is_primary===1 || i.is_primary===true) ? 'act' : 'context';
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -2263,7 +2662,12 @@ function supCopy(elId, btn){
 // ══════════════════════════════════════════════════════════════════
 function fndDebounce(){
   if(fndDebounceTimer) clearTimeout(fndDebounceTimer);
-  fndDebounceTimer=setTimeout(loadFunding, 220);
+  fndDebounceTimer=setTimeout(() => {
+    loadFunding();
+    // When the graph sub-tab is active, refresh it too so filter changes
+    // (year window, country, min amount) flow through immediately.
+    if(document.querySelector('.fnd-main.fnd-mode-graph')) loadFundingGraph();
+  }, 220);
 }
 
 function fndCollectFilters(){
@@ -2302,6 +2706,152 @@ function fndReset(){
   document.querySelector('#fnd-donor-chips .fnd-chip[data-val=""]').classList.add('on');
   fndFilters={search:'', country:'', donor_type:'', year_min:'', year_max:'', amount_min:'', sort:'year_desc'};
   loadFunding();
+}
+
+// ── MS-4 — FUNDING GRAPH (D3-Force) ────────────────────────────────
+let fndGraphSim = null;
+let fndGraphLoaded = false;
+
+function fndSwitchView(view){
+  const main = document.querySelector('.fnd-main');
+  if(!main) return;
+  main.classList.toggle('fnd-mode-graph', view === 'graph');
+  const wrap = document.getElementById('fnd-graph-wrap');
+  if(wrap) wrap.style.display = view === 'graph' ? 'block' : 'none';
+  document.getElementById('fnd-tab-table').classList.toggle('on', view !== 'graph');
+  document.getElementById('fnd-tab-graph').classList.toggle('on', view === 'graph');
+  if(view === 'graph' && !fndGraphLoaded){
+    fndGraphLoaded = true;
+    loadFundingGraph();
+  }
+}
+
+async function loadFundingGraph(){
+  if(typeof d3 === 'undefined'){
+    document.getElementById('fnd-graph-counts').textContent = 'd3.js failed to load';
+    return;
+  }
+  fndCollectFilters();
+  const qs = new URLSearchParams();
+  if(fndFilters.year_min)   qs.append('year_min',   fndFilters.year_min);
+  if(fndFilters.year_max)   qs.append('year_max',   fndFilters.year_max);
+  if(fndFilters.country)    qs.append('country',    fndFilters.country);
+  if(fndFilters.amount_min) qs.append('min_amount', fndFilters.amount_min);
+  try{
+    const data = await fetch('/api/funding/graph?' + qs.toString()).then(r=>r.json());
+    renderFundingGraph(data);
+  }catch(e){
+    document.getElementById('fnd-graph-counts').textContent = 'FEHLER BEIM LADEN';
+  }
+}
+
+function renderFundingGraph(data){
+  const svgEl = document.getElementById('fnd-graph-svg');
+  const tipEl = document.getElementById('fnd-graph-tooltip');
+  const cntEl = document.getElementById('fnd-graph-counts');
+  if(!svgEl) return;
+  const svg = d3.select(svgEl);
+  svg.selectAll('*').remove();
+  cntEl.textContent = `${data.node_count} ${t('fnd.legend_nodes','Knoten')} · ${data.link_count} ${t('fnd.legend_links','Kanten')}`;
+  if(!data.nodes || !data.nodes.length){
+    svg.append('text').attr('x','50%').attr('y','50%').attr('fill','var(--t3)')
+      .attr('text-anchor','middle').attr('font-family','var(--mono)').attr('font-size','11')
+      .text(t('fnd.graph_empty','Keine Daten für die aktiven Filter'));
+    return;
+  }
+  const w = svgEl.clientWidth, h = svgEl.clientHeight;
+  // Deep-copy node/link refs so D3 can mutate without polluting the API data.
+  const nodes = data.nodes.map(n => ({...n}));
+  const id2 = Object.fromEntries(nodes.map(n => [n.id, n]));
+  const links = data.links
+    .filter(l => id2[l.source] && id2[l.target])
+    .map(l => ({...l}));
+
+  const colorFor = (type) => type === 'donor' ? '#d99a2b'
+                          : type === 'intermediary' ? '#6aa9c9'
+                          : '#d4495d';
+  const totalFor = (n) => (n.amount_in || 0) + (n.amount_out || 0);
+  const totals   = nodes.map(totalFor);
+  const tMax     = Math.max(1, d3.max(totals) || 1);
+  const radius   = (n) => 4 + 12 * Math.sqrt(totalFor(n) / tMax);
+
+  const g_links = svg.append('g').attr('class','fg-links');
+  const g_nodes = svg.append('g').attr('class','fg-nodes');
+  const g_labels = svg.append('g').attr('class','fg-labels');
+
+  const link = g_links.selectAll('line').data(links).enter()
+    .append('line').attr('class', l => 'fg-link ' + (l.kind || 'direct'));
+  const node = g_nodes.selectAll('circle').data(nodes).enter()
+    .append('circle').attr('class','fg-node')
+    .attr('r',  d => radius(d))
+    .attr('fill', d => colorFor(d.type))
+    .call(d3.drag()
+      .on('start', (ev, d) => { if(!ev.active) sim.alphaTarget(0.25).restart(); d.fx=d.x; d.fy=d.y; })
+      .on('drag',  (ev, d) => { d.fx=ev.x; d.fy=ev.y; })
+      .on('end',   (ev, d) => { if(!ev.active) sim.alphaTarget(0); d.fx=null; d.fy=null; })
+    );
+  const label = g_labels.selectAll('text').data(nodes).enter()
+    .append('text').attr('class','fg-label').text(d => d.label);
+
+  function fmtEur(v){
+    if(!v) return '—';
+    if(v >= 1e6) return (v/1e6).toFixed(1).replace('.0','') + 'M';
+    if(v >= 1e3) return Math.round(v/1e3) + 'k';
+    return Math.round(v);
+  }
+  function showTip(ev, d){
+    const inSum  = fmtEur(d.amount_in);
+    const outSum = fmtEur(d.amount_out);
+    tipEl.style.display = 'block';
+    tipEl.innerHTML = `<b style="color:${colorFor(d.type)}">${d.label}</b>` +
+      `<br><span style="color:var(--t2)">${t('fnd.tt_role','Rolle')}:</span> ${d.type}` +
+      `<br><span style="color:var(--t2)">${t('fnd.tt_in','Eingehend')}:</span> €${inSum} (${d.in||0})` +
+      `<br><span style="color:var(--t2)">${t('fnd.tt_out','Ausgehend')}:</span> €${outSum} (${d.out||0})`;
+    const r = svgEl.getBoundingClientRect();
+    tipEl.style.left = (ev.clientX - r.left + 10) + 'px';
+    tipEl.style.top  = (ev.clientY - r.top  + 10) + 'px';
+  }
+  function hideTip(){ tipEl.style.display = 'none'; }
+
+  // Hover highlighting — fade out non-neighbours so the topology is readable.
+  function highlight(d){
+    const nbr = new Set([d.id]);
+    links.forEach(l => {
+      const sid = l.source.id || l.source, tid = l.target.id || l.target;
+      if(sid === d.id) nbr.add(tid);
+      if(tid === d.id) nbr.add(sid);
+    });
+    node.style('opacity', n => nbr.has(n.id) ? 1 : 0.18);
+    label.classed('hl', n => nbr.has(n.id));
+    link.classed('hl', l => {
+      const sid = l.source.id || l.source, tid = l.target.id || l.target;
+      return sid === d.id || tid === d.id;
+    }).style('opacity', l => {
+      const sid = l.source.id || l.source, tid = l.target.id || l.target;
+      return (sid === d.id || tid === d.id) ? 1 : 0.15;
+    });
+  }
+  function unhighlight(){
+    node.style('opacity', 1);
+    label.classed('hl', false);
+    link.classed('hl', false).style('opacity', 1);
+  }
+  node.on('mouseover', (ev, d) => { showTip(ev, d); highlight(d); })
+      .on('mousemove', (ev, d) => showTip(ev, d))
+      .on('mouseout',  () => { hideTip(); unhighlight(); });
+
+  const sim = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(70).strength(0.35))
+    .force('charge', d3.forceManyBody().strength(-120))
+    .force('center', d3.forceCenter(w/2, h/2))
+    .force('collide', d3.forceCollide().radius(d => radius(d) + 4))
+    .on('tick', () => {
+      link.attr('x1', l => l.source.x).attr('y1', l => l.source.y)
+          .attr('x2', l => l.target.x).attr('y2', l => l.target.y);
+      node.attr('cx', d => d.x).attr('cy', d => d.y);
+      label.attr('x', d => d.x + radius(d) + 3).attr('y', d => d.y + 3);
+    });
+  fndGraphSim = sim;
 }
 
 async function loadFunding(){

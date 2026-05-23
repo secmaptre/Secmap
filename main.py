@@ -1,4 +1,5 @@
-import os, logging, json, time, hashlib, re, secrets, csv, io
+import os, logging, json, time, hashlib, re, secrets, csv, io, gzip
+from pathlib import Path
 from datetime import datetime, timedelta
 from urllib.parse import urljoin, quote_plus
 import xml.etree.ElementTree as ET
@@ -26,6 +27,31 @@ def _resolve_db_path():
     return "lex_threat.db"
 
 DB_PATH = _resolve_db_path()
+
+# ── EVIDENCE STORAGE (Säule 4, MS-5) ────────────────────────────────
+# Mirrors DB_PATH resolution: prefer persistent disk on render.com, fall
+# back to the local working dir during dev. evidence/<yyyy>/<mm>/<hash>.warc.gz.
+def _resolve_evidence_dir():
+    env = os.getenv("EVIDENCE_DIR")
+    if env:
+        try:
+            Path(env).mkdir(parents=True, exist_ok=True)
+            return env
+        except Exception as e:
+            log.warning(f"EVIDENCE_DIR '{env}' not usable: {e}")
+    for base in ("/disk", "/data"):
+        if os.path.isdir(base):
+            p = os.path.join(base, "evidence")
+            try:
+                Path(p).mkdir(parents=True, exist_ok=True)
+                return p
+            except Exception:
+                pass
+    p = "evidence"
+    Path(p).mkdir(parents=True, exist_ok=True)
+    return p
+
+EVIDENCE_DIR = _resolve_evidence_dir()
 GROK_MODEL = os.getenv("GROK_MODEL", "grok-4")
 ADMIN_USER = os.getenv("ADMIN_USER", "admin")
 ADMIN_PASS = os.getenv("ADMIN_PASS", "changeme")
@@ -70,7 +96,11 @@ def get_db():
                       ("target_type","TEXT DEFAULT ''"),
                       ("prosec_status","TEXT DEFAULT 'unknown'"),
                       ("case_ref","TEXT DEFAULT ''"),
-                      ("last_status_check","TEXT DEFAULT ''")]:
+                      ("last_status_check","TEXT DEFAULT ''"),
+                      # MS-5 (Säule 4) — Quellensicherung
+                      ("evidence_path","TEXT DEFAULT ''"),
+                      ("evidence_sha","TEXT DEFAULT ''"),
+                      ("evidence_ts","TEXT DEFAULT ''")]:
         try:
             c.execute(f"ALTER TABLE incidents ADD COLUMN {col} {defn}")
         except Exception:
@@ -101,6 +131,75 @@ def get_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_fund_year    ON funding_records(year)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_fund_country ON funding_records(country)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_fund_donor   ON funding_records(donor_type)")
+
+    # ── EARLY-WARNING CLUSTERS (Säule 2, MS-3) ────────────────────
+    # Detected attack patterns: ≥3 incidents with the same target_type in
+    # the same country over a rolling 6-week window. Lets operators of
+    # likely targets subscribe to /api/early-warning.{rss,json} without us
+    # ever holding a recipient list (DSGVO-Hygiene per Concept §C2/§C3).
+    c.execute('''CREATE TABLE IF NOT EXISTS early_warning_clusters (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cluster_key TEXT UNIQUE NOT NULL,
+        country TEXT NOT NULL,
+        target_type TEXT NOT NULL,
+        count INTEGER NOT NULL,
+        first_seen TEXT,
+        last_seen TEXT,
+        incident_ids TEXT,
+        sample_titles TEXT,
+        detected_at TEXT,
+        active INTEGER DEFAULT 1
+    )''')
+    c.execute("CREATE INDEX IF NOT EXISTS idx_ewc_active ON early_warning_clusters(active)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_ewc_country ON early_warning_clusters(country)")
+
+    # ── FUNDING EDGES (Säule 3, MS-4) ──────────────────────────────
+    # Explizite Mehr-Hop-Kanten (Donor → Trägerverein → Sub-Empfänger →
+    # Vorstand). funding_records bleibt die kanonische Quelle der
+    # dokumentierten Direkt-Förderungen; funding_edges ergänzt nur die
+    # Brücken, für die der Tabellenstil ungeeignet ist. Datenpolicy §C3
+    # gilt: nur öffentliche Vereins-/Registerdaten, keine Personenprofile.
+    c.execute('''CREATE TABLE IF NOT EXISTS funding_edges (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        src_org TEXT NOT NULL,
+        dst_org TEXT NOT NULL,
+        amount REAL,
+        currency TEXT DEFAULT 'EUR',
+        year INTEGER,
+        source_url TEXT,
+        notes TEXT,
+        manual INTEGER DEFAULT 1,
+        hash TEXT UNIQUE,
+        timestamp TEXT
+    )''')
+    c.execute("CREATE INDEX IF NOT EXISTS idx_fe_src ON funding_edges(src_org)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_fe_dst ON funding_edges(dst_org)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_fe_year ON funding_edges(year)")
+
+    # ── API TOKENS + AUDIT (Säule 4 — MS-6) ────────────────────────
+    # Authenticated /api/v1/* endpoint for LEA / academic users. Tokens
+    # are scoped (default „incidents:read") and revocable. Every request
+    # that authenticates writes an api_audit row — that's how token misuse
+    # gets surfaced and how we justify the access policy to data subjects.
+    c.execute('''CREATE TABLE IF NOT EXISTS api_tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        token TEXT UNIQUE NOT NULL,
+        label TEXT NOT NULL,
+        scopes TEXT DEFAULT 'incidents:read',
+        created_at TEXT,
+        last_used TEXT,
+        revoked INTEGER DEFAULT 0
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS api_audit (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        token_id INTEGER,
+        endpoint TEXT NOT NULL,
+        query TEXT,
+        ip TEXT,
+        timestamp TEXT
+    )''')
+    c.execute("CREATE INDEX IF NOT EXISTS idx_audit_token ON api_audit(token_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_audit_ts    ON api_audit(timestamp)")
     c.commit()
     return c
 
@@ -382,25 +481,35 @@ def score_severity(category, text=""):
     return base
 
 # ── ACTOR / GROUP TRACKING ────────────────────────────────────────
+# Each entry: (display name, regex patterns, fedpol_tier).
+# Tier mapping is intentionally conservative (Concept §C3 #2 — keine
+# Vorverurteilung). Only attribute "act" where public record clearly
+# connects the name to concrete violent acts (claim letters or convictions);
+# "enable" for groups that organise support/propaganda for the milieu;
+# "endorse" for scene/neighbourhood labels and movements that explicitly
+# disavow violence themselves but are part of the broader endorsement layer.
 KNOWN_ACTORS = [
-    ("Rote Flora",         [r"rote\s+flora"]),
-    ("Rigaer 94",          [r"rigaer\s*(?:94|straße|str\.)", r"liebig\s*34"]),
-    ("Ende Gelände",       [r"ende\s+gel[äa]nde"]),
-    ("Schwarzer Block",    [r"schwarzer\s+block", r"black\s+bloc"]),
-    ("Rev. Zellen",        [r"revolutionäre\s+zellen", r"\brz\b"]),
-    ("Letzte Generation",  [r"letzte\s+generation"]),
-    ("Lina E. Netzwerk",   [r"\blina\s+e[\.\b]", r"hammerbande"]),
-    ("Rote Hilfe",         [r"rote\s+hilfe"]),
-    ("Antifa Leipzig",     [r"antifa\s+leipzig", r"connewitz"]),
-    ("Autonome Gruppe",    [r"eine?\s+autonome\s+gruppe", r"autonome\s+zelle"]),
-    ("Junge Welt Umfeld",  [r"junge\s+welt\s+gruppe"]),
-    ("Interventionist Left",[r"interventionistische\s+linke", r"\bil\b.*linke"]),
+    ("Rote Flora",          [r"rote\s+flora"],                                "endorse"),
+    ("Rigaer 94",           [r"rigaer\s*(?:94|straße|str\.)", r"liebig\s*34"], "endorse"),
+    ("Ende Gelände",        [r"ende\s+gel[äa]nde"],                            "endorse"),
+    ("Schwarzer Block",     [r"schwarzer\s+block", r"black\s+bloc"],           "act"),
+    ("Rev. Zellen",         [r"revolutionäre\s+zellen", r"\brz\b"],            "act"),
+    ("Letzte Generation",   [r"letzte\s+generation"],                          "endorse"),
+    ("Lina E. Netzwerk",    [r"\blina\s+e[\.\b]", r"hammerbande"],             "act"),
+    ("Rote Hilfe",          [r"rote\s+hilfe"],                                 "enable"),
+    ("Antifa Leipzig",      [r"antifa\s+leipzig", r"connewitz"],               "endorse"),
+    ("Autonome Gruppe",     [r"eine?\s+autonome\s+gruppe", r"autonome\s+zelle"], "act"),
+    ("Junge Welt Umfeld",   [r"junge\s+welt\s+gruppe"],                        "enable"),
+    ("Interventionist Left",[r"interventionistische\s+linke", r"\bil\b.*linke"], "endorse"),
 ]
+
+ACTOR_TIER = {name: tier for name, _patterns, tier in KNOWN_ACTORS}
 
 def extract_actors(text):
     found = []
     t = (text or "").lower()
-    for name, patterns in KNOWN_ACTORS:
+    for entry in KNOWN_ACTORS:
+        name, patterns = entry[0], entry[1]
         if any(re.search(p, t) for p in patterns):
             found.append(name)
     return ",".join(found)
@@ -1382,6 +1491,16 @@ def save_incident(ai, text, source, url, date_str=None, manual=False):
              summ, is_primary, is_high_risk, tier, target_type)
         )
         db.commit()
+        # MS-5 — best-effort WARC snapshot of the source URL. Failing to
+        # capture evidence must NOT roll back the incident save.
+        if url_norm and not manual:
+            ev_path, ev_sha, ev_ts = save_evidence(url_norm, h)
+            if ev_path:
+                db.execute(
+                    "UPDATE incidents SET evidence_path=?, evidence_sha=?, evidence_ts=? WHERE hash=?",
+                    (ev_path, ev_sha, ev_ts, h)
+                )
+                db.commit()
         log.info(
             f"SAVED [sev={sev}/conf={conf}/tier={tier}/hi={is_high_risk}/"
             f"target={target_type or '-'}]: {cat} / {ai.get('ort')} / {source}"
@@ -2162,6 +2281,612 @@ async def index(request: Request):
         "fiat_info":   os.getenv("FIAT_INFO",   ""),
     })
 
+# ── EARLY-WARNING CLUSTER DETECTION (Säule 2 — MS-3) ──────────────
+EWC_WINDOW_DAYS = 42      # 6 weeks
+EWC_THRESHOLD   = 3       # ≥ 3 incidents to flag a cluster
+EWC_TIERS       = ("act", "enable")
+
+def save_evidence(url, hash_hex):
+    """
+    Persist a WARC-1.1 record of `url` under EVIDENCE_DIR/<yyyy>/<mm>/<hash>.warc.gz.
+    Returns (relative_path, sha256, iso_timestamp) on success, ('', '', '') on
+    failure. Idempotent — re-running on the same hash short-circuits if the
+    file already exists. Designed to be cheap: one HTTP GET, no library deps.
+    """
+    if not url or not url.startswith("http"):
+        return "", "", ""
+    now = datetime.now()
+    yyyy, mm = now.strftime("%Y"), now.strftime("%m")
+    subdir = os.path.join(EVIDENCE_DIR, yyyy, mm)
+    fname  = f"{hash_hex}.warc.gz"
+    fpath  = os.path.join(subdir, fname)
+    rel    = f"evidence/{yyyy}/{mm}/{fname}"
+    if os.path.isfile(fpath):
+        # Already captured — recompute the digest so the caller can store it
+        # if the original save was interrupted before the columns were set.
+        try:
+            with open(fpath, "rb") as fh:
+                sha = hashlib.sha256(fh.read()).hexdigest()
+            return rel, sha, ""
+        except Exception:
+            return "", "", ""
+    try:
+        Path(subdir).mkdir(parents=True, exist_ok=True)
+        r = session.get(url, timeout=15, allow_redirects=True)
+        body = r.content or b""
+        if not body:
+            return "", "", ""
+        ts = now.replace(microsecond=0).isoformat() + "Z"
+        # Minimal WARC/1.1 response record — no external dep required.
+        block = (
+            f"HTTP/1.1 {r.status_code} {r.reason}\r\n"
+            f"Content-Type: {r.headers.get('Content-Type','application/octet-stream')}\r\n"
+            f"Content-Length: {len(body)}\r\n\r\n"
+        ).encode("utf-8") + body
+        block_sha = hashlib.sha256(block).hexdigest()
+        record_id = "<urn:uuid:" + hashlib.sha1((hash_hex + ts).encode()).hexdigest() + ">"
+        header = (
+            "WARC/1.1\r\n"
+            "WARC-Type: response\r\n"
+            f"WARC-Record-ID: {record_id}\r\n"
+            f"WARC-Date: {ts}\r\n"
+            f"WARC-Target-URI: {url}\r\n"
+            f"WARC-Block-Digest: sha256:{block_sha}\r\n"
+            "Content-Type: application/http; msgtype=response\r\n"
+            f"Content-Length: {len(block)}\r\n"
+            "\r\n"
+        ).encode("utf-8")
+        raw = header + block + b"\r\n\r\n"
+        with gzip.open(fpath, "wb", compresslevel=6) as gz:
+            gz.write(raw)
+        # SHA of the gzipped artifact (what's actually on disk) is the
+        # tamper-evident anchor we cite later.
+        with open(fpath, "rb") as fh:
+            disk_sha = hashlib.sha256(fh.read()).hexdigest()
+        return rel, disk_sha, ts
+    except Exception as e:
+        log.info(f"save_evidence failed for {url}: {e}")
+        return "", "", ""
+
+
+def detect_clusters():
+    """
+    Group recent T1/T2 incidents by (country, target_type). Any group with
+    ≥ EWC_THRESHOLD hits in the last EWC_WINDOW_DAYS becomes an active
+    cluster. Idempotent — re-scan can demote a cluster to active=0 when
+    the wave dies down, and can revive it when a new attack lands.
+    """
+    cutoff = (datetime.now() - timedelta(days=EWC_WINDOW_DAYS)).strftime("%Y-%m-%d")
+    rows = db.execute(
+        "SELECT id, date, country, target_type, category, location, summary, description "
+        "FROM incidents "
+        "WHERE tier IN ({}) AND target_type != '' AND date >= ? "
+        "ORDER BY date DESC".format(",".join("?"*len(EWC_TIERS))),
+        list(EWC_TIERS) + [cutoff]
+    ).fetchall()
+    groups = {}
+    for r in rows:
+        country = (r["country"] or "Andere").strip() or "Andere"
+        tt      = (r["target_type"] or "").strip()
+        if not tt:
+            continue
+        key = f"{country}|{tt}"
+        groups.setdefault(key, []).append(r)
+
+    now_iso = datetime.now().isoformat(timespec="seconds")
+    seen_keys = set()
+    for key, items in groups.items():
+        if len(items) < EWC_THRESHOLD:
+            continue
+        seen_keys.add(key)
+        country, tt = key.split("|", 1)
+        first_seen = min((it["date"] for it in items if it["date"]), default="")
+        last_seen  = max((it["date"] for it in items if it["date"]), default="")
+        ids        = json.dumps([it["id"] for it in items])
+        titles     = json.dumps([
+            (it["summary"] or it["location"] or "—")[:140]
+            for it in items[:3]
+        ], ensure_ascii=False)
+        db.execute(
+            "INSERT INTO early_warning_clusters "
+            "(cluster_key,country,target_type,count,first_seen,last_seen,"
+            " incident_ids,sample_titles,detected_at,active) "
+            "VALUES (?,?,?,?,?,?,?,?,?,1) "
+            "ON CONFLICT(cluster_key) DO UPDATE SET "
+            "count=excluded.count,first_seen=excluded.first_seen,"
+            "last_seen=excluded.last_seen,incident_ids=excluded.incident_ids,"
+            "sample_titles=excluded.sample_titles,detected_at=excluded.detected_at,"
+            "active=1",
+            (key, country, tt, len(items), first_seen, last_seen, ids, titles, now_iso)
+        )
+    # Stale clusters: still in the table but no longer meet the threshold
+    # in the current window — flag inactive (keep history for trend lines).
+    existing = db.execute(
+        "SELECT cluster_key FROM early_warning_clusters WHERE active=1"
+    ).fetchall()
+    for r in existing:
+        if r["cluster_key"] not in seen_keys:
+            db.execute(
+                "UPDATE early_warning_clusters SET active=0 WHERE cluster_key=?",
+                (r["cluster_key"],)
+            )
+    db.commit()
+    n_active = db.execute(
+        "SELECT COUNT(*) FROM early_warning_clusters WHERE active=1"
+    ).fetchone()[0]
+    log.info(f"detect_clusters: {n_active} active clusters (threshold ≥{EWC_THRESHOLD} / {EWC_WINDOW_DAYS}d)")
+    return n_active
+
+
+@app.get("/api/early-warning.json")
+async def early_warning_json():
+    """Active Frühwarn-Cluster — JSON-Feed für Betreiber & Forschung."""
+    rows = db.execute(
+        "SELECT cluster_key,country,target_type,count,first_seen,last_seen,"
+        "incident_ids,sample_titles,detected_at "
+        "FROM early_warning_clusters WHERE active=1 "
+        "ORDER BY count DESC, last_seen DESC"
+    ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        try: d["incident_ids"]  = json.loads(d["incident_ids"]  or "[]")
+        except Exception: d["incident_ids"] = []
+        try: d["sample_titles"] = json.loads(d["sample_titles"] or "[]")
+        except Exception: d["sample_titles"] = []
+        out.append(d)
+    return JSONResponse({
+        "window_days": EWC_WINDOW_DAYS,
+        "threshold":   EWC_THRESHOLD,
+        "active":      len(out),
+        "clusters":    out,
+        "asof":        datetime.now().isoformat(timespec="seconds"),
+    })
+
+
+@app.get("/api/early-warning.rss")
+async def early_warning_rss(request: Request):
+    """
+    RSS 2.0 feed der aktiven Frühwarn-Cluster. Betreiber potenziell ziel-
+    gefährdeter Infrastruktur (Bahn, Energie, Polizei …) abonnieren das
+    selbst — wir versenden bewusst nichts proaktiv (DSGVO-Hygiene §C3).
+    """
+    rows = db.execute(
+        "SELECT cluster_key,country,target_type,count,first_seen,last_seen,"
+        "sample_titles,detected_at "
+        "FROM early_warning_clusters WHERE active=1 "
+        "ORDER BY last_seen DESC"
+    ).fetchall()
+    base = str(request.base_url).rstrip("/")
+    items = []
+    for r in rows:
+        try:
+            titles = json.loads(r["sample_titles"] or "[]")
+        except Exception:
+            titles = []
+        body = (
+            f"{r['count']} Anschläge auf Ziel-Typ „{r['target_type']}" + "“"
+            f" in {r['country']} zwischen {r['first_seen']} und {r['last_seen']}.\n"
+        )
+        if titles:
+            body += "Beispiele:\n" + "\n".join(f"- {t}" for t in titles)
+        items.append(
+            "<item>"
+            f"<title>{_xml_esc(r['target_type'])} · {_xml_esc(r['country'])} — {r['count']} Anschläge / 6 Wochen</title>"
+            f"<link>{base}/api/early-warning.json</link>"
+            f"<guid isPermaLink=\"false\">ewc-{_xml_esc(r['cluster_key'])}-{_xml_esc(r['last_seen'] or '')}</guid>"
+            f"<pubDate>{_rfc822(r['detected_at'] or r['last_seen'])}</pubDate>"
+            f"<description>{_xml_esc(body)}</description>"
+            "</item>"
+        )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<rss version="2.0">\n<channel>\n'
+        '<title>LEX EUROPE — Frühwarn-Cluster</title>\n'
+        f'<link>{base}/api/early-warning.json</link>\n'
+        '<description>Aktive Anschlags-Cluster (≥3 gleichartige Ziele in 6 Wochen)</description>\n'
+        '<language>de-DE</language>\n'
+        + "\n".join(items) +
+        '\n</channel>\n</rss>\n'
+    )
+    return StreamingResponse(iter([xml]), media_type="application/rss+xml; charset=utf-8")
+
+
+def _xml_esc(s):
+    return (str(s or "")
+            .replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+            .replace('"',"&quot;").replace("'","&apos;"))
+
+def _rfc822(s):
+    """Best-effort ISO/date → RFC822 string for RSS pubDate."""
+    if not s: return ""
+    try:
+        d = datetime.fromisoformat(s.replace("Z","").split("+")[0])
+        return d.strftime("%a, %d %b %Y %H:%M:%S +0000")
+    except Exception:
+        return ""
+
+
+@app.post("/admin/api/detect-clusters")
+async def admin_detect_clusters(_=Depends(require_admin)):
+    n = detect_clusters()
+    return JSONResponse({"ok": True, "active_clusters": n})
+
+
+# ── CITATION EXPORT (Säule 4 — MS-5) ──────────────────────────────
+@app.get("/api/incident/{inc_id}/cite")
+async def cite_incident(inc_id: int, format: str = "bibtex"):
+    """
+    BibTeX/RIS/Chicago citation for a single incident. Cites the original
+    source URL (with evidence_path + SHA-256 when available) so academic
+    and legal users can ground their analysis in a tamper-evident record.
+    """
+    r = db.execute(
+        "SELECT id,date,location,country,category,summary,description,source,url,"
+        "evidence_path,evidence_sha,evidence_ts FROM incidents WHERE id=?",
+        (inc_id,)
+    ).fetchone()
+    if not r:
+        return JSONResponse({"ok": False, "message": "not found"}, status_code=404)
+    r = dict(r)
+    title    = (r["summary"] or r["description"] or r["category"] or "Incident")[:200]
+    author   = r["source"] or "OSINT-Quelle"
+    yr       = (r["date"] or "")[:4] or "n.d."
+    site     = r["url"] or ""
+    accessed = datetime.now().date().isoformat()
+    ev_ts    = r["evidence_ts"] or ""
+    ev_sha   = r["evidence_sha"] or ""
+    fmt = (format or "bibtex").lower()
+    if fmt == "ris":
+        body = (
+            "TY  - GEN\n"
+            f"TI  - {title}\n"
+            f"AU  - {author}\n"
+            f"PY  - {yr}\n"
+            f"DA  - {r['date'] or ''}\n"
+            f"CY  - {r['location'] or ''}, {r['country'] or ''}\n"
+            f"UR  - {site}\n"
+            f"N1  - LEX EUROPE id={inc_id}; category={r['category'] or ''}; "
+            f"evidence_sha256={ev_sha}; evidence_ts={ev_ts}\n"
+            f"Y2  - {accessed}\n"
+            "ER  - \n"
+        )
+        mt = "application/x-research-info-systems"
+    elif fmt == "chicago":
+        body = (
+            f"{author}. \"{title}\" (LEX EUROPE id {inc_id}), {r['date'] or ''}, "
+            f"{r['location'] or ''}, {r['country'] or ''}. "
+            f"{site}. SHA-256: {ev_sha or 'n/a'}. Accessed {accessed}.\n"
+        )
+        mt = "text/plain; charset=utf-8"
+    else:
+        key = f"lexeurope-{inc_id}"
+        title_e = title.replace("{","\\{").replace("}","\\}")
+        body = (
+            f"@misc{{{key},\n"
+            f"  title   = {{{title_e}}},\n"
+            f"  author  = {{{author}}},\n"
+            f"  year    = {{{yr}}},\n"
+            f"  url     = {{{site}}},\n"
+            f"  note    = {{LEX EUROPE id={inc_id}; category={r['category'] or ''}; "
+            f"evidence-sha256={ev_sha}; evidence-ts={ev_ts}}},\n"
+            f"  urldate = {{{accessed}}}\n"
+            "}\n"
+        )
+        mt = "application/x-bibtex; charset=utf-8"
+    return StreamingResponse(iter([body]), media_type=mt)
+
+
+# ── LEA/RESEARCH API v1 (Säule 4 — MS-6) ──────────────────────────
+def require_api_token(scope: str = "incidents:read"):
+    """
+    FastAPI dependency that authenticates an Authorization: Bearer <token>
+    header against the api_tokens table, scoped to `scope`. Logs the call
+    in api_audit. Raises 401 on missing/invalid/revoked, 403 on scope
+    mismatch.
+    """
+    def _dep(request: Request):
+        auth = request.headers.get("authorization") or ""
+        if not auth.lower().startswith("bearer "):
+            raise HTTPException(401, "Missing Bearer token")
+        token = auth.split(" ", 1)[1].strip()
+        row = db.execute(
+            "SELECT id, scopes, revoked, label FROM api_tokens WHERE token=?",
+            (token,)
+        ).fetchone()
+        if not row or row["revoked"]:
+            raise HTTPException(401, "Invalid or revoked token")
+        if scope not in (row["scopes"] or "").split(","):
+            raise HTTPException(403, f"Token missing scope: {scope}")
+        # Touch last_used and write the audit trail. The 'ip' field is the
+        # source IP as seen by FastAPI (X-Forwarded-For-aware via Render).
+        now = datetime.now().isoformat(timespec="seconds")
+        ip  = (request.headers.get("x-forwarded-for") or
+               (request.client.host if request.client else "")).split(",")[0].strip()
+        db.execute("UPDATE api_tokens SET last_used=? WHERE id=?", (now, row["id"]))
+        db.execute(
+            "INSERT INTO api_audit (token_id, endpoint, query, ip, timestamp) "
+            "VALUES (?,?,?,?,?)",
+            (row["id"], str(request.url.path), str(request.url.query), ip, now)
+        )
+        db.commit()
+        return {"id": row["id"], "label": row["label"], "scopes": row["scopes"]}
+    return _dep
+
+
+@app.get("/api/v1/incidents")
+async def v1_incidents(
+    limit: int = 500,
+    country: str = "",
+    tier: str = "",
+    severity_min: int = 0,
+    date_from: str = "",
+    date_to: str = "",
+    _tok=Depends(require_api_token("incidents:read")),
+):
+    """
+    Authenticated full-fidelity incident export — same fields as
+    /api/incidents plus evidence_path/sha/ts. Designed for LEA and
+    academic users who need verifiable, citation-quality data.
+    """
+    q = ("SELECT id,date,location,country,category,description,summary,url,"
+         "source,lat,lon,severity_score,actors,confidence,"
+         "is_primary,is_high_risk,tier,target_type,"
+         "prosec_status,case_ref,last_status_check,"
+         "evidence_path,evidence_sha,evidence_ts,timestamp "
+         "FROM incidents WHERE 1=1")
+    p = []
+    if country:      q += " AND country=?";       p.append(country)
+    if tier:         q += " AND tier=?";          p.append(tier)
+    if severity_min: q += " AND severity_score >= ?"; p.append(severity_min)
+    if date_from:    q += " AND date >= ?";        p.append(date_from)
+    if date_to:      q += " AND date <= ?";        p.append(date_to)
+    q += " ORDER BY date DESC LIMIT ?"
+    p.append(min(max(limit, 1), 5000))
+    rows = [dict(r) for r in db.execute(q, p).fetchall()]
+    return JSONResponse({
+        "count":  len(rows),
+        "incidents": rows,
+        "asof":   datetime.now().isoformat(timespec="seconds"),
+    })
+
+
+@app.get("/api/v1/audit")
+async def v1_audit(
+    limit: int = 200,
+    _tok=Depends(require_api_token("audit:read")),
+):
+    """Self-audit endpoint — token holder can see their own call history."""
+    rows = db.execute(
+        "SELECT endpoint, query, ip, timestamp FROM api_audit "
+        "WHERE token_id=? ORDER BY timestamp DESC LIMIT ?",
+        (_tok["id"], min(max(limit, 1), 1000))
+    ).fetchall()
+    return JSONResponse({"count": len(rows), "calls": [dict(r) for r in rows]})
+
+
+@app.get("/api/v1/docs", response_class=HTMLResponse)
+async def v1_docs():
+    """Minimal static docs page in English — what the API offers, how to
+    authenticate, link to the policy lines (Concept §C3)."""
+    return HTMLResponse(_V1_DOCS_HTML)
+
+
+_V1_DOCS_HTML = """<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><title>LEX EUROPE — API v1 docs</title>
+<style>
+body{font-family:ui-monospace,Menlo,Consolas,monospace;background:#0a121e;color:#cfd6dd;
+  max-width:880px;margin:30px auto;padding:0 24px;line-height:1.55;font-size:14px}
+h1,h2{font-family:ui-sans-serif,system-ui,sans-serif;color:#e8edf2;letter-spacing:0.5px}
+h1{font-size:22px;border-bottom:1px solid #1c2937;padding-bottom:8px}
+h2{font-size:16px;margin-top:28px;color:#6aa9c9;text-transform:uppercase;letter-spacing:1.5px;font-size:12px}
+code,pre{background:#0f1a28;color:#a8c2d8;border:1px solid #1c2937;border-radius:3px;
+  padding:1px 6px;font-size:12px}
+pre{padding:10px 14px;overflow-x:auto;white-space:pre}
+a{color:#6aa9c9}
+.tag{display:inline-block;background:#1c2937;color:#6aa9c9;padding:1px 6px;
+  border-radius:2px;font-size:10px;letter-spacing:1px;margin-right:6px}
+.note{border-left:2px solid #d99a2b;background:rgba(217,154,43,0.08);padding:10px 14px;margin:14px 0}
+</style></head><body>
+
+<h1>LEX EUROPE — API v1</h1>
+<p>Authenticated, full-fidelity access to the LEX EUROPE incident corpus for
+law-enforcement agencies, academic researchers, and journalists. All endpoints
+require a personal API token; every call is logged in <code>api_audit</code>.</p>
+
+<div class="note"><b>Policy line.</b> The dataset never includes personal
+profiles of private individuals (no names, addresses, employers, family
+relationships). Tier classification follows Fedpol Art. 19 Abs. 2 Bst. e NDG
+(act / enable / context). Citations of single records should include the
+<code>evidence_sha</code> hash so verification is reproducible.</div>
+
+<h2>Authentication</h2>
+<pre>Authorization: Bearer &lt;your-token&gt;</pre>
+<p>Tokens are issued by the operator. Missing token → <code>401</code>. Revoked
+or wrong scope → <code>401</code> / <code>403</code>.</p>
+
+<h2>GET /api/v1/incidents</h2>
+<p><span class="tag">scope</span><code>incidents:read</code></p>
+<p>Returns up to <code>limit</code> incidents (default 500, max 5000) with all
+classification, severity, tier, prosecution-status, and WARC-evidence fields.</p>
+<p>Query parameters:</p>
+<ul>
+  <li><code>limit</code> — int, max 5000</li>
+  <li><code>country</code> — DE/AT/CH/FR/IT/...</li>
+  <li><code>tier</code> — <code>act</code> | <code>enable</code> | <code>context</code></li>
+  <li><code>severity_min</code> — 1..5</li>
+  <li><code>date_from</code>, <code>date_to</code> — ISO yyyy-mm-dd</li>
+</ul>
+
+<pre>curl -H "Authorization: Bearer $TOKEN" \\
+     "https://&lt;host&gt;/api/v1/incidents?tier=act&amp;severity_min=4&amp;date_from=2024-01-01"</pre>
+
+<h2>GET /api/v1/audit</h2>
+<p><span class="tag">scope</span><code>audit:read</code></p>
+<p>Returns the token holder's own call history — every request is timestamped
+and IP-stamped, so misuse is auditable on the operator side as well as on the
+researcher side.</p>
+
+<h2>GET /api/early-warning.json / .rss</h2>
+<p>Unauthenticated. Returns active target-type clusters (≥3 same-target attacks
+in 6 weeks). See <a href="/api/early-warning.json">/api/early-warning.json</a>.</p>
+
+<h2>GET /api/incident/&lt;id&gt;/cite</h2>
+<p>Unauthenticated. <code>format=bibtex|ris|chicago</code>. Embeds the
+<code>evidence_sha256</code> and capture timestamp in the citation note so the
+underlying WARC snapshot is reproducibly verifiable.</p>
+
+</body></html>
+"""
+
+
+@app.post("/admin/api/tokens")
+async def admin_create_token(request: Request, _=Depends(require_admin)):
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "message": "Ungültiges JSON"}, status_code=400)
+    label = (data.get("label") or "").strip()
+    if not label:
+        return JSONResponse({"ok": False, "message": "label ist Pflicht"}, status_code=400)
+    scopes = (data.get("scopes") or "incidents:read").strip()
+    token  = secrets.token_urlsafe(32)
+    now    = datetime.now().isoformat(timespec="seconds")
+    db.execute(
+        "INSERT INTO api_tokens (token,label,scopes,created_at,revoked) VALUES (?,?,?,?,0)",
+        (token, label, scopes, now)
+    )
+    db.commit()
+    # Token is returned ONLY here — never again. Operator must hand it to
+    # the researcher / LEA contact over a secure channel.
+    return JSONResponse({"ok": True, "token": token, "label": label, "scopes": scopes})
+
+
+@app.delete("/admin/api/tokens/{token_id}")
+async def admin_revoke_token(token_id: int, _=Depends(require_admin)):
+    db.execute("UPDATE api_tokens SET revoked=1 WHERE id=?", (token_id,))
+    db.commit()
+    return JSONResponse({"ok": True})
+
+
+@app.get("/admin/api/tokens")
+async def admin_list_tokens(_=Depends(require_admin)):
+    rows = db.execute(
+        "SELECT id, label, scopes, created_at, last_used, revoked "
+        "FROM api_tokens ORDER BY id DESC"
+    ).fetchall()
+    return JSONResponse([dict(r) for r in rows])
+
+
+@app.get("/api/effectiveness")
+async def get_effectiveness():
+    """
+    Säule-Wirksamkeits-Zähler für den Status-Footer (Concept §C5).
+    Liefert vier konkrete Kennzahlen — bewusst öffentlich:
+      - prosec_gap_pct: % der T1-Vorfälle Severity ≥ 4 ohne öffentliches
+        Verfahren nach 180 Tagen (Säule 1).
+      - cluster_active:  Anzahl aktiver Frühwarn-Cluster (≥ 3 gleichartige
+        Anschläge in 6 Wochen). Aus early_warning_clusters (MS-3).
+      - funding_year_eur: Summe der dokumentierten Förderung im laufenden
+        Jahr (Säule 3). Sobald wir einen recipient_tier-Marker haben, wird
+        das auf T1/T2-Empfänger eingeschränkt.
+      - evidence_pct:  % Einträge mit WARC-Snapshot (MS-5).
+    """
+    today = datetime.now().date()
+    # Strafverfolgungs-Lücke
+    sev_4plus = db.execute(
+        "SELECT id,date,prosec_status,case_ref FROM incidents "
+        "WHERE tier='act' AND severity_score >= 4"
+    ).fetchall()
+    elig = 0; gap = 0
+    for r in sev_4plus:
+        try:
+            d = datetime.fromisoformat(r["date"]).date()
+        except Exception:
+            continue
+        if (today - d).days < 180:
+            continue
+        elig += 1
+        if (r["prosec_status"] or "unknown") in ("unknown","none") and not (r["case_ref"] or "").strip():
+            gap += 1
+    prosec_gap_pct = round(100.0 * gap / elig) if elig else 0
+
+    # Finanzfluss-Transparenz — Summe laufendes Jahr.
+    yr = today.year
+    funding_eur = db.execute(
+        "SELECT COALESCE(SUM(amount), 0) FROM funding_records WHERE year = ?",
+        (yr,)
+    ).fetchone()[0] or 0
+
+    cluster_active = db.execute(
+        "SELECT COUNT(*) FROM early_warning_clusters WHERE active=1"
+    ).fetchone()[0]
+
+    # Evidence coverage: crawled rows only — manuelle Einträge haben keinen
+    # URL-Snapshot und würden den Quotient sonst künstlich drücken.
+    ev_base = db.execute(
+        "SELECT COUNT(*) FROM incidents WHERE manual=0 AND url LIKE 'http%'"
+    ).fetchone()[0] or 0
+    ev_have = db.execute(
+        "SELECT COUNT(*) FROM incidents "
+        "WHERE manual=0 AND url LIKE 'http%' AND evidence_path != ''"
+    ).fetchone()[0] or 0
+    evidence_pct = round(100.0 * ev_have / ev_base) if ev_base else 0
+
+    return JSONResponse({
+        "prosec_gap_pct":  prosec_gap_pct,
+        "prosec_gap_n":    gap,
+        "prosec_gap_base": elig,
+        "cluster_active":  cluster_active,
+        "funding_year_eur": int(funding_eur),
+        "funding_year":    yr,
+        "evidence_pct":    evidence_pct,
+        "evidence_have":   ev_have,
+        "evidence_base":   ev_base,
+        "asof":            today.isoformat(),
+    })
+
+@app.get("/api/accountability")
+async def get_accountability():
+    """
+    Säule 1 — Strafverfolgungs-Druck: aggregate which T1-tier incidents have
+    a documented prosec_status and which sit silent for ≥180 days at
+    severity≥4 (the "Gap"). Returns:
+      total_t1, with_case, gap_count, by_status[], gap_rows[]
+    """
+    rows = db.execute(
+        "SELECT id,date,location,country,category,severity_score,"
+        "tier,prosec_status,case_ref,url,source,last_status_check "
+        "FROM incidents WHERE tier='act' ORDER BY date DESC"
+    ).fetchall()
+    rows = [dict(r) for r in rows]
+    total_t1   = len(rows)
+    with_case  = sum(1 for r in rows if (r.get("case_ref") or "").strip())
+    today      = datetime.now().date()
+    gap_rows = []
+    by_status = {}
+    for r in rows:
+        st = (r.get("prosec_status") or "unknown")
+        by_status[st] = by_status.get(st, 0) + 1
+        # Gap heuristic: T1 sev≥4 with no case_ref, status unknown/none, and
+        # incident date is ≥180 days old. These are the politically active
+        # cases that should have triggered a public investigation by now.
+        if (r.get("severity_score") or 0) >= 4 and st in ("unknown","none") and not (r.get("case_ref") or "").strip():
+            try:
+                d = datetime.fromisoformat(r["date"]).date()
+                if (today - d).days >= 180:
+                    gap_rows.append(r)
+            except Exception:
+                pass
+    return JSONResponse({
+        "total_t1":   total_t1,
+        "with_case":  with_case,
+        "gap_count":  len(gap_rows),
+        "by_status":  [{"status": k, "count": v} for k, v in sorted(by_status.items(), key=lambda x: -x[1])],
+        "gap_rows":   gap_rows[:200],
+    })
+
 @app.get("/api/incidents")
 async def get_incidents(
     country: str = "", category: str = "", date_from: str = "",
@@ -2177,7 +2902,8 @@ async def get_incidents(
     q = ("SELECT id,date,location,country,category,description,summary,url,"
          "lat,lon,manual,source,severity_score,actors,confidence,"
          "is_primary,is_high_risk,tier,target_type,"
-         "prosec_status,case_ref,last_status_check FROM incidents WHERE 1=1")
+         "prosec_status,case_ref,last_status_check,"
+         "evidence_path,evidence_sha,evidence_ts FROM incidents WHERE 1=1")
     p = []
     if country:   q += " AND country=?";   p.append(country)
     if category:  q += " AND category=?";  p.append(category)
@@ -2331,7 +3057,13 @@ async def get_actors():
             a = a.strip()
             if not a: continue
             if a not in actor_map:
-                actor_map[a] = {"name": a, "count": 0, "high": 0, "last_seen": ""}
+                actor_map[a] = {
+                    "name": a, "count": 0, "high": 0, "last_seen": "",
+                    # MS-7 — Fedpol Akteurs-Tier: act|enable|endorse, fallback
+                    # endorse for actors not in KNOWN_ACTORS (we don't impute
+                    # active perpetration to unknown labels).
+                    "tier": ACTOR_TIER.get(a, "endorse"),
+                }
             actor_map[a]["count"] += row["n"]
             actor_map[a]["high"]  += row["hi"]
             if (row["last_seen"] or "") > actor_map[a]["last_seen"]:
@@ -2418,6 +3150,132 @@ async def funding_stats():
         "by_country":    by_country,
         "top_donors":    top_donors,
     })
+
+@app.get("/api/funding/graph")
+async def funding_graph(year_min: int = 0, year_max: int = 0,
+                        country: str = "", min_amount: float = 0,
+                        max_nodes: int = 120):
+    """
+    Säule 3 — Finanzfluss-Graph. Aggregiert funding_records zu Donor→
+    Recipient-Kanten und ergänzt explizite Mehr-Hop-Kanten aus funding_edges.
+    Liefert {nodes, links} im D3-Force-kompatiblen Format.
+    """
+    # Direct edges aus funding_records
+    q1 = ("SELECT donor_name AS src, recipient_org AS dst, "
+          "SUM(amount) AS amount, MAX(year) AS yr, COUNT(*) AS n, "
+          "MAX(source_url) AS src_url, MAX(country) AS country, "
+          "MAX(donor_type) AS dtype "
+          "FROM funding_records WHERE 1=1")
+    params = []
+    if year_min: q1 += " AND year >= ?"; params.append(year_min)
+    if year_max: q1 += " AND year <= ?"; params.append(year_max)
+    if country:  q1 += " AND country = ?"; params.append(country)
+    if min_amount: q1 += " AND amount >= ?"; params.append(min_amount)
+    q1 += " GROUP BY donor_name, recipient_org"
+    direct = [dict(r) for r in db.execute(q1, params).fetchall()]
+
+    # Multi-hop edges
+    edges = [dict(r) for r in db.execute(
+        "SELECT src_org AS src, dst_org AS dst, amount, year AS yr, "
+        "source_url AS src_url, notes FROM funding_edges"
+    ).fetchall()]
+
+    # Node aggregation
+    nodes = {}
+    def upsert_node(name, role):
+        if not name: return
+        if name not in nodes:
+            nodes[name] = {"id": name, "label": name, "in": 0, "out": 0,
+                           "amount_in": 0.0, "amount_out": 0.0, "type": role}
+        nodes[name]["type"] = role if nodes[name]["type"] == role else "intermediary"
+
+    links = []
+    for e in direct:
+        upsert_node(e["src"], "donor")
+        upsert_node(e["dst"], "recipient")
+        nodes[e["src"]]["out"] += e["n"];  nodes[e["src"]]["amount_out"] += (e["amount"] or 0)
+        nodes[e["dst"]]["in"]  += e["n"];  nodes[e["dst"]]["amount_in"]  += (e["amount"] or 0)
+        links.append({
+            "source": e["src"], "target": e["dst"],
+            "amount": e["amount"] or 0, "year": e["yr"],
+            "url":    e["src_url"] or "", "kind": "direct",
+            "country": e.get("country") or "", "donor_type": e.get("dtype") or "",
+        })
+    for e in edges:
+        upsert_node(e["src"], "donor")
+        upsert_node(e["dst"], "recipient")
+        nodes[e["src"]]["out"] += 1; nodes[e["src"]]["amount_out"] += (e["amount"] or 0)
+        nodes[e["dst"]]["in"]  += 1; nodes[e["dst"]]["amount_in"]  += (e["amount"] or 0)
+        links.append({
+            "source": e["src"], "target": e["dst"],
+            "amount": e["amount"] or 0, "year": e["yr"],
+            "url":    e["src_url"] or "", "kind": "edge",
+            "notes":  e.get("notes") or "",
+        })
+
+    # Cap node count by total connectivity if necessary.
+    if len(nodes) > max_nodes:
+        ranked = sorted(nodes.values(),
+                        key=lambda n: -(n["in"] + n["out"]))[:max_nodes]
+        keep = {n["id"] for n in ranked}
+        nodes = {k: v for k, v in nodes.items() if k in keep}
+        links = [l for l in links if l["source"] in keep and l["target"] in keep]
+
+    return JSONResponse({
+        "nodes": list(nodes.values()),
+        "links": links,
+        "node_count": len(nodes),
+        "link_count": len(links),
+    })
+
+
+@app.post("/admin/api/funding-edge")
+async def admin_add_funding_edge(request: Request, _=Depends(require_admin)):
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "message": "Ungültiges JSON"}, status_code=400)
+    src = (data.get("src_org") or "").strip()
+    dst = (data.get("dst_org") or "").strip()
+    if not src or not dst:
+        return JSONResponse({"ok": False, "message": "src_org und dst_org sind Pflicht"}, status_code=400)
+    if src == dst:
+        return JSONResponse({"ok": False, "message": "src_org darf nicht == dst_org sein"}, status_code=400)
+    amount = data.get("amount") or 0
+    year   = data.get("year")  or None
+    src_url = (data.get("source_url") or "").strip()
+    notes   = (data.get("notes") or "").strip()
+    h = hashlib.sha256(f"edge|{src.lower()}|{dst.lower()}|{year}".encode()).hexdigest()
+    try:
+        db.execute(
+            "INSERT OR IGNORE INTO funding_edges "
+            "(src_org,dst_org,amount,currency,year,source_url,notes,manual,hash,timestamp) "
+            "VALUES (?,?,?,?,?,?,?,1,?,datetime('now'))",
+            (src, dst, float(amount or 0), data.get("currency","EUR"),
+             year, src_url, notes, h)
+        )
+        db.commit()
+    except Exception as e:
+        return JSONResponse({"ok": False, "message": str(e)}, status_code=400)
+    return JSONResponse({"ok": True, "hash": h})
+
+
+@app.delete("/admin/api/funding-edge/{edge_id}")
+async def admin_delete_funding_edge(edge_id: int, _=Depends(require_admin)):
+    db.execute("DELETE FROM funding_edges WHERE id=?", (edge_id,))
+    db.commit()
+    return JSONResponse({"ok": True})
+
+
+@app.get("/api/funding/edges")
+async def list_funding_edges(limit: int = 200):
+    rows = db.execute(
+        "SELECT id, src_org, dst_org, amount, currency, year, "
+        "source_url, notes, timestamp FROM funding_edges "
+        "ORDER BY year DESC, timestamp DESC LIMIT ?", (limit,)
+    ).fetchall()
+    return JSONResponse([dict(r) for r in rows])
+
 
 @app.get("/api/funding/export-csv")
 async def funding_export_csv():
@@ -2610,8 +3468,16 @@ async def admin_inline_update(inc_id: int, request: Request, _=Depends(require_a
         data = await request.json()
     except Exception:
         return JSONResponse({"ok": False, "message": "Ungültiges JSON"}, status_code=400)
-    allowed = {"description","summary","location","country","category","severity_score","date","url"}
+    allowed = {"description","summary","location","country","category","severity_score","date","url",
+               # Strategic Concept v3 — Säule 1 (Strafverfolgungs-Druck) + Säule 2 (Frühwarn-Routing)
+               "tier","target_type","prosec_status","case_ref","last_status_check"}
     fields = {k: v for k, v in data.items() if k in allowed}
+    # Validate tier + prosec_status values to keep the columns clean.
+    if "tier" in fields and fields["tier"] not in ("act","enable","context"):
+        return JSONResponse({"ok": False, "message": "tier muss act|enable|context sein"}, status_code=400)
+    _allowed_prosec = {"unknown","none","investigating","charged","trial","convicted","acquitted","dismissed"}
+    if "prosec_status" in fields and fields["prosec_status"] not in _allowed_prosec:
+        return JSONResponse({"ok": False, "message": f"prosec_status muss eines von {sorted(_allowed_prosec)} sein"}, status_code=400)
     if not fields:
         return JSONResponse({"ok": False, "message": "Keine erlaubten Felder"}, status_code=400)
     # Run PII redaction on text fields before saving — admin shouldn't be
@@ -2921,6 +3787,12 @@ async def startup():
     backfill_summaries_and_flags()
     # Always attempt to seed funding (idempotent — no-op if already present).
     seed_funding_data()
+    # Säule 2 — populate the Frühwarn-Cluster table on boot so the footer
+    # counter and /api/early-warning.{rss,json} have data immediately.
+    try:
+        detect_clusters()
+    except Exception as e:
+        log.warning(f"detect_clusters at startup failed: {e}")
     sched = BackgroundScheduler(daemon=True, timezone="Europe/Zurich")
     # Main crawler: every 12 hours (cost-efficient)
     sched.add_job(run_crawler, "interval", hours=12, id="main",
@@ -2928,6 +3800,9 @@ async def startup():
     # Auto-continue historical barrikade crawl every 45 min until complete
     sched.add_job(auto_hist, "interval", minutes=45, id="auto_hist",
                   next_run_time=datetime.now() + timedelta(seconds=90))
+    # Re-detect Frühwarn-Cluster weekly. Cheap query — runs in milliseconds.
+    sched.add_job(detect_clusters, "interval", days=7, id="early_warning",
+                  next_run_time=datetime.now() + timedelta(hours=6))
     sched.start()
     log.info(f"LEX EUROPE — {len(RSS_FEEDS)} RSS + {len(GNEWS_Q)} GNews — crawl in 20s | hist auto-continue every 45min")
 
