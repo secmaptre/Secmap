@@ -155,13 +155,23 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 .cn{font-family:var(--mono);font-size:9px;color:var(--t2);}
 
 /* ── INCIDENT CARDS ── */
-.icard{padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;transition:background .12s;border-left:2px solid transparent;margin:0 -14px;-webkit-tap-highlight-color:transparent;position:relative;}
+.icard{padding:11px 14px 12px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;transition:background .12s,border-left-color .12s;border-left:3px solid transparent;margin:0 -14px;-webkit-tap-highlight-color:transparent;position:relative;}
+.icard:hover{background:rgba(106,169,201,0.04);border-left-color:var(--accent) !important;}
 .icard:hover,.icard:active{background:rgba(0,200,255,0.04);}
 .icard-hd{display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap;}
 .ibadge{font-family:var(--mono);font-size:8px;font-weight:600;letter-spacing:.5px;padding:2px 6px;border-radius:2px;white-space:nowrap;}
 .idate{font-family:var(--mono);font-size:8px;color:var(--t2);margin-left:auto;flex-shrink:0;}
-.iloc{font-family:var(--mono);font-size:9px;color:var(--t1);margin-bottom:3px;}
-.idesc{font-size:10px;color:var(--t2);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.iloc{font-family:var(--mono);font-size:9px;color:var(--t1);margin-bottom:5px;display:flex;align-items:center;gap:8px;}
+.iloc-src{margin-left:auto;font-family:var(--mono);font-size:8px;color:var(--t3);letter-spacing:0.5px;
+  border:1px solid rgba(160,188,212,0.14);padding:1px 6px;border-radius:2px;
+  text-decoration:none;transition:color .12s,border-color .12s;flex-shrink:0;max-width:50%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.iloc-src:hover{color:var(--accent);border-color:rgba(106,169,201,0.40);}
+.idesc{font-size:11px;color:var(--t1);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-family:var(--sans);}
+/* Severity bar inside the card header — minimalist 5-segment indicator. */
+.sev-bar{display:inline-flex;gap:1px;flex-shrink:0;margin-left:2px;}
+.sev-bar .sb{width:4px;height:9px;background:rgba(160,188,212,0.10);border-radius:1px;}
+.sev-bar .sb.on{background:currentColor;}
 .ifempty{font-family:var(--mono);font-size:10px;color:var(--t2);opacity:.5;text-align:center;padding:40px 14px;}
 .sh{background:rgba(255,51,85,0.13);color:var(--red);border:1px solid rgba(255,51,85,0.28);}
 .sm{background:rgba(240,165,0,0.11);color:var(--amber);border:1px solid rgba(240,165,0,0.24);}
@@ -503,10 +513,13 @@ body.mod-funding #mod-funding-view{display:grid !important;}
 .fnd-aside::-webkit-scrollbar{width:3px;}
 .fnd-aside::-webkit-scrollbar-thumb{background:var(--pb);}
 .fnd-main{display:flex;flex-direction:column;overflow:hidden;}
-.fnd-mhdr{display:flex;align-items:center;gap:18px;padding:11px 18px;border-bottom:1px solid var(--pb);
-  background:rgba(5,11,22,0.55);flex-shrink:0;flex-wrap:wrap;}
-.fnd-stat{font-family:var(--mono);font-size:9px;letter-spacing:1.5px;color:var(--t2);white-space:nowrap;}
-.fnd-stat b{font-size:14px;color:var(--accent);font-weight:600;letter-spacing:0;margin-right:5px;}
+.fnd-mhdr{display:flex;align-items:center;gap:14px;padding:12px 20px;border-bottom:1px solid var(--pb);
+  background:rgba(5,11,22,0.75);flex-shrink:0;flex-wrap:wrap;}
+.fnd-stat{font-family:var(--mono);font-size:8px;letter-spacing:2px;color:var(--t3);white-space:nowrap;
+  text-transform:uppercase;border-left:1px solid rgba(160,188,212,0.10);padding-left:14px;}
+.fnd-stat:first-child{border-left:0;padding-left:0;}
+.fnd-stat b{font-size:17px;color:var(--accent);font-weight:600;letter-spacing:-0.3px;margin-right:7px;
+  font-variant-numeric:tabular-nums;display:block;margin-bottom:2px;}
 .fnd-stat.red b{color:var(--red);}
 .fnd-stat.amber b{color:var(--amber);}
 .fnd-stat.green b{color:var(--green);}
@@ -627,6 +640,15 @@ body.mod-funding #mod-funding-view{display:grid !important;}
 .sup-copy.done{color:var(--green);border-color:var(--green);}
 .sup-disclaimer{font-family:var(--mono);font-size:8px;letter-spacing:1.5px;color:var(--t3);
   margin-top:14px;line-height:1.6;text-transform:uppercase;}
+/* Contact block — prominenter als die Crypto-Blöcke, weil das der primäre
+   professionelle Eingangskanal für Behörden/Journalismus ist. */
+.sup-contact{border-color:rgba(106,169,201,0.45);background:rgba(106,169,201,0.07);}
+.sup-contact .sup-block-lbl{color:var(--accent);}
+.sup-contact .sup-addr{background:rgba(106,169,201,0.12);border-color:rgba(106,169,201,0.35);font-size:13px;}
+.sup-contact .sup-addr a{color:var(--t0);text-decoration:none;}
+.sup-contact .sup-addr a:hover{text-decoration:underline;}
+.sup-contact-hint{font-family:var(--sans);font-size:11px;color:var(--t2);
+  margin-top:8px;line-height:1.55;}
 
 /* ── DETAIL EXTRAS ── */
 .det-sev-bar{display:flex;gap:3px;margin:8px 0;}
@@ -1122,14 +1144,28 @@ body.mod-funding #mod-funding-view{display:grid !important;}
 <div id="support-modal" onclick="supportClose()">
   <div class="sup-card" onclick="event.stopPropagation()">
     <div class="sup-hd">
-      <span style="font-size:18px;color:var(--accent)">♥</span>
-      <span class="sup-hd-t">UNTERSTÜTZEN // SPENDEN</span>
+      <span style="font-size:18px;color:var(--accent)">◈</span>
+      <span class="sup-hd-t">UNTERSTÜTZEN // KONTAKT</span>
       <button class="sup-close" onclick="supportClose()">✕</button>
     </div>
     <div class="sup-intro">
-      LEX EUROPE ist ein unabhängiges OSINT-Forschungsprojekt. Spenden helfen,
-      die Datenqualität zu sichern, Hosting zu finanzieren und die Recherche
-      auszubauen. Keine Werbung, kein Tracking.
+      LEX EUROPE ist eine unabhängige OSINT-Plattform für die Dokumentation
+      politisch linksextrem motivierter Gewalttaten und der zugehörigen
+      öffentlichen Finanzflüsse in Europa. Keine Werbung, kein Tracking,
+      keine externen Sponsoren — finanziert ausschließlich über Spenden.
+    </div>
+
+    <!-- KONTAKT: prominent oben für Behörden / Forschung / Hinweisgeber -->
+    <div class="sup-block sup-contact">
+      <div class="sup-block-lbl">KONTAKT // HINWEIS // KOOPERATION</div>
+      <div class="sup-addr">
+        <a href="mailto:{{ contact_email }}" id="sup-mail">{{ contact_email }}</a>
+      </div>
+      <div class="sup-contact-hint">
+        Behörden, Forschende, Journalist:innen und Hinweisgeber:innen erreichen
+        die Redaktion über diese Adresse. PGP-Schlüssel auf Anfrage.
+      </div>
+      <button class="sup-copy" onclick="supCopy('sup-mail',this)">⎘ ADRESSE KOPIEREN</button>
     </div>
 
     <div class="sup-block">
@@ -1160,7 +1196,8 @@ body.mod-funding #mod-funding-view{display:grid !important;}
     {% endif %}
 
     <div class="sup-disclaimer">
-      Unabhängige Recherche · Keine Werbung · Kein Tracking · Open-Source-Daten
+      Unabhängige Recherche · DSGVO-konform · Keine Werbung · Kein Tracking ·
+      Quellen-Hashes (SHA-256) für gerichtsfeste Nachprüfung verfügbar
     </div>
   </div>
 </div>
@@ -1776,6 +1813,17 @@ function renderFeed(list){
   const lbl_t3    = t('tier.context.short','T3');
   const lbl_ctxhd = t('feed.ctx_group','Kontext-Einträge');
   const now=new Date();
+  function srcHost(u){
+    if(!u) return '';
+    try{ return new URL(u).hostname.replace(/^www\./,''); }
+    catch(_){ return ''; }
+  }
+  function sevBar(score, color){
+    if(!score) return '';
+    const segs = [1,2,3,4,5].map(n =>
+      `<span class="sb${n<=score?' on':''}"></span>`).join('');
+    return `<span class="sev-bar" style="color:${color||'var(--t2)'}">${segs}</span>`;
+  }
   function card(i, asContext){
     const c=col(i.category),s=sev(i.category);
     const summ=(i.summary||'').trim();
@@ -1786,7 +1834,8 @@ function renderFeed(list){
     const newBadge=isNew?`<span class="neu-badge">${lbl_new}</span>`:'';
     const geoBadge=noGeo?`<span class="nogeo-badge">${lbl_geo}</span>`:'';
     const sc=i.severity_score||0;
-    const scBadge=(sc>0 && !asContext)?`<span class="sev-score" style="background:${SEV_BG[sc]||'transparent'};color:${SEV_COL[sc]||'var(--t2)'};border:1px solid ${SEV_COL[sc]||'var(--t3)'}44">${sc}</span>`:'';
+    const sevColor = SEV_COL[sc] || 'var(--t3)';
+    const sBar  = (sc>0 && !asContext) ? sevBar(sc, sevColor) : '';
     const tg = tierOf(i);
     const hr = (i.is_high_risk===1||i.is_high_risk===true) && !asContext;
     const hrBadge = hr ? `<span class="hr-badge">${lbl_hr}</span>` : '';
@@ -1795,14 +1844,21 @@ function renderFeed(list){
       : (asContext ? `<span class="tier-pill t3">${lbl_t3}</span>` : '');
     const ctxBadge = asContext ? `<span class="ctx-badge">${lbl_ctx}</span>` : '';
     const borderClr = asContext ? 'rgba(160,188,212,0.25)' : c;
+    const host = srcHost(i.url);
+    const srcChip = host
+      ? `<a class="iloc-src" href="${i.url}" target="_blank" rel="noopener" title="${i.url}" onclick="event.stopPropagation()">↗ ${host}</a>`
+      : '';
     return `<div class="icard${asContext?' is-context':''}" id="ic-${i.id}" onclick="openDetailById(${i.id})" style="border-left-color:${borderClr}">
       <div class="icard-hd">
         ${hrBadge}${ctxBadge}${tierPill}
         <span class="ibadge s${s}">${i.category}</span>
-        ${scBadge}${newBadge}${geoBadge}
+        ${sBar}${newBadge}${geoBadge}
         <span class="idate">${i.date||'—'}</span>
       </div>
-      <div class="iloc">${noGeo?`<span style="color:var(--t3)">${lbl_unk}</span>`:i.location+'&nbsp;·&nbsp;<span style="opacity:.6">'+i.country+'</span>'}</div>
+      <div class="iloc">
+        <span>${noGeo?`<span style="color:var(--t3)">${lbl_unk}</span>`:i.location+'&nbsp;·&nbsp;<span style="opacity:.6">'+i.country+'</span>'}</span>
+        ${srcChip}
+      </div>
       <div class="idesc">${d}${d.length>=200?'…':''}</div>
     </div>`;
   }

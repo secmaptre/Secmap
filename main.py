@@ -2670,13 +2670,14 @@ if os.path.isdir("i18n"):
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    # Donation addresses are configured per render.com instance via env vars.
-    # Leaving them unset shows a safe "wird in Kürze veröffentlicht" placeholder.
+    # Donation addresses + contact email are configured per render.com instance
+    # via env vars. Leaving them unset shows a safe placeholder.
     return templates.TemplateResponse("index.html", {
         "request": request,
-        "btc_address": os.getenv("BTC_ADDRESS", ""),
-        "xmr_address": os.getenv("XMR_ADDRESS", ""),
-        "fiat_info":   os.getenv("FIAT_INFO",   ""),
+        "btc_address":   os.getenv("BTC_ADDRESS", ""),
+        "xmr_address":   os.getenv("XMR_ADDRESS", ""),
+        "fiat_info":     os.getenv("FIAT_INFO",   ""),
+        "contact_email": os.getenv("CONTACT_EMAIL", "kontakt@lex-europe.org"),
     })
 
 # ── EARLY-WARNING CLUSTER DETECTION (Säule 2 — MS-3) ──────────────
