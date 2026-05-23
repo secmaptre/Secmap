@@ -3304,6 +3304,61 @@ async def get_effectiveness():
         "asof":            today.isoformat(),
     })
 
+@app.get("/api/accountability/trend")
+async def accountability_trend(months: int = 24):
+    """
+    Säule 1 — Trend-Daten für das „Wachsende-Lücke"-Chart im Verfolgung-Tab.
+    Liefert pro Monat (zurück bis `months` Monate) den T1-Sev≥4-Counter
+    und die Anzahl mit prosec_status ∈ {investigating,charged,trial,convicted}
+    bzw. dokumentiertem Aktenzeichen. Die Differenz ist die wachsende
+    Strafverfolgungs-Lücke. Output für Chart.js direkt verwendbar.
+    """
+    today = datetime.now().date()
+    start = (today.replace(day=1) - timedelta(days=32 * months)).replace(day=1)
+    rows = db.execute(
+        "SELECT date, prosec_status, case_ref FROM incidents "
+        "WHERE tier='act' AND severity_score >= 4 AND date >= ? "
+        "ORDER BY date ASC", (start.isoformat(),)
+    ).fetchall()
+    from collections import defaultdict
+    counts = defaultdict(lambda: {"total": 0, "prosecuted": 0})
+    PROSEC_OK = {"investigating", "charged", "trial", "convicted"}
+    for r in rows:
+        try:
+            d = datetime.fromisoformat(r["date"]).date()
+        except Exception:
+            continue
+        key = f"{d.year}-{d.month:02d}"
+        counts[key]["total"] += 1
+        ps = (r["prosec_status"] or "unknown")
+        if ps in PROSEC_OK or (r["case_ref"] or "").strip():
+            counts[key]["prosecuted"] += 1
+    # Build a continuous month series (no gaps in the chart)
+    series = []
+    cur = start
+    while cur <= today:
+        key = f"{cur.year}-{cur.month:02d}"
+        c = counts.get(key, {"total": 0, "prosecuted": 0})
+        gap = c["total"] - c["prosecuted"]
+        series.append({"month": key, "total": c["total"],
+                       "prosecuted": c["prosecuted"], "gap": gap})
+        if cur.month == 12:
+            cur = cur.replace(year=cur.year + 1, month=1)
+        else:
+            cur = cur.replace(month=cur.month + 1)
+    cum = {"total": 0, "prosecuted": 0, "gap": 0}
+    for s in series:
+        cum["total"]      += s["total"]
+        cum["prosecuted"] += s["prosecuted"]
+        cum["gap"]        += s["gap"]
+        s["cum_total"]      = cum["total"]
+        s["cum_prosecuted"] = cum["prosecuted"]
+        s["cum_gap"]        = cum["gap"]
+    return JSONResponse({
+        "months": months, "series": series,
+        "totals": cum,
+    })
+
 @app.get("/api/accountability")
 async def get_accountability():
     """
