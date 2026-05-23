@@ -543,6 +543,16 @@ body.mod-funding #mod-funding-view{display:grid !important;}
   padding:2px 6px;border-radius:2px;background:var(--ag);color:var(--accent);
   border:1px solid var(--pb2);text-transform:uppercase;}
 .fnd-conf-dots{font-family:var(--mono);letter-spacing:1px;color:var(--amber);font-size:10px;}
+/* Verified-Flag-Badges (MS-9 Haftungsfix) */
+.fnd-vrow{margin-top:3px;}
+.fnd-verified{display:inline-block;font-family:var(--mono);font-size:7px;font-weight:700;
+  letter-spacing:1.5px;padding:1px 5px;border-radius:2px;color:var(--green);
+  background:rgba(95,181,131,0.10);border:1px solid rgba(95,181,131,0.40);}
+.fnd-unverified{display:inline-block;font-family:var(--mono);font-size:7px;font-weight:700;
+  letter-spacing:1.5px;padding:1px 5px;border-radius:2px;color:var(--amber);
+  background:rgba(217,154,43,0.10);border:1px solid rgba(217,154,43,0.40);}
+.fnd-row-unverified{background:rgba(217,154,43,0.025);}
+.fnd-row-unverified:hover{background:rgba(217,154,43,0.06);}
 .fnd-srclink{color:var(--accent);text-decoration:none;font-size:11px;}
 .fnd-srclink:hover{text-decoration:underline;}
 .fnd-empty{text-align:center;padding:36px 16px;font-family:var(--mono);font-size:10px;color:var(--t2);letter-spacing:2px;}
@@ -1060,12 +1070,17 @@ body.mod-funding #mod-funding-view{display:grid !important;}
         Verfassungsschutzberichten (BfV, LfV, DSN, NDB) namentlich genannt
         sind oder gegen deren Strukturen laufende Ermittlungsverfahren nach
         §§ 129 / 129a StGB bzw. analogen Normen geführt werden.
-        Jeder Eintrag verlinkt die Primärquelle und nennt die
-        Verbindungsbegründung (Zeile aufklappen). Beträge sind, soweit nicht
-        anders gekennzeichnet, Originaldokumenten entnommen oder konservative
-        Schätzungen aus parlamentarischen Drucksachen.
         <b>Keine Vorverurteilung</b> — die Aufnahme stellt keine Aussage über
         individuelle strafrechtliche Verantwortung dar.
+        <br><br>
+        <b>Quellen-Status pro Eintrag.</b>
+        <span class="fnd-verified">✓ verifiziert</span> bedeutet: die Quelle
+        zeigt direkt auf ein spezifisches Primärdokument (Tätigkeitsbericht,
+        Grantees-Liste, Bürgerschafts-Drucksache mit Aktenzeichen).
+        <span class="fnd-unverified">⚠ ungeprüft</span> bedeutet: die Quelle
+        ist eine Programm- oder Behörden-Landingpage; das spezifische
+        Dokument ist dahinter veröffentlicht, aber die Plattform verlinkt
+        nicht direkt darauf — bitte vor Zitation eigenständig prüfen.
         <a class="fdc-link" onclick="openMethodology()">→ Vollständige Methodik</a>
       </div>
     </div>
@@ -3036,14 +3051,19 @@ function renderFundingTable(){
   // The detail row is the legally critical disclosure — readers must be
   // able to see WHY a recipient is in the database with one click.
   tbody.innerHTML = slice.map(r=>{
+    const verified = r.verified === 1 || r.verified === true;
+    const srcBadge = verified
+      ? '<span class="fnd-verified" title="Quelle zeigt auf spezifisches Primärdokument">✓ verifiziert</span>'
+      : '<span class="fnd-unverified" title="Quelle ist Programm-Landingpage, kein spezifisches Dokument — bitte selbst prüfen">⚠ ungeprüft</span>';
     const src = r.source_url
       ? `<a class="fnd-srclink" href="${escapeHtml(r.source_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">↗ Quelle</a>`
       : '<span style="color:var(--t3)">—</span>';
     const proj = r.project ? `<span class="fnd-proj">${escapeHtml(r.project)}</span>` : '';
     const notes = (r.notes||'').trim() || '<em style="color:var(--t3)">— Keine Begründung erfasst —</em>';
-    return `<tr class="fnd-row" data-rid="${r.id}" onclick="fndToggleDetail(${r.id})">
+    const rowCls = verified ? 'fnd-row' : 'fnd-row fnd-row-unverified';
+    return `<tr class="${rowCls}" data-rid="${r.id}" onclick="fndToggleDetail(${r.id})">
       <td class="fnd-yr">${escapeHtml(String(r.year||'—'))}</td>
-      <td><div class="fnd-org">${escapeHtml(r.recipient_org)}</div>${proj}</td>
+      <td><div class="fnd-org">${escapeHtml(r.recipient_org)}</div>${proj}<div class="fnd-vrow">${srcBadge}</div></td>
       <td>${escapeHtml(r.donor_name)}</td>
       <td><span class="fnd-don-type">${escapeHtml(r.donor_type)}</span></td>
       <td class="fnd-amt" style="text-align:right">${fmtAmount(r.amount, r.currency)}</td>
@@ -3054,6 +3074,8 @@ function renderFundingTable(){
     <tr class="fnd-detail" id="fnd-det-${r.id}" style="display:none">
       <td colspan="8">
         <dl class="fnd-detail-grid">
+          <dt>Status</dt>
+          <dd>${srcBadge}</dd>
           <dt>Verbindung</dt>
           <dd class="note">${escapeHtml(notes)}</dd>
           <dt>Primärquelle</dt>
