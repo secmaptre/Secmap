@@ -474,9 +474,39 @@ SEVERITY_MAP = {
 }
 
 def score_severity(category, text=""):
+    """
+    Schwere 1..5 — Basis aus SEVERITY_MAP, dann text-basiert hochgestuft.
+    Mehrere Signale können stapeln (bis Cap 5). Reihenfolge nach Härte:
+      Personen-Schaden > Brandwaffe/Sprengstoff > Sachschadens-Magnitude.
+    """
     base = SEVERITY_MAP.get(category, 1)
     t = (text or "").lower()
-    if re.search(r"\bschwer\s+verletzt|\btot\b|\bgetötet\b|\bexplosion\b", t):
+    # Personenschaden = unmittelbarer Härte-Faktor
+    if re.search(r"\b(schwer\s+verletzt|getötet|getoetet|\btot\b|tote\b|todesopfer|"
+                 r"lebensgefahr|reanim(iert|ation)|krankenhaus(?!\w))",
+                 t):
+        base = min(base + 2, 5)
+    elif re.search(r"\b(verletzt|verletzung|verletzte|geprellt|prellung|gebrochen|"
+                   r"blutung)", t):
+        base = min(base + 1, 5)
+    # Brandwaffe / Sprengstoff / Werkzeugmilieu
+    if re.search(r"\b(brandsatz|molotov|molotow|brand(?:flasche|beschleuniger)|"
+                 r"sprengsatz|sprengstoff|usbv|brandsetzung)\b", t):
+        base = min(base + 1, 5)
+    # Sachschadens-Magnitude (€-Hinweise)
+    m = re.search(r"(\d{1,3}(?:[.,]\d{3})+|\d{4,})\s*(?:€|euro|chf|franken)", t)
+    if m:
+        try:
+            amt = int(re.sub(r"[.,]", "", m.group(1)))
+            if   amt >= 1_000_000: base = min(base + 2, 5)
+            elif amt >=   100_000: base = min(base + 1, 5)
+        except Exception:
+            pass
+    # Mehrfach-Anschlag / koordinierte Aktion
+    if re.search(r"(\bserien?anschl|\bkoordinier|\bmehrere\s+anschl|"
+                 r"\bin\s+der\s+gleichen\s+nacht|\bsimultan|"
+                 r"\b(?:fünf|sechs|sieben|acht|neun|zehn|\d{2,})\s+(?:fahrzeuge|"
+                 r"autos|wagen|tesla|streifen|polizei))", t):
         base = min(base + 1, 5)
     return base
 
@@ -1067,9 +1097,17 @@ def classify(text):
         '"Andere"|""   '
         '   // Zielklasse für Mustererkennung (Anschläge auf gleichartige '
         'Ziele). Leerstring wenn kein klares Ziel erkennbar.\n'
-        '  "zusammenfassung": "2-3 sachliche Sätze auf Deutsch, max. 280 Zeichen, '
-        'keine Wertung, keine Floskeln, keine HTML-Reste, kein Navigations-Müll. '
-        'Nennt Wo, Was, Wer (falls bekannt)."\n\n'
+        '  "zusammenfassung": "EIN bis ZWEI sehr kurze, neutrale deutsche '
+        'Sätze. Maximal 140 Zeichen gesamt. Stil: knappes Nachrichten-Lead, '
+        'kein Aktivismus-Vokabular, keine Wertung, keine Floskeln, keine '
+        'HTML-Reste, kein Navigations-Müll. Nennt nur Wo, Was, ggf. Wer. '
+        'Beispiele für den gewünschten Stil:\n'
+        '    \\"In Bamberg wurde ANTIFA-Graffiti an der Stadtbibliothek entdeckt.\\"\n'
+        '    \\"Linksextreme attackierten in Kloten eine Junge-Tat-WG mit Farbe.\\"\n'
+        '    \\"In Berlin-Friedrichshain brannte ein Polizei-Streifenwagen aus.\\"\n'
+        '    Verbote: Wörter wie \\"feige\\", \\"perfide\\", \\"mutige Tat\\", '
+        '\\"solidarische Aktion\\", \\"das System\\", \\"die Schweine\\" — '
+        'diese sind aktivistische Sprache und gehören NICHT in die Zusammenfassung."\n\n'
         f"Text:\n{text[:2200]}\n\n"
         "JSON:"
     )
@@ -1097,11 +1135,13 @@ def classify(text):
         res.setdefault("tier", "")
         res.setdefault("ziel_typ", "")
         res.setdefault("zusammenfassung", "")
-        # Sanitise the summary: clamp length, strip nav artefacts.
+        # Sanitise the summary: clamp length, strip nav artefacts AND
+        # aktivismus-Sprache. The hard 140-char cap matches the new prompt.
         summ = (res.get("zusammenfassung") or "").strip()
+        summ = strip_activist_phrases(summ)
         if _SUMMARY_BAD.search(summ):
             summ = ""
-        res["zusammenfassung"] = summ[:280]
+        res["zusammenfassung"] = clamp_two_sentences(summ, 140)
         log.info(
             f"Grok → {res['kategorie']} / {res['ort']} / {res['land']} / "
             f"gewalt={res['ist_gewalttat']} / tier={res.get('tier') or '-'} / "
@@ -1124,28 +1164,69 @@ _SUMMARY_BAD = re.compile(
     re.IGNORECASE,
 )
 
+# Activist / advocacy phrasing that turns a factual summary into commentary.
+# Strip these — leave only the descriptive substrate. Conservative: only
+# unambiguous editorialising patterns; we don't censor named-actor labels
+# like "Antifa" or "schwarzer Block" because those are journalistic facts.
+_ACTIVIST_PATTERNS = [
+    (re.compile(r"\b(?:feige[rn]?|perfide[rs]?|hinterhältig|niederträchtig)\b", re.I), ""),
+    (re.compile(r"\bmutige[rn]?\s+(?:tat|aktion|widerstand|kämpfer\w*)\b", re.I), ""),
+    (re.compile(r"\bsolidarische\s+(?:aktion|tat|geste|grüße)\b", re.I), "Aktion"),
+    (re.compile(r"\bdie\s+(?:schweine|bullen|bonzen|faschos|nazis)\b", re.I), "die Beamten"),
+    (re.compile(r"\bdas\s+(?:system|kapital|imperium)\b", re.I), ""),
+    (re.compile(r"\bfuck\s+(?:the\s+)?police\b", re.I), ""),
+    (re.compile(r"\b(?:wir|uns)\s+(?:fordern|verurteilen|stehen|kämpfen|kämpfen weiter)\b", re.I), ""),
+    (re.compile(r"\bes\s+lebe\b[^.!?]{0,80}", re.I), ""),
+    (re.compile(r"\bnie\s+wieder\s+(?:deutschland|kapitalismus)\b", re.I), ""),
+    (re.compile(r"!{2,}"), "."),                # !!! → .
+    (re.compile(r"\s{2,}"), " "),                # collapse extra spaces
+]
+
+def strip_activist_phrases(s: str) -> str:
+    if not s:
+        return ""
+    out = s
+    for rx, repl in _ACTIVIST_PATTERNS:
+        out = rx.sub(repl, out)
+    # Collapse any awkward joins ", ." → ".", "  " → " "
+    out = re.sub(r",\s*[\.\,]", ".", out)
+    out = re.sub(r"\s{2,}", " ", out).strip(" ,;")
+    return out
+
+def clamp_two_sentences(s: str, max_chars: int) -> str:
+    """Take at most the first two sentences, hard-cap to max_chars."""
+    if not s:
+        return ""
+    parts = re.split(r"(?<=[.!?])\s+", s.strip())
+    out = " ".join(parts[:2]).strip()
+    if len(out) > max_chars:
+        cut = out[:max_chars].rstrip()
+        # Try to end at the nearest sentence boundary inside the cap.
+        m = re.search(r"^(.+[.!?])\s", cut)
+        out = m.group(1) if m else cut.rstrip(",;:") + "…"
+    return out
+
 def fallback_summary(text):
     """
     Regex-based fallback when Grok is unavailable or returns junk.
-    Picks the first two non-trivial German sentences, clamped to 280 chars.
+    Pickt einen sehr kurzen ersten Satz, max. 140 Zeichen, neutral.
     """
     if not text:
         return ""
     cleaned = clean_description(text)
-    # Split on sentence punctuation, keep the punctuation glued to the sentence.
     parts = re.split(r'(?<=[\.!?])\s+', cleaned)
     out = []
     for p in parts:
         p = p.strip()
-        if len(p) < 25 or len(p) > 260:
+        if len(p) < 20 or len(p) > 240:
             continue
         if _SUMMARY_BAD.search(p):
             continue
         out.append(p)
         if len(out) >= 2:
             break
-    summ = " ".join(out)[:280].strip()
-    return summ
+    summ = strip_activist_phrases(" ".join(out))
+    return clamp_two_sentences(summ, 140)
 
 # ── PERSISTENCE ───────────────────────────────────────────────────
 def mk_hash(url, text):
@@ -1472,7 +1553,13 @@ def save_incident(ai, text, source, url, date_str=None, manual=False):
     summ = (ai.get("zusammenfassung") or "").strip()
     if not summ:
         summ = fallback_summary(text)
-    summ = redact_pii(summ)[:280]
+    # Strip activist phrasing AND clamp to 140 chars / 2 sentences — the new
+    # high-impact-news style the dashboard renders. Defense-in-depth: even a
+    # too-long Grok output gets trimmed here.
+    summ = clamp_two_sentences(
+        strip_activist_phrases(redact_pii(summ)),
+        140,
+    )
 
     d = date_str or datetime.now().strftime("%Y-%m-%d")
     desc = redact_pii(clean_description(text))[:500]
@@ -1616,7 +1703,13 @@ def backfill_summaries_and_flags():
         desc_in = r["description"] or ""
         summ_in = (r["summary"] or "").strip()
         desc_out = redact_pii(desc_in)
-        summ_out = redact_pii(summ_in or fallback_summary(desc_in))[:280]
+        # Re-strip activist phrasing + clamp to 140 chars even for existing
+        # rows so the visual tightening is retroactive.
+        summ_raw = summ_in or fallback_summary(desc_in)
+        summ_out = clamp_two_sentences(
+            strip_activist_phrases(redact_pii(summ_raw)),
+            140,
+        )
         prim, hi, tier_new = compute_flags(
             r["category"], desc_in, r["severity_score"] or 0
         )
@@ -3485,7 +3578,11 @@ async def admin_inline_update(inc_id: int, request: Request, _=Depends(require_a
     if "description" in fields:
         fields["description"] = redact_pii(fields["description"] or "")[:500]
     if "summary" in fields:
-        fields["summary"] = redact_pii(fields["summary"] or "")[:280]
+        # Auch admin edits respektieren das neue 140-Zeichen/2-Satz-Limit.
+        fields["summary"] = clamp_two_sentences(
+            strip_activist_phrases(redact_pii(fields["summary"] or "")),
+            140,
+        )
     cols = ", ".join(f"{k}=?" for k in fields)
     db.execute(f"UPDATE incidents SET {cols} WHERE id=?",
                tuple(list(fields.values()) + [inc_id]))
