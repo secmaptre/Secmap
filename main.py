@@ -8,6 +8,7 @@ import sqlite3
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, Request, BackgroundTasks, Depends, HTTPException, Form
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -62,7 +63,14 @@ def get_db():
                       # Quality-scope additions (see plan §0)
                       ("summary","TEXT DEFAULT ''"),
                       ("is_primary","INTEGER DEFAULT 0"),
-                      ("is_high_risk","INTEGER DEFAULT 0")]:
+                      ("is_high_risk","INTEGER DEFAULT 0"),
+                      # Strategic Concept v3 — Fedpol 3-tier taxonomy + target
+                      # routing + Strafverfolgungs-Status (Säule 1+2 ground work).
+                      ("tier","TEXT DEFAULT 'act'"),
+                      ("target_type","TEXT DEFAULT ''"),
+                      ("prosec_status","TEXT DEFAULT 'unknown'"),
+                      ("case_ref","TEXT DEFAULT ''"),
+                      ("last_status_check","TEXT DEFAULT ''")]:
         try:
             c.execute(f"ALTER TABLE incidents ADD COLUMN {col} {defn}")
         except Exception:
@@ -938,6 +946,18 @@ def classify(text):
         'false bei reiner Demo/Kundgebung, Solidaritätsaufruf, '
         'Repressionsbericht, reinem Graffiti, Tech-/Auto-/Krypto-Themen, '
         'Auslandskonflikten ohne DACH-Bezug.\n'
+        '  "tier":          "act"|"enable"|"context"   '
+        '   // Fedpol Art. 19 Abs. 2 Bst. e NDG: "act" = Verüben (Brand/Sabo/'
+        'Gewalt/Militante Aktion/politisch motivierte Sachbeschädigung); '
+        '"enable" = Fördern (Aufruf zu Gewalt, Mobilisierungstreffen, '
+        'Gewaltpropaganda, Schmiererei mit konkreter Drohphrase + Schwere); '
+        '"context" = alles übrige inkl. Demo/Kundgebung, Repression, '
+        'Verhaftung, Besetzung, Sonstiges.\n'
+        '  "ziel_typ":      "Energie"|"Telekom"|"Schiene"|"Auto"|"Militär"|'
+        '"Polizei"|"Politik"|"Justiz"|"Medien"|"Wirtschaft"|"Privatperson"|'
+        '"Andere"|""   '
+        '   // Zielklasse für Mustererkennung (Anschläge auf gleichartige '
+        'Ziele). Leerstring wenn kein klares Ziel erkennbar.\n'
         '  "zusammenfassung": "2-3 sachliche Sätze auf Deutsch, max. 280 Zeichen, '
         'keine Wertung, keine Floskeln, keine HTML-Reste, kein Navigations-Müll. '
         'Nennt Wo, Was, Wer (falls bekannt)."\n\n'
@@ -965,6 +985,8 @@ def classify(text):
         res.setdefault("land", "Unbekannt")
         res.setdefault("kategorie", "Sonstiges")
         res.setdefault("ist_gewalttat", False)
+        res.setdefault("tier", "")
+        res.setdefault("ziel_typ", "")
         res.setdefault("zusammenfassung", "")
         # Sanitise the summary: clamp length, strip nav artefacts.
         summ = (res.get("zusammenfassung") or "").strip()
@@ -973,7 +995,8 @@ def classify(text):
         res["zusammenfassung"] = summ[:280]
         log.info(
             f"Grok → {res['kategorie']} / {res['ort']} / {res['land']} / "
-            f"gewalt={res['ist_gewalttat']}"
+            f"gewalt={res['ist_gewalttat']} / tier={res.get('tier') or '-'} / "
+            f"ziel={res.get('ziel_typ') or '-'}"
         )
         return res
     except requests.HTTPError:
@@ -1199,31 +1222,93 @@ def normalize_url(url, source=""):
 
 def compute_flags(category, text, severity):
     """
-    Derive (is_primary, is_high_risk) from category + text + severity.
-    See plan §0. Used by save_incident() and by backfill_summaries_and_flags().
+    Derive (is_primary, is_high_risk, tier) from category + text + severity.
+
+    tier is the Fedpol Art. 19 Abs. 2 Bst. e NDG taxonomy:
+      'act'     — Verüben (Brandanschlag, Sabotage, Gewalt, Militante Aktion,
+                  Sachbeschädigung mit politischem Motiv).
+      'enable'  — Fördern (Aufruf zu Gewalt, Mobilisierungstreffen,
+                  Gewaltpropaganda, Schmiererei mit Drohphrase + Sev≥3).
+      'context' — alles übrige (Demo/Kundgebung, Repression, Besetzung,
+                  Verhaftung, Sonstiges, Schmiererei ohne Drohphrase,
+                  Sachbeschädigung ohne politisches Motiv).
+
+    is_primary stays 1 only for tier=='act' (UI backward-compat).
     """
     cat = (category or "").strip()
     t   = (text or "").lower()
-    # Categories that are PRIMARY by definition.
-    primary_cats = {"Brandanschlag", "Sabotage", "Gewalt",
-                    "Militante Aktion", "Aufruf zu Gewalt"}
-    if cat in primary_cats:
-        is_primary = 1
+
+    act_cats    = {"Brandanschlag", "Sabotage", "Gewalt", "Militante Aktion"}
+    enable_cats = {"Aufruf zu Gewalt"}
+
+    if cat in act_cats:
+        tier = "act"
+    elif cat in enable_cats:
+        tier = "enable"
     elif cat == "Sachbeschädigung":
-        # Only PRIMARY if politically motivated (actor / Bekennerschreiben /
-        # Brandsatz / Farbbeutel / Molotow context).
-        is_primary = 1 if _POLITICAL_MOTIVE_RE.search(t) else 0
+        # PRIMARY/act only if politically motivated; otherwise T3 context.
+        tier = "act" if _POLITICAL_MOTIVE_RE.search(t) else "context"
+    elif cat == "Schmiererei":
+        # Schmiererei → enable only with a credible threat phrase AND sev≥3,
+        # otherwise context. Mirrors the §0 v3 policy and §2e save floor.
+        tier = "enable" if (
+            (severity or 0) >= 3 and _THREAT_PHRASE_RE.search(t)
+        ) else "context"
     else:
-        is_primary = 0
+        # Demo/Kundgebung, Repression, Besetzung, Verhaftung, Sonstiges → context.
+        tier = "context"
+
+    is_primary   = 1 if tier == "act" else 0
     is_high_risk = 1 if (
         (severity or 0) >= 4
         or re.search(r'\b(schwer\s+verletzt|tot\b|getötet|explosion|sprengstoff)\b', t)
     ) else 0
-    return is_primary, is_high_risk
+    return is_primary, is_high_risk, tier
+
+
+# Target-type routing — used by Säule 2 (operative Frühwarnung) to detect
+# clusters of attacks on the same target class. Regex fallback when Grok
+# does not return ziel_typ. Keep keys short ASCII tokens for stable joins.
+_TARGET_TYPE_RE = [
+    ("Energie",    re.compile(r"\b(strommast|umspannwerk|kraftwerk|stromleitung|hochspannungs?|tennet|enbw|rwe|eon|gaspipeline|pipeline|wärmepumpe|fernwärme|stadtwerke)\b", re.I)),
+    ("Telekom",    re.compile(r"\b(telekom|vodafone|funkmast|funkturm|sendemast|5g[- ]?mast|glasfaser|kabelverteiler)\b", re.I)),
+    ("Schiene",    re.compile(r"\b(bahn|gleis|signaltechnik|kabelschacht|stellwerk|deutsche\s+bahn|sbb|öbb|s[- ]?bahn|ic[e]?[- ]?strecke)\b", re.I)),
+    ("Auto",       re.compile(r"\b(tesla|porsche|audi|mercedes|bmw|vw|volkswagen|autohaus|showroom|ladestation|e[- ]?auto|suv|reifen.{0,15}(zerstoch|aufgeschlitzt|platt))\b", re.I)),
+    ("Militär",    re.compile(r"\b(bundeswehr|wehrmacht|kaserne|munition|nato|karriereberat|panzer|raketen?werfer|rheinmetall|heckler|krauss[- ]?maffei)\b", re.I)),
+    ("Polizei",    re.compile(r"\b(polizei|streifenwagen|polizeifahrzeug|polizeirevier|polizeiwache|polizist|cobra|gsg ?9)\b", re.I)),
+    ("Politik",    re.compile(r"\b(parteibüro|parteizentrale|cdu|csu|spd|grüne|fdp|afd|linke|wahlkampfbüro|wahlkreisbüro|abgeordnetenbüro|rathaus)\b", re.I)),
+    ("Justiz",     re.compile(r"\b(gericht|justizvollzug|jva|staatsanwaltschaft|amtsgericht|landgericht|olg|verwaltungsgericht|verfassungsgericht)\b", re.I)),
+    ("Medien",     re.compile(r"\b(zeitung|verlag|redaktion|funkhaus|fernsehsender|rundfunk|ard\b|zdf\b|orf\b|srf\b)\b", re.I)),
+    ("Wirtschaft", re.compile(r"\b(bank|sparkasse|amazon|lidl|aldi|edeka|rewe|konzern|firmensitz|hauptsitz|niederlassung)\b", re.I)),
+]
+_TARGET_TYPE_ALLOWED = {
+    "Energie","Telekom","Schiene","Auto","Militär","Polizei","Politik",
+    "Justiz","Medien","Wirtschaft","Privatperson","Andere",""
+}
+
+def compute_target_type(text, category=""):
+    """Cheap regex fallback for Grok's ziel_typ. Returns '' if no match."""
+    if not text:
+        return ""
+    for label, rx in _TARGET_TYPE_RE:
+        if rx.search(text):
+            return label
+    return ""
 
 def save_incident(ai, text, source, url, date_str=None, manual=False):
     """
-    Persist one incident, applying the plan §0 ingestion rules.
+    Persist one incident, applying the v3 ingestion policy.
+
+    Policy v3 (Concept §C2):
+      - Demo/Kundgebung, Repression, Sonstiges, Besetzung, Verhaftung,
+        Schmiererei ohne Drohphrase, Sachbeschädigung ohne politisches Motiv
+        werden NICHT mehr rejected, sondern als tier='context' (T3) gespeichert.
+      - tier='act' (T1)    → Brandanschlag/Sabotage/Gewalt/Militante Aktion,
+                              politisch motivierte Sachbeschädigung
+      - tier='enable' (T2) → Aufruf zu Gewalt, Schmiererei mit Drohphrase + sev≥3
+      - tier='context' (T3) → der gesamte Rest (Lagebild-Vollständigkeit)
+    Hard rejects bleiben nur: DOXXING, fehlende URL, false_positive
+    (siehe is_false_positive() Aufrufer in parse_rss).
     Returns True if a new row was inserted, False otherwise.
     """
     # ── URL gate ───────────────────────────────────────────────────
@@ -1247,35 +1332,6 @@ def save_incident(ai, text, source, url, date_str=None, manual=False):
     sev = score_severity(cat, text)
     act = extract_actors(text)
     conf = score_confidence(source)
-    t_low = (text or "").lower()
-
-    # ── §0 ingestion floor — Grok cannot bypass this ────────────────
-    # Slightly relaxed vs. the previous version: we now keep Schmiererei
-    # entries at sev≥2 with a threat phrase OR a known actor (was sev≥3),
-    # and accept Sonstiges at sev≥3 (was sev≥4). This was over-filtering
-    # legitimate militant reports.
-    if not manual:
-        if cat in ("Demo/Kundgebung", "Repression"):
-            log.info(f"filtered: out_of_scope ({cat}) — {source}")
-            return False
-        if cat == "Schmiererei" and not ((sev >= 2 and _THREAT_PHRASE_RE.search(t_low)) or act):
-            log.info(f"filtered: schmiererei_no_threat_no_actor — {source}")
-            return False
-        if cat == "Sonstiges" and sev < 3:
-            log.info(f"filtered: sonstiges_low_sev — {source}")
-            return False
-        if cat == "Sachbeschädigung" and not (act or _POLITICAL_MOTIVE_RE.search(t_low)):
-            log.info(f"filtered: sachbesch_no_motive — {source}")
-            return False
-        # Grok's own ist_gewalttat=False on a non-PRIMARY category → drop.
-        if ai.get("ist_gewalttat") is False and cat not in {
-            "Besetzung", "Verhaftung",  # allowed as CONTEXT
-        } and cat not in {
-            "Brandanschlag", "Sabotage", "Gewalt", "Militante Aktion",
-            "Aufruf zu Gewalt", "Sachbeschädigung",
-        }:
-            log.info(f"filtered: ai_says_not_violent — {source}")
-            return False
 
     # ── Geocode + flags + summary ───────────────────────────────────
     # Country override: when the AI returns a country that disagrees with a
@@ -1289,11 +1345,20 @@ def save_incident(ai, text, source, url, date_str=None, manual=False):
         land_raw = land_fixed
 
     lat, lon = geocode(ort_raw, land_raw)
-    is_primary, is_high_risk = compute_flags(cat, text, sev)
+    is_primary, is_high_risk, tier = compute_flags(cat, text, sev)
 
-    # Verhaftung is only kept as CONTEXT, never PRIMARY.
-    if cat == "Verhaftung":
-        is_primary = 0
+    # Grok may override tier directly via the new "tier" field.
+    ai_tier = (ai.get("tier") or "").strip().lower()
+    if ai_tier in ("act", "enable", "context"):
+        tier = ai_tier
+        is_primary = 1 if tier == "act" else 0
+
+    # Target-type routing for Säule 2 (Frühwarn-Cluster).
+    target_type = (ai.get("ziel_typ") or "").strip()
+    if target_type not in _TARGET_TYPE_ALLOWED:
+        target_type = ""
+    if not target_type:
+        target_type = compute_target_type(text, cat)
 
     summ = (ai.get("zusammenfassung") or "").strip()
     if not summ:
@@ -1309,17 +1374,17 @@ def save_incident(ai, text, source, url, date_str=None, manual=False):
             """INSERT OR IGNORE INTO incidents
                (date,location,country,category,description,source,url,hash,lat,lon,
                 manual,timestamp,severity_score,actors,confidence,
-                summary,is_primary,is_high_risk)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'),?,?,?,?,?,?)""",
+                summary,is_primary,is_high_risk,tier,target_type)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'),?,?,?,?,?,?,?,?)""",
             (d, ai.get("ort", "Unbekannt"), ai.get("land", "Unbekannt"),
              cat, desc, source, url_norm, h, lat, lon,
              1 if manual else 0, sev, act, conf,
-             summ, is_primary, is_high_risk)
+             summ, is_primary, is_high_risk, tier, target_type)
         )
         db.commit()
         log.info(
-            f"SAVED [sev={sev}/conf={conf}/prim={is_primary}/hi={is_high_risk}]: "
-            f"{cat} / {ai.get('ort')} / {source}"
+            f"SAVED [sev={sev}/conf={conf}/tier={tier}/hi={is_high_risk}/"
+            f"target={target_type or '-'}]: {cat} / {ai.get('ort')} / {source}"
         )
         return True
     except Exception as e:
@@ -1354,9 +1419,12 @@ def purge_garbage():
             (loc,)
         ).rowcount
         deleted += c
-    # Unknown locations are noise (we can't map them anyway).
+    # Unknown locations are mostly noise — but under Policy v3 we only purge
+    # them if they're also low-severity (sev < 3). Real high-severity reports
+    # without a parsed city stay as T3 context (still useful for aggregates).
     c = db.execute(
-        "DELETE FROM incidents WHERE location IN ('','Unbekannt','Unknown') AND manual=0"
+        "DELETE FROM incidents WHERE location IN ('','Unbekannt','Unknown') "
+        "AND manual=0 AND (severity_score IS NULL OR severity_score < 3)"
     ).rowcount
     deleted += c
 
@@ -1381,65 +1449,22 @@ def purge_garbage():
     ).rowcount
     deleted += c
 
-    # 5) §0 — EXCLUDED categories purged unconditionally for crawled rows.
-    c = db.execute(
-        "DELETE FROM incidents WHERE manual=0 AND category IN "
-        "('Demo/Kundgebung','Repression')"
-    ).rowcount
-    deleted += c
+    # 5) Policy v3 (Concept §C2) — re-tag instead of delete.
+    # Demo/Kundgebung, Repression, Sonstiges, Besetzung, Verhaftung and
+    # the soft-filter variants of Schmiererei / Sachbeschädigung used to be
+    # purged here. Under v3 they are kept as T3 context (Lagebild-
+    # Vollständigkeit) and the backfill below sets tier='context'. We still
+    # delete only the hardest noise (nav, FP, broken URL, doxxing).
+    db.execute(
+        "UPDATE incidents SET tier='context', is_primary=0 "
+        "WHERE manual=0 AND category IN "
+        "('Demo/Kundgebung','Repression','Sonstiges','Besetzung','Verhaftung') "
+        "AND (tier IS NULL OR tier='' OR tier='act')"
+    )
 
-    # 6) §0 — Schmiererei kept only if severity≥3 AND threat-phrase present.
-    rows = db.execute(
-        "SELECT id, description, severity_score FROM incidents "
-        "WHERE manual=0 AND category='Schmiererei'"
-    ).fetchall()
-    for r in rows:
-        if (r["severity_score"] or 0) < 3 or not _THREAT_PHRASE_RE.search(r["description"] or ""):
-            db.execute("DELETE FROM incidents WHERE id=?", (r["id"],))
-            deleted += 1
-
-    # 7) §0 — Sonstiges kept only if severity≥4.
-    c = db.execute(
-        "DELETE FROM incidents WHERE manual=0 AND category='Sonstiges' "
-        "AND severity_score < 4"
-    ).rowcount
-    deleted += c
-
-    # 8) §0 — Sachbeschädigung kept only if politically motivated.
-    rows = db.execute(
-        "SELECT id, description, actors FROM incidents "
-        "WHERE manual=0 AND category='Sachbeschädigung'"
-    ).fetchall()
-    for r in rows:
-        if not ((r["actors"] or "").strip() or _POLITICAL_MOTIVE_RE.search(r["description"] or "")):
-            db.execute("DELETE FROM incidents WHERE id=?", (r["id"],))
-            deleted += 1
-
-    # 9) §0 — Verhaftung kept only if a PRIMARY incident exists in the same
-    # location within ±7 days. Otherwise the arrest report is orphaned context.
-    rows = db.execute(
-        "SELECT id, date, location FROM incidents "
-        "WHERE manual=0 AND category='Verhaftung'"
-    ).fetchall()
-    for r in rows:
-        if not r["date"] or not r["location"]:
-            db.execute("DELETE FROM incidents WHERE id=?", (r["id"],))
-            deleted += 1
-            continue
-        neighbour = db.execute(
-            "SELECT 1 FROM incidents WHERE location=? "
-            "AND category IN ('Brandanschlag','Sabotage','Gewalt','Militante Aktion',"
-            "                 'Aufruf zu Gewalt','Sachbeschädigung') "
-            "AND ABS(julianday(date) - julianday(?)) <= 7 LIMIT 1",
-            (r["location"], r["date"])
-        ).fetchone()
-        if not neighbour:
-            db.execute("DELETE FROM incidents WHERE id=?", (r["id"],))
-            deleted += 1
-
-    # 10) DOXXING — purge entries whose description matches the Klarnamen-
+    # 6) DOXXING — purge entries whose description matches the Klarnamen-
     # outing pattern. These propagate the doxxing harm even when the action
-    # itself is a militant-left act.
+    # itself is a militant-left act. (Non-negotiable per Concept §C3 #1.)
     rows = db.execute(
         "SELECT id, description, summary FROM incidents WHERE manual=0"
     ).fetchall()
@@ -1450,7 +1475,7 @@ def purge_garbage():
 
     if deleted:
         db.commit()
-        log.info(f"purge_garbage: removed {deleted} entries per §0 scope")
+        log.info(f"purge_garbage: removed {deleted} entries (Policy v3: T3 kept)")
     return deleted
 
 def backfill_summaries_and_flags():
@@ -1461,7 +1486,8 @@ def backfill_summaries_and_flags():
     get retro-actively cleaned (addresses, names, phones removed).
     """
     rows = db.execute(
-        "SELECT id, category, description, severity_score, summary, is_primary, is_high_risk "
+        "SELECT id, category, description, severity_score, summary, "
+        "is_primary, is_high_risk, tier, target_type "
         "FROM incidents"
     ).fetchall()
     if not rows:
@@ -1472,20 +1498,29 @@ def backfill_summaries_and_flags():
         summ_in = (r["summary"] or "").strip()
         desc_out = redact_pii(desc_in)
         summ_out = redact_pii(summ_in or fallback_summary(desc_in))[:280]
-        prim, hi = compute_flags(r["category"], desc_in, r["severity_score"] or 0)
+        prim, hi, tier_new = compute_flags(
+            r["category"], desc_in, r["severity_score"] or 0
+        )
+        tt_old = (r["target_type"] or "").strip()
+        tt_new = tt_old or compute_target_type(desc_in, r["category"])
+        tier_old = (r["tier"] or "").strip()
         # Skip if nothing actually changed (avoid pointless writes on warm DB)
-        if (desc_out == desc_in and summ_out == (r["summary"] or "")
-                and prim == (r["is_primary"] or 0) and hi == (r["is_high_risk"] or 0)):
+        if (desc_out == desc_in
+                and summ_out == (r["summary"] or "")
+                and prim == (r["is_primary"] or 0)
+                and hi   == (r["is_high_risk"] or 0)
+                and tier_new == tier_old
+                and tt_new == tt_old):
             continue
         db.execute(
-            "UPDATE incidents SET description=?, summary=?, is_primary=?, is_high_risk=? "
-            "WHERE id=?",
-            (desc_out, summ_out, prim, hi, r["id"])
+            "UPDATE incidents SET description=?, summary=?, is_primary=?, "
+            "is_high_risk=?, tier=?, target_type=? WHERE id=?",
+            (desc_out, summ_out, prim, hi, tier_new, tt_new, r["id"])
         )
         n += 1
     db.commit()
     if n:
-        log.info(f"backfill_summaries_and_flags: updated {n} rows (PII + flags)")
+        log.info(f"backfill_summaries_and_flags: updated {n} rows (PII + tier + target)")
     return n
 
 def backfill_enrichment():
@@ -2112,6 +2147,9 @@ def auto_hist():
 # ── FASTAPI ───────────────────────────────────────────────────────
 app = FastAPI(title="LEX EUROPE")
 templates = Jinja2Templates(directory="templates")
+# i18n strings (DE/EN) served as static JSON for client-side hot-swap.
+if os.path.isdir("i18n"):
+    app.mount("/i18n", StaticFiles(directory="i18n"), name="i18n")
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
@@ -2128,15 +2166,18 @@ async def index(request: Request):
 async def get_incidents(
     country: str = "", category: str = "", date_from: str = "",
     date_to: str = "", search: str = "", severity_min: int = 0,
-    primary_only: int = 0,
+    primary_only: int = 0, tier: str = "", target_type: str = "",
 ):
     """
     primary_only=1 → only is_primary=1 rows (default UI behaviour for the
     incidents feed; the "INKL. KONTEXT" toggle clears the flag).
+    tier=act|enable|context → filter on the Fedpol 3-tier taxonomy.
+    target_type=Energie|Schiene|… → filter on Säule-2 target routing.
     """
     q = ("SELECT id,date,location,country,category,description,summary,url,"
          "lat,lon,manual,source,severity_score,actors,confidence,"
-         "is_primary,is_high_risk FROM incidents WHERE 1=1")
+         "is_primary,is_high_risk,tier,target_type,"
+         "prosec_status,case_ref,last_status_check FROM incidents WHERE 1=1")
     p = []
     if country:   q += " AND country=?";   p.append(country)
     if category:  q += " AND category=?";  p.append(category)
@@ -2151,6 +2192,12 @@ async def get_incidents(
         p.append(severity_min)
     if primary_only:
         q += " AND is_primary=1"
+    if tier:
+        q += " AND tier=?"
+        p.append(tier)
+    if target_type:
+        q += " AND target_type=?"
+        p.append(target_type)
     q += " ORDER BY date DESC, timestamp DESC"
     return JSONResponse([dict(r) for r in db.execute(q, p).fetchall()])
 
