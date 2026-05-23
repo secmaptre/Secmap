@@ -614,6 +614,10 @@ def extract_actors(text):
 # ── SOURCE CONFIDENCE SCORING ─────────────────────────────────────
 SOURCE_CONFIDENCE = {
     "verfassungsschutz.de": 5,
+    # Konfidenz 5 — Behörden-Primärquellen (Polizei-Press, Parlamente)
+    "polizei-": 5, "presseportal.de": 5,
+    "bundestag.de": 5, "bundestag-": 5,
+    "bundesregierung.de": 5, "bundesregierung": 5,
     # Konfidenz 4 — öffentlich-rechtlich oder etablierte Leitmedien
     "tagesschau.de": 4, "zdf.de": 4, "deutschlandfunk.de": 4,
     "spiegel.de": 4, "zeit.de": 4, "sueddeutsche.de": 4, "faz.net": 4,
@@ -2336,6 +2340,23 @@ _FP = [
     r'\b(trump|biden|harris|usa\b|united\s+states)\b',
     r'\b(china|taiwan|tibet|xinjiang|hongkong)\b',
     r'\b(iran|saudi|yemen|libanon|hisbollah)\b',
+    # ── Polizei-Press-FP: typische Nicht-Extremismus-Meldungen ────
+    # Polizei-Pressestellen publizieren TÄGLICH Verkehrsunfälle,
+    # Ladendiebstähle, Drogendelikte usw. Diese MUESSEN raus, sonst
+    # frisst der Grok-Classifier eine 5stellige Token-Rechnung weg.
+    r'\b(verkehrsunfall|verkehrskontrolle|geschwindigkeitskontrolle|alkohol\s*am\s+steuer)\b',
+    r'\b(ladendiebstahl|taschendiebstahl|fahrraddiebstahl|wohnungseinbruch)\b',
+    r'\b(drogenfund|btmg|cannabis|kokain|crystal\s*meth)\b(?!.*demo)',
+    r'\bvermisst.*person\b', r'\bsenioren?\b.*\btrickbetrug\b',
+    r'\bbrand\s+in\s+wohnung\b(?!.*polit)',
+    r'\benkeltrick|schockanruf\b',
+    r'\bsexual.*delikt\b(?!.*polit)',
+    r'\bversicherungs?betrug|sozialleistungs?betrug\b',
+    r'\bgemein(de|sames)?\s+spendenaufruf\b',
+    r'\btierrettung|tierquäler', r'\bunwetter|hochwasser|sturm\b(?!.*demo)',
+    # ── Bundestags-Drucksachen: vieles davon ist Lesung/Anhörung ────
+    r'\b(lesung|abstimmung|anhörung|haushalts(beratung|debatte))\b(?!.*linksex)',
+    r'\bgrundgesetz.*änderung\b(?!.*linksex)',
 ]
 
 def is_false_positive(text):
@@ -2444,6 +2465,38 @@ RSS_FEEDS = [
     ("nd-aktuell.de",         "https://www.nd-aktuell.de/static/rss/rss.xml"),
     ("perspektive-online.net","https://perspektive-online.net/feed/"),
     ("jungewelt.de",          "https://www.jungewelt.de/rss/inland.rss"),
+    # ── DE — Polizei-Pressestellen (presseportal.de Blaulicht) ────
+    # Höchste Signal-Qualität: was hier veröffentlicht wird, ist
+    # offizielle Pressemitteilung der jeweiligen Landespolizei oder des
+    # Bundeskriminalamts. Wir lassen alle 16 Bundesländer + BKA crawlen.
+    ("polizei-bka",              "https://www.presseportal.de/blaulicht/nr/7/rss.xml"),
+    ("polizei-berlin",           "https://www.presseportal.de/blaulicht/nr/14202/rss.xml"),
+    ("polizei-hamburg",          "https://www.presseportal.de/blaulicht/nr/6337/rss.xml"),
+    ("polizei-bayern",           "https://www.presseportal.de/blaulicht/nr/6013/rss.xml"),
+    ("polizei-bw",               "https://www.presseportal.de/blaulicht/nr/110971/rss.xml"),
+    ("polizei-nrw",              "https://www.presseportal.de/blaulicht/nr/6420/rss.xml"),
+    ("polizei-sachsen",          "https://www.presseportal.de/blaulicht/nr/108299/rss.xml"),
+    ("polizei-sachsen-anhalt",   "https://www.presseportal.de/blaulicht/nr/108699/rss.xml"),
+    ("polizei-thueringen",       "https://www.presseportal.de/blaulicht/nr/74166/rss.xml"),
+    ("polizei-brandenburg",      "https://www.presseportal.de/blaulicht/nr/12059/rss.xml"),
+    ("polizei-niedersachsen",    "https://www.presseportal.de/blaulicht/nr/107106/rss.xml"),
+    ("polizei-hessen",           "https://www.presseportal.de/blaulicht/nr/61169/rss.xml"),
+    ("polizei-rlp",              "https://www.presseportal.de/blaulicht/nr/24114/rss.xml"),
+    ("polizei-saarland",         "https://www.presseportal.de/blaulicht/nr/16193/rss.xml"),
+    ("polizei-mv",               "https://www.presseportal.de/blaulicht/nr/108747/rss.xml"),
+    ("polizei-sh",               "https://www.presseportal.de/blaulicht/nr/108747/rss.xml"),
+    ("polizei-bremen",           "https://www.presseportal.de/blaulicht/nr/65279/rss.xml"),
+
+    # ── Bundestag / Parlamente — Drucksachen + Anfragen ────────────
+    # Hochwertige primäre Quelle für die Verfolgungs-Statistik: jede
+    # parlamentarische Anfrage zu einem Linksextremismus-Vorfall ist
+    # potenziell eine Strafverfolgungs-Aktualisierung. Wir crawlen die
+    # öffentlich publizierten Bundestags-Drucksachen + den Pressedienst.
+    ("bundestag-drucksachen",
+        "https://www.bundestag.de/static/appdata/includes/rss/aktuell/aktuell.xml"),
+    ("bundesregierung",
+        "https://www.bundesregierung.de/breg-de/rss/aktuelles-1003770/rss.xml"),
+
     # ── Riseup.net Mailing-Listen (öffentliche Archive) ───────────
     # HINWEIS: lists.riseup.net hostet zahlreiche Bewegungs-Mailinglisten
     # auf Sympa. Manche Archive sind öffentlich (Subscriber-Only-Listen
