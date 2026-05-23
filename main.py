@@ -614,15 +614,28 @@ def extract_actors(text):
 # ── SOURCE CONFIDENCE SCORING ─────────────────────────────────────
 SOURCE_CONFIDENCE = {
     "verfassungsschutz.de": 5,
+    # Konfidenz 4 — öffentlich-rechtlich oder etablierte Leitmedien
     "tagesschau.de": 4, "zdf.de": 4, "deutschlandfunk.de": 4,
     "spiegel.de": 4, "zeit.de": 4, "sueddeutsche.de": 4, "faz.net": 4,
+    "welt.de": 4,
     "srf.ch": 4, "orf.at": 4, "derstandard.at": 4, "nzz.ch": 4,
-    "tagesanzeiger.ch": 4,
-    "tagesspiegel.de": 3, "mdr.de": 3, "rbb24.de": 3, "taz.de": 3,
-    "blick.ch": 3, "20min.ch": 3, "belltower.news": 3, "br.de": 3,
+    "tagesanzeiger.ch": 4, "diepresse.com": 4,
+    "lemonde.fr": 4, "liberation.fr": 4, "repubblica.it": 4, "corriere.it": 4,
+    "elpais.com": 4, "euronews.com": 4,
+    # Konfidenz 3 — regionale öffentlich-rechtliche + Boulevard-Leit
+    "tagesspiegel.de": 3, "mdr.de": 3, "rbb24.de": 3, "ndr.de": 3,
+    "wdr.de": 3, "br.de": 3, "hr.de": 3, "swr.de": 3, "ntv.de": 3,
+    "taz.de": 3, "blick.ch": 3, "20min.ch": 3, "belltower.news": 3,
+    "bzbasel.ch": 3, "watson.ch": 3, "rts.ch": 3,
+    "kurier.at": 3, "kleinezeitung.at": 3, "noen.at": 3, "krone.at": 3,
+    "wien.orf.at": 3,
+    # Konfidenz 2 — szenenahe Quellen, brauchen Cross-Check
     "barrikade.info": 2, "de.indymedia.org": 2, "nd-aktuell.de": 2,
-    "jungle.world": 2, "gnews": 2, "labournet.de": 2,
+    "jungle.world": 2, "gnews": 2, "labournet.de": 2, "woz.ch": 2,
+    "jungewelt.de": 2,
+    # Konfidenz 1 — Bewegungs-Outlets / Mailing-Listen-Archive
     "perspektive-online.net": 1, "radikal.news": 1, "klassegegenklasse.org": 1,
+    "lists.riseup.net": 1,
     "Archiv": 3, "Manuell": 2,
 }
 
@@ -2380,19 +2393,25 @@ def _coords_in_country(country, lat, lon):
 RSS_FEEDS = [
     # ── Sicherheitsbehörden ────────────────────────────────────────
     ("verfassungsschutz.de",  "https://www.verfassungsschutz.de/SiteGlobals/Functions/RSSNewsFeed/AlleMeldungen.xml"),
-    # ── Kernquellen Deutschland (öffentlich-rechtlich + Leitmedien) ─
+    # ── DE — öffentlich-rechtlich + Leitmedien ────────────────────
     ("tagesschau.de",         "https://www.tagesschau.de/xml/rss2/"),
     ("deutschlandfunk.de",    "https://www.deutschlandfunk.de/nachrichten.rss"),
     ("spiegel.de",            "https://www.spiegel.de/schlagzeilen/index.rss"),
     ("zeit.de",               "https://newsfeed.zeit.de/politik/index"),
     ("sueddeutsche.de",       "https://rss.sueddeutsche.de/rss/Politik"),
     ("faz.net",               "https://www.faz.net/rss/aktuell/"),
+    ("welt.de",               "https://www.welt.de/feeds/section/politik.rss"),
     ("tagesspiegel.de",       "https://www.tagesspiegel.de/contentexport/feed/home"),
     ("taz.de",                "https://taz.de/!p4608;rss/"),
     ("mdr.de",                "https://www.mdr.de/nachrichten/rss-nachrichten100.xml"),
     ("rbb24.de",              "https://www.rbb24.de/index/rss.xml/index.xml"),
     ("ndr.de",                "https://www.ndr.de/nachrichten/index-rss.xml"),
-    # ── Schweiz (Kernquellen) ─────────────────────────────────────
+    ("wdr.de",                "https://www1.wdr.de/uebersicht-100.feed"),
+    ("br.de",                 "https://www.br.de/nachrichten/index.xml"),
+    ("hr.de",                 "https://www.hr.de/news/index-rss.xml"),
+    ("swr.de",                "https://www.swr.de/aktuell/index.xml"),
+    ("ntv.de",                "https://www.n-tv.de/politik/rss"),
+    # ── CH — Kernmedien + Regionalmedien ──────────────────────────
     ("nzz.ch",                "https://www.nzz.ch/recent.rss"),
     ("tagesanzeiger.ch",      "https://www.tagesanzeiger.ch/rss.xml"),
     ("srf.ch",                "https://www.srf.ch/news/bnf/rss/1646"),
@@ -2400,16 +2419,45 @@ RSS_FEEDS = [
     ("blick.ch",              "https://www.blick.ch/news/rss.xml"),
     ("woz.ch",                "https://www.woz.ch/rss.xml"),
     ("rts.ch",                "https://www.rts.ch/rss/info.xml"),
-    # ── Österreich (Kernquellen) ──────────────────────────────────
+    ("bzbasel.ch",            "https://www.bzbasel.ch/rss"),
+    ("watson.ch",             "https://www.watson.ch/api/feed/rss/news"),
+    # ── AT — Kernquellen + Bundesländer ───────────────────────────
     ("orf.at",                "https://rss.orf.at/news.xml"),
     ("derstandard.at",        "https://www.derstandard.at/rss/inland"),
     ("diepresse.com",         "https://www.diepresse.com/rss/politik"),
     ("kurier.at",             "https://kurier.at/rss"),
+    ("kleinezeitung.at",      "https://www.kleinezeitung.at/index.rss"),
+    ("noen.at",               "https://www.noen.at/rss"),
+    ("krone.at",              "https://www.krone.at/feed.xml"),
+    ("wien.orf.at",           "https://rss.orf.at/wien.xml"),
+    # ── FR / IT / ES — Auslandskontext für transnationale Ereignisse
+    ("lemonde.fr",            "https://www.lemonde.fr/rss/une.xml"),
+    ("liberation.fr",         "https://www.liberation.fr/arc/outboundfeeds/rss/"),
+    ("repubblica.it",         "https://www.repubblica.it/rss/homepage/rss2.0.xml"),
+    ("corriere.it",           "https://xml2.corriereobjects.it/rss/homepage.xml"),
+    ("elpais.com",            "https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada"),
+    ("euronews.com",          "https://www.euronews.com/rss?level=theme&name=news"),
     # ── Einschlägige Quellen (szenenah + extremismusbeobachtend) ──
     ("barrikade.info",        "https://barrikade.info/feed"),
     ("belltower.news",        "https://www.belltower.news/feed/"),
     ("radikal.news",          "https://radikal.news/feed/"),
     ("nd-aktuell.de",         "https://www.nd-aktuell.de/static/rss/rss.xml"),
+    ("perspektive-online.net","https://perspektive-online.net/feed/"),
+    ("jungewelt.de",          "https://www.jungewelt.de/rss/inland.rss"),
+    # ── Riseup.net Mailing-Listen (öffentliche Archive) ───────────
+    # HINWEIS: lists.riseup.net hostet zahlreiche Bewegungs-Mailinglisten
+    # auf Sympa. Manche Archive sind öffentlich (Subscriber-Only-Listen
+    # sind explizit als „closed archive" markiert). Wir crawlen NUR die
+    # öffentlichen Archive über den Sympa-RSS-Endpoint. Admin kann weitere
+    # Listen ergänzen; die Plattform durchläuft alle Einträge durch
+    # is_doxxing_text() + redact_pii() bevor sie gespeichert werden, damit
+    # personenbezogene Mailing-Inhalte nicht in die DB sickern.
+    # Die folgenden Einträge sind exemplarisch — Admin sollte selber
+    # prüfen welche Listen für seinen Use Case sinnvoll sind.
+    ("lists.riseup.net/anarchist-news",
+        "https://lists.riseup.net/www/rss/anarchist-news"),
+    ("lists.riseup.net/news",
+        "https://lists.riseup.net/www/rss/news"),
 ]
 
 GNEWS_Q = [
