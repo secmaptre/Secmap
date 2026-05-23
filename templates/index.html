@@ -220,6 +220,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
   -webkit-tap-highlight-color:transparent;
 }
 .det-act:hover{background:var(--ag);}
+.det-act.det-danger{border-color:var(--red);color:var(--red);}
+.det-act.det-danger:hover{background:var(--rdg);}
+.det-act.det-admin{border-style:dashed;}
+.det-act.det-admin::before{content:'⚙ ';opacity:.6;}
 #det-src{
   display:block;margin-top:12px;font-family:var(--mono);font-size:9px;
   color:var(--accent);text-decoration:none;opacity:.75;
@@ -572,10 +576,10 @@ body.mod-funding #mod-funding-view{display:grid !important;}
       <div class="brand-sub">Politische Gewalt &amp; Förderfluss — OSINT-Recherche</div>
     </div>
   </a>
-  <!-- MODULE SWITCHER: Incidents (map) ↔ Funding (tracker) -->
+  <!-- MODULE SWITCHER: Vorfälle (Karte) ↔ Finanzierung (Tracker) -->
   <div class="tb-mod">
-    <button class="gbtn on" id="mod-incidents" onclick="switchModule('incidents')" title="Vorfälle-Karte">⚠ INCIDENTS</button>
-    <button class="gbtn"    id="mod-funding"   onclick="switchModule('funding')"   title="Fördergeld-Tracker">€ FUNDING</button>
+    <button class="gbtn on" id="mod-incidents" onclick="switchModule('incidents')" title="Vorfälle-Karte">Vorfälle</button>
+    <button class="gbtn"    id="mod-funding"   onclick="switchModule('funding')"   title="Finanzierungs-Tracker">Finanzierung</button>
   </div>
   <div class="tb-div hide-mob"></div>
   <div class="chip"><span class="live-dot"></span> LIVE</div>
@@ -585,16 +589,13 @@ body.mod-funding #mod-funding-view{display:grid !important;}
   <div class="tb-sp"></div>
   <span class="tb-version hide-mob">v2025.5 — Open Research</span>
   <div class="tb-acts">
-    <button class="gbtn hide-mob mod-inc-only" onclick="cmdOpen()" title="Befehlspalette (Ctrl+K)">⌘ SEARCH</button>
-    <button class="gbtn hide-mob mod-inc-only" id="btn-layer" onclick="toggleLayer()" title="Kartenebene">⬡ LAYER</button>
-    <button class="gbtn mod-inc-only" id="btn-heat" onclick="toggleHeat()" title="Heatmap">⊞ HEAT</button>
-    <button class="gbtn hide-mob mod-inc-only" id="btn-charts" onclick="openCharts()" title="Statistik-Charts">⬛ CHARTS</button>
-    <button class="gbtn hide-mob" onclick="exportJson()" title="Daten-Export">↓ EXPORT</button>
-    <button class="gbtn hide-mob mod-inc-only" onclick="openReport()" title="Intelligence-Bericht">⎗ BERICHT</button>
-    <button class="gbtn hide-mob" onclick="copyLink()" title="Link kopieren">⎘ TEILEN</button>
-    <button class="gbtn hide-mob mod-inc-only" onclick="kbdOpen()" title="Tastatur">? HILFE</button>
-    <button class="gbtn" onclick="supportOpen()" title="Unterstützen / Spenden">♥ SUPPORT</button>
-    <a class="gbtn" href="/admin" target="_blank">⚙</a>
+    <button class="gbtn hide-mob mod-inc-only" onclick="cmdOpen()" title="Suche (Strg+K)">Suche</button>
+    <button class="gbtn mod-inc-only" id="btn-heat" onclick="toggleHeat()" title="Heatmap">Heatmap</button>
+    <button class="gbtn hide-mob mod-inc-only" id="btn-charts" onclick="openCharts()" title="Statistik-Charts">Charts</button>
+    <button class="gbtn hide-mob" onclick="exportJson()" title="Daten-Export">Export</button>
+    <button class="gbtn hide-mob mod-inc-only" onclick="openReport()" title="Wöchentlicher Bericht">Bericht</button>
+    <button class="gbtn" onclick="supportOpen()" title="Unterstützen / Spenden">Spenden</button>
+    <a class="gbtn" href="/admin" target="_blank" title="Administration">Admin</a>
   </div>
 </header>
 
@@ -623,15 +624,36 @@ body.mod-funding #mod-funding-view{display:grid !important;}
       <div class="fsec" style="margin-top:6px">
         <div class="frow2">
           <select class="fsel" id="f-co" onchange="applyFilters()">
-            <option value="">LAND: ALLE</option>
-            <option value="DE">🇩🇪 Deutschland</option>
-            <option value="AT">🇦🇹 Österreich</option>
-            <option value="CH">🇨🇭 Schweiz</option>
-            <option value="FR">🇫🇷 Frankreich</option>
-            <option value="IT">🇮🇹 Italien</option>
-            <option value="GR">🇬🇷 Griechenland</option>
-            <option value="ES">🇪🇸 Spanien</option>
-            <option value="UK">🇬🇧 UK</option>
+            <option value="">Land: alle</option>
+            <optgroup label="DACH">
+              <option value="DE">🇩🇪 Deutschland</option>
+              <option value="AT">🇦🇹 Österreich</option>
+              <option value="CH">🇨🇭 Schweiz</option>
+            </optgroup>
+            <optgroup label="Westeuropa">
+              <option value="FR">🇫🇷 Frankreich</option>
+              <option value="IT">🇮🇹 Italien</option>
+              <option value="ES">🇪🇸 Spanien</option>
+              <option value="PT">🇵🇹 Portugal</option>
+              <option value="UK">🇬🇧 UK</option>
+              <option value="IE">🇮🇪 Irland</option>
+              <option value="NL">🇳🇱 Niederlande</option>
+              <option value="BE">🇧🇪 Belgien</option>
+            </optgroup>
+            <optgroup label="Nord-/Osteuropa">
+              <option value="DK">🇩🇰 Dänemark</option>
+              <option value="SE">🇸🇪 Schweden</option>
+              <option value="NO">🇳🇴 Norwegen</option>
+              <option value="FI">🇫🇮 Finnland</option>
+              <option value="PL">🇵🇱 Polen</option>
+              <option value="CZ">🇨🇿 Tschechien</option>
+              <option value="HU">🇭🇺 Ungarn</option>
+              <option value="RO">🇷🇴 Rumänien</option>
+              <option value="GR">🇬🇷 Griechenland</option>
+            </optgroup>
+            <optgroup label="Nordamerika">
+              <option value="US">🇺🇸 USA</option>
+            </optgroup>
           </select>
           <select class="fsel" id="f-ca" onchange="applyFilters()">
             <option value="">TYP: ALLE</option>
@@ -767,8 +789,10 @@ body.mod-funding #mod-funding-view{display:grid !important;}
     <div id="det-desc"></div>
     <div id="det-conf-row" style="margin-top:12px"></div>
     <div id="det-actions">
-      <button class="det-act" onclick="detFlyTo()">AUF KARTE</button>
-      <button class="det-act" onclick="detShare()">⎘ TEILEN</button>
+      <button class="det-act" onclick="detFlyTo()">Auf Karte zeigen</button>
+      <!-- Admin-only quick controls — JS injects these when an admin cookie/session is detected -->
+      <button class="det-act det-admin" id="det-admin-edit"   style="display:none" onclick="detAdminEdit()">Bearbeiten</button>
+      <button class="det-act det-admin det-danger" id="det-admin-delete" style="display:none" onclick="detAdminDelete()">Löschen</button>
     </div>
     <a id="det-src" href="#" target="_blank" rel="noopener"></a>
   </div>
@@ -813,10 +837,14 @@ body.mod-funding #mod-funding-view{display:grid !important;}
     <div class="fsec">
       <span class="flbl">LAND</span>
       <div class="fnd-chip-row" id="fnd-country-chips">
-        <button class="fnd-chip on" data-val="" onclick="fndToggleChip(this,'country')">ALLE</button>
+        <button class="fnd-chip on" data-val="" onclick="fndToggleChip(this,'country')">Alle</button>
         <button class="fnd-chip" data-val="DE" onclick="fndToggleChip(this,'country')">🇩🇪 DE</button>
         <button class="fnd-chip" data-val="AT" onclick="fndToggleChip(this,'country')">🇦🇹 AT</button>
         <button class="fnd-chip" data-val="CH" onclick="fndToggleChip(this,'country')">🇨🇭 CH</button>
+        <button class="fnd-chip" data-val="FR" onclick="fndToggleChip(this,'country')">🇫🇷 FR</button>
+        <button class="fnd-chip" data-val="IT" onclick="fndToggleChip(this,'country')">🇮🇹 IT</button>
+        <button class="fnd-chip" data-val="UK" onclick="fndToggleChip(this,'country')">🇬🇧 UK</button>
+        <button class="fnd-chip" data-val="US" onclick="fndToggleChip(this,'country')">🇺🇸 US</button>
         <button class="fnd-chip" data-val="EU" onclick="fndToggleChip(this,'country')">🇪🇺 EU</button>
       </div>
     </div>
@@ -1137,7 +1165,9 @@ const CAT_COL={
   'Verhaftung':'#00c8ff','Repression':'#00c8ff','Sonstiges':'#3a5570'
 };
 const CO_COL={DE:'#00c8ff',AT:'#f0a500',CH:'#00e87a',FR:'#a0c8ff',IT:'#c080ff',GR:'#ff8844',ES:'#ff6644',UK:'#80c8ff'};
-const CO_FLAG={DE:'🇩🇪',AT:'🇦🇹',CH:'🇨🇭',FR:'🇫🇷',IT:'🇮🇹',GR:'🇬🇷',ES:'🇪🇸',UK:'🇬🇧'};
+const CO_FLAG={DE:'🇩🇪',AT:'🇦🇹',CH:'🇨🇭',FR:'🇫🇷',IT:'🇮🇹',GR:'🇬🇷',ES:'🇪🇸',UK:'🇬🇧',
+               IE:'🇮🇪',NL:'🇳🇱',BE:'🇧🇪',DK:'🇩🇰',SE:'🇸🇪',NO:'🇳🇴',FI:'🇫🇮',
+               PL:'🇵🇱',CZ:'🇨🇿',HU:'🇭🇺',RO:'🇷🇴',PT:'🇵🇹',US:'🇺🇸'};
 const CO_BOUNDS={
   DE:[[47.2,5.9],[55.1,15.0]],AT:[[46.4,9.5],[49.0,17.2]],CH:[[45.8,5.9],[47.8,10.5]],
   FR:[[41.3,-5.1],[51.1,9.6]],IT:[[36.6,6.6],[47.1,18.5]],GR:[[34.8,19.4],[41.8,29.7]],
@@ -1166,6 +1196,8 @@ const SEV_BG={1:'rgba(58,85,112,0.18)',2:'rgba(90,122,146,0.18)',3:'rgba(240,165
 // Boot screen entfernt — Daten werden direkt geladen, kein theatralisches Intro.
 function runBoot(){
   loadData(); loadTrends(); loadTimeline();
+  // Admin-Status einmal abfragen; das Cookie ist httpOnly, daher Server-Roundtrip.
+  checkAdmin().then(()=>{ if(detailItem) showDetAdminButtons(); });
 }
 
 // ── TEXT CLEANER ───────────────────────────────────────────────────
@@ -1257,6 +1289,7 @@ function renderHeatmap(list){
 // ── DETAIL PANEL ───────────────────────────────────────────────────
 function openDetail(i){
   detailItem=i;
+  showDetAdminButtons();
   const c=col(i.category),s=sev(i.category);
   const catEl=document.getElementById('det-cat');
   catEl.textContent=i.category.toUpperCase();
@@ -1331,10 +1364,64 @@ function detFlyTo(){
   }
 }
 
-function detShare(){
-  const url=detailItem?.url;
-  navigator.clipboard.writeText(url&&url.startsWith('http')?url:location.href)
-    .then(()=>showToast('⎘ Link kopiert'));
+// ── ADMIN: in-place edit/delete from the public detail panel ───────
+// Visibility is gated by /api/admin-check (honours the httpOnly admin cookie).
+let isAdmin = false;
+async function checkAdmin(){
+  try{
+    const r = await fetch('/api/admin-check', {credentials:'same-origin'}).then(r=>r.json());
+    isAdmin = !!r.admin;
+  }catch(e){ isAdmin = false; }
+}
+
+function showDetAdminButtons(){
+  const ed = document.getElementById('det-admin-edit');
+  const dl = document.getElementById('det-admin-delete');
+  if(ed) ed.style.display = isAdmin ? '' : 'none';
+  if(dl) dl.style.display = isAdmin ? '' : 'none';
+}
+
+async function detAdminDelete(){
+  if(!detailItem || !isAdmin) return;
+  const id = detailItem.id;
+  const label = (detailItem.location||'?') + ' / ' + (detailItem.category||'?');
+  if(!confirm(`Eintrag wirklich löschen?\n\n${label}\n\nDies ist endgültig.`)) return;
+  try{
+    const r = await fetch('/api/admin/incident/'+id, {method:'DELETE', credentials:'same-origin'});
+    if(!r.ok){ showToast('Löschen fehlgeschlagen ('+r.status+')'); return; }
+    showToast('Eintrag gelöscht');
+    detClose();
+    // Drop from in-memory cache so the marker disappears immediately.
+    incidents = (incidents||[]).filter(x=>x.id !== id);
+    vis       = (vis||[]).filter(x=>x.id !== id);
+    renderMarkers(vis);
+    renderFeed(vis);
+  }catch(e){ showToast('Netzwerkfehler beim Löschen'); }
+}
+
+async function detAdminEdit(){
+  if(!detailItem || !isAdmin) return;
+  // Minimal inline editor: prompt for the four most important fields.
+  // Heavyweight editor lives in /admin; this is the quick "fix this one row"
+  // path so admins don't context-switch when they spot a bad entry on the map.
+  const i = detailItem;
+  const newSummary = prompt('Kurzbeschreibung (max. 280 Zeichen):', i.summary || '');
+  if(newSummary === null) return;
+  const newCountry = prompt('Land (DE/AT/CH/FR/IT/GR/ES/UK/IE/NL/BE/DK/SE/NO/FI/PL/CZ/HU/RO/PT/US):', i.country || '');
+  if(newCountry === null) return;
+  const newLocation = prompt('Ort:', i.location || '');
+  if(newLocation === null) return;
+  try{
+    const r = await fetch('/api/admin/incident/'+i.id, {
+      method:'PUT', credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({summary:newSummary, country:newCountry, location:newLocation})
+    });
+    if(!r.ok){ showToast('Bearbeiten fehlgeschlagen'); return; }
+    showToast('Aktualisiert — Daten werden neu geladen');
+    setTimeout(()=>loadData(), 400);
+    detClose();
+  }catch(e){ showToast('Netzwerkfehler'); }
 }
 
 // ── FEED RENDER ────────────────────────────────────────────────────
