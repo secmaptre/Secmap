@@ -397,10 +397,39 @@ def geocode(location, country):
 
     loc_lower = location.strip().lower()
 
-    # Check city fallback first (instant, no API)
+    # ── CITY-FALLBACK MATCHING — Hardening v2 ────────────────────────
+    # Vorher: `if city in loc_lower` (substring) — produzierte Bugs wie
+    #   "Bernau bei Berlin" → matched "bern" (CH) statt "berlin" (DE),
+    #   "Berliner Straße, Stuttgart" → matched "bern" (CH).
+    # Jetzt:
+    #   1) Exakt-Match auf den ganzen Ortsstring (z.B. "berlin", "wien").
+    #   2) Word-Boundary-Match, längster Key zuerst (damit "berlin" vor
+    #      "bern" gewinnt) UND nur wenn die Stadt im erwarteten Land
+    #      liegt (sonst Skip — Nominatim oder Country-Center entscheidet).
+    expected_co = (country or "").upper()
+    co_for_key = {k.lower(): co for co, kws in COUNTRY_KEYWORDS.items() for k in kws}
+    # Exact match on the full cleaned location.
+    if loc_lower in CITY_FALLBACK:
+        city_co = co_for_key.get(loc_lower)
+        if (not expected_co) or (not city_co) or city_co == expected_co or expected_co in ("", "ANDERE"):
+            return CITY_FALLBACK[loc_lower]
+    # Longest-key word-boundary match, country-consistent only.
+    matches = []
     for city, coords in CITY_FALLBACK.items():
-        if city in loc_lower:
-            return coords
+        if len(city) < 4:    # skip 2-letter country codes etc.
+            continue
+        if re.search(rf"\b{re.escape(city)}\b", loc_lower):
+            city_co = co_for_key.get(city)
+            # Reject the match when the city's country contradicts AI's
+            # country guess — avoids "Berner Straße, Stuttgart" landing
+            # in Bern, CH. We trust the AI's country here because
+            # _override_country_from_city has already run upstream.
+            if expected_co and city_co and city_co != expected_co:
+                continue
+            matches.append((len(city), city, coords))
+    if matches:
+        matches.sort(reverse=True)         # longest key wins
+        return matches[0][2]
 
     key = f"{loc_lower}|{(country or '').lower()}"
     row = db.execute("SELECT lat,lon FROM geocache WHERE query=?", (key,)).fetchone()
@@ -463,6 +492,37 @@ def regeocode_nulls():
     if fixed:
         db.commit()
         log.info(f"Re-geocoded {fixed} incidents")
+
+def regeocode_all_inconsistent():
+    """
+    Re-runs geocoding for every incident whose current lat/lon lie outside
+    the country bounding box. Fixes Userhinweis: Vorfälle landeten in CH
+    oder USA statt DE, weil die alte substring-Match-Logik z.B. "Bernau"
+    nach Bern/CH geroutet hat. Idempotent — überspringt korrekte Rows.
+    """
+    # Cache-Wipe: alte Substring-Match-Treffer können in der geocache-Tabelle
+    # stehen und würden den Fix sonst überleben.
+    db.execute("DELETE FROM geocache")
+    db.commit()
+    rows = db.execute(
+        "SELECT id, location, country, lat, lon FROM incidents WHERE lat IS NOT NULL"
+    ).fetchall()
+    fixed = 0
+    for r in rows:
+        if not r["country"]:
+            continue
+        # Wenn die aktuellen Koordinaten ausserhalb des erwarteten Landes
+        # liegen, neu geokodieren.
+        if not _coords_in_country(r["country"], r["lat"], r["lon"]):
+            lat, lon = geocode(r["location"], r["country"])
+            if lat and lon and _coords_in_country(r["country"], lat, lon):
+                db.execute("UPDATE incidents SET lat=?, lon=? WHERE id=?",
+                           (lat, lon, r["id"]))
+                fixed += 1
+    if fixed:
+        db.commit()
+        log.info(f"regeocode_all_inconsistent: {fixed} incidents korrigiert")
+    return fixed
 
 # ── GROK ─────────────────────────────────────────────────────────
 CATEGORIES = [
@@ -645,23 +705,39 @@ for _co, _kws in COUNTRY_KEYWORDS.items():
 def _override_country_from_city(city: str, text: str, ai_country: str) -> str:
     """
     Defends against AI mis-classifying the country when a famous city is named.
-    Example: a doxxing post about Chemnitz with the word "Schweiz" buried in
-    the boilerplate gets classified as CH; the city Chemnitz is unambiguously
-    in DE, so we override.
-    Returns the corrected country code (or the original if no override applies).
+    v2-Hardening (Userhinweis: Vorfälle landeten in CH oder USA statt DE):
+      1) Exact-match auf den city-String (z.B. "Chemnitz" → DE).
+      2) Word-Boundary-Scan der ersten ~600 Zeichen — aber wir picken
+         NICHT mehr den ersten Treffer in dict-Order, sondern zählen
+         pro Land die Treffer ein und nehmen das dominante Land. Damit
+         überstimmt z.B. ein einziges "Schweiz" im Boilerplate-Footer
+         keinen Artikel über vier Berliner Vorfälle mehr.
+      3) Wenn Stadt- und Text-Signal sich widersprechen, gewinnt die Stadt
+         (sie ist meist genauer als ein Random-Text-Hit).
     """
+    # 1) Stadt-Exact-Match — höchste Confidence.
+    city_co = None
     if city:
-        c = _CITY_TO_COUNTRY.get(city.strip().lower())
-        if c and c != ai_country:
-            return c
-    # Fallback: scan the first 600 chars of text for a known city
+        city_co = _CITY_TO_COUNTRY.get(city.strip().lower())
+        if city_co:
+            return city_co if city_co != ai_country else ai_country
+    # 2) Text-Scan mit Dominanz-Voting.
     if text:
-        head = text[:600].lower()
+        head = text[:1200].lower()
+        votes = {}
         for kw, co in _CITY_TO_COUNTRY.items():
-            if len(kw) >= 5 and re.search(r'\b' + re.escape(kw) + r'\b', head):
-                if co != ai_country:
-                    return co
-                break
+            if len(kw) < 5:
+                continue
+            if re.search(r'\b' + re.escape(kw) + r'\b', head):
+                votes[co] = votes.get(co, 0) + 1
+        if votes:
+            dominant = max(votes.items(), key=lambda kv: kv[1])
+            # Override nur, wenn das dominante Land klar überlegen ist
+            # (mindestens 2:1, oder einziges votiertes Land).
+            if dominant[0] != ai_country:
+                second = sorted(votes.values(), reverse=True)
+                if len(second) == 1 or dominant[1] >= 2 * second[1]:
+                    return dominant[0]
     return ai_country
 
 def classify_keywords(text):
@@ -3995,6 +4071,13 @@ async def admin_regeocode(bg: BackgroundTasks, _=Depends(require_admin)):
     bg.add_task(regeocode_nulls)
     return JSONResponse({"status": "Geocoding läuft"})
 
+@app.post("/admin/api/regeocode-fix")
+async def admin_regeocode_fix(_=Depends(require_admin)):
+    """Manueller Trigger für den Geocoding-Bugfix-Lauf — re-geokodiert
+    alle Incidents, deren Koordinaten ausserhalb ihres Landes liegen."""
+    n = regeocode_all_inconsistent()
+    return JSONResponse({"ok": True, "fixed": n})
+
 @app.post("/admin/api/grok-test")
 async def admin_grok(_=Depends(require_admin)):
     res = classify("In Berlin-Kreuzberg wurden drei Polizeifahrzeuge in Brand gesetzt. Bekennerschreiben einer militanten autonomen Gruppe.")
@@ -4135,6 +4218,17 @@ async def startup():
     # the flag/summary backfill so is_high_risk sees the real severity.
     backfill_enrichment()
     backfill_summaries_and_flags()
+    # Geocoding-Fix (Userhinweis): alte Substring-Match-Bugs in den vor-
+    # handenen Koordinaten korrigieren. Wipe-and-rebuild des geocache läuft
+    # einmal, sobald die DB-Meta nicht den aktuellen geocode-Fix-Marker
+    # zeigt. Schützt vor Endlos-Loop bei Neustarts.
+    if meta_get("geocode_fix_v2") != "1":
+        try:
+            n = regeocode_all_inconsistent()
+            meta_set("geocode_fix_v2", "1")
+            log.info(f"geocode_fix_v2 applied: {n} incidents korrigiert")
+        except Exception as e:
+            log.warning(f"geocode_fix_v2 at startup failed: {e}")
     # Always attempt to seed funding (idempotent — no-op if already present).
     seed_funding_data()
     # Säule 2 — populate the Frühwarn-Cluster table on boot so the footer
