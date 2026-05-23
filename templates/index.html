@@ -1130,6 +1130,10 @@ body.mod-funding #mod-funding-view{display:grid !important;}
           <canvas id="fnd-chart-donor-type" height="220"></canvas>
         </div>
         <div class="chart-card wide">
+          <div class="chart-title">FÖRDERUNG NACH REGION (TOP 15)</div>
+          <canvas id="fnd-chart-region" height="240"></canvas>
+        </div>
+        <div class="chart-card wide">
           <div class="chart-title">JÄHRLICHE FÖRDERSUMMEN</div>
           <canvas id="fnd-chart-year" height="120"></canvas>
         </div>
@@ -2720,8 +2724,8 @@ function fndDebounce(){
   if(fndDebounceTimer) clearTimeout(fndDebounceTimer);
   fndDebounceTimer=setTimeout(() => {
     loadFunding();
-    // When the graph sub-tab is active, refresh it too so filter changes
-    // (year window, country, min amount) flow through immediately.
+    // Filter-Änderungen müssen auch durch Region- und Graph-Views fließen.
+    loadFundingByRegion();
     if(document.querySelector('.fnd-main.fnd-mode-graph')) loadFundingGraph();
   }, 220);
 }
@@ -2933,6 +2937,59 @@ async function loadFundingStats(){
     renderFundingTopDonors(s.top_donors||[]);
     renderFundingCharts(s);
   }catch(e){/* charts will retry on next module switch */}
+  // Region-Aggregat ist ein separater Endpoint (passt sich an Filter an).
+  loadFundingByRegion();
+}
+
+async function loadFundingByRegion(){
+  try{
+    fndCollectFilters();
+    const qs = new URLSearchParams();
+    if(fndFilters.year_min)   qs.append('year_min',   fndFilters.year_min);
+    if(fndFilters.year_max)   qs.append('year_max',   fndFilters.year_max);
+    if(fndFilters.country)    qs.append('country',    fndFilters.country);
+    if(fndFilters.amount_min) qs.append('min_amount', fndFilters.amount_min);
+    const d = await fetch('/api/funding/by-region?' + qs.toString()).then(r=>r.json());
+    renderFundingRegionChart(d.regions || []);
+  }catch(e){ /* keep last */ }
+}
+
+function renderFundingRegionChart(regions){
+  const top = regions.slice(0, 15);
+  const labels = top.map(r => `${r.region} · ${r.country}`);
+  const data   = top.map(r => Math.round(r.amount));
+  // Farbcode pro Ebene: Bund=accent, Land/Kanton=amber, Stadt=green, Andere=t3
+  const colors = top.map(r => r.level === 'Bund'   ? 'rgba(106,169,201,0.85)'
+                            : r.level === 'Land'   ? 'rgba(217,154,43,0.78)'
+                            : r.level === 'Kanton' ? 'rgba(217,154,43,0.78)'
+                            : r.level === 'Stadt'  ? 'rgba(95,181,131,0.82)'
+                            : r.level === 'Stiftung'?'rgba(160,188,212,0.55)'
+                            : r.level === 'EU'     ? 'rgba(160,200,255,0.78)'
+                            : 'rgba(160,188,212,0.40)');
+  fndChart('fnd-chart-region', {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ label: 'Förderung (€)', data, backgroundColor: colors, borderRadius: 1 }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (ctx) =>
+          'Σ ' + fmtAmount(ctx.parsed.x, 'EUR') + ' · ' + top[ctx.dataIndex].count + ' Einträge · ' + top[ctx.dataIndex].level
+        }}
+      },
+      scales: {
+        x: { ticks: { color: 'var(--t2)', font: { family: 'var(--mono)', size: 10 },
+                       callback: v => fmtAmount(v, '€') },
+             grid:  { color: 'rgba(160,188,212,0.06)' } },
+        y: { ticks: { color: 'var(--t1)', font: { family: 'var(--mono)', size: 10 } },
+             grid:  { display: false } }
+      }
+    }
+  });
 }
 
 function fmtAmount(v, currency){
