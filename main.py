@@ -1,4 +1,5 @@
-import os, logging, json, time, hashlib, re, secrets, csv, io
+import os, logging, json, time, hashlib, re, secrets, csv, io, gzip
+from pathlib import Path
 from datetime import datetime, timedelta
 from urllib.parse import urljoin, quote_plus
 import xml.etree.ElementTree as ET
@@ -26,6 +27,31 @@ def _resolve_db_path():
     return "lex_threat.db"
 
 DB_PATH = _resolve_db_path()
+
+# ── EVIDENCE STORAGE (Säule 4, MS-5) ────────────────────────────────
+# Mirrors DB_PATH resolution: prefer persistent disk on render.com, fall
+# back to the local working dir during dev. evidence/<yyyy>/<mm>/<hash>.warc.gz.
+def _resolve_evidence_dir():
+    env = os.getenv("EVIDENCE_DIR")
+    if env:
+        try:
+            Path(env).mkdir(parents=True, exist_ok=True)
+            return env
+        except Exception as e:
+            log.warning(f"EVIDENCE_DIR '{env}' not usable: {e}")
+    for base in ("/disk", "/data"):
+        if os.path.isdir(base):
+            p = os.path.join(base, "evidence")
+            try:
+                Path(p).mkdir(parents=True, exist_ok=True)
+                return p
+            except Exception:
+                pass
+    p = "evidence"
+    Path(p).mkdir(parents=True, exist_ok=True)
+    return p
+
+EVIDENCE_DIR = _resolve_evidence_dir()
 GROK_MODEL = os.getenv("GROK_MODEL", "grok-4")
 ADMIN_USER = os.getenv("ADMIN_USER", "admin")
 ADMIN_PASS = os.getenv("ADMIN_PASS", "changeme")
@@ -70,7 +96,11 @@ def get_db():
                       ("target_type","TEXT DEFAULT ''"),
                       ("prosec_status","TEXT DEFAULT 'unknown'"),
                       ("case_ref","TEXT DEFAULT ''"),
-                      ("last_status_check","TEXT DEFAULT ''")]:
+                      ("last_status_check","TEXT DEFAULT ''"),
+                      # MS-5 (Säule 4) — Quellensicherung
+                      ("evidence_path","TEXT DEFAULT ''"),
+                      ("evidence_sha","TEXT DEFAULT ''"),
+                      ("evidence_ts","TEXT DEFAULT ''")]:
         try:
             c.execute(f"ALTER TABLE incidents ADD COLUMN {col} {defn}")
         except Exception:
@@ -1413,6 +1443,16 @@ def save_incident(ai, text, source, url, date_str=None, manual=False):
              summ, is_primary, is_high_risk, tier, target_type)
         )
         db.commit()
+        # MS-5 — best-effort WARC snapshot of the source URL. Failing to
+        # capture evidence must NOT roll back the incident save.
+        if url_norm and not manual:
+            ev_path, ev_sha, ev_ts = save_evidence(url_norm, h)
+            if ev_path:
+                db.execute(
+                    "UPDATE incidents SET evidence_path=?, evidence_sha=?, evidence_ts=? WHERE hash=?",
+                    (ev_path, ev_sha, ev_ts, h)
+                )
+                db.commit()
         log.info(
             f"SAVED [sev={sev}/conf={conf}/tier={tier}/hi={is_high_risk}/"
             f"target={target_type or '-'}]: {cat} / {ai.get('ort')} / {source}"
@@ -2198,6 +2238,69 @@ EWC_WINDOW_DAYS = 42      # 6 weeks
 EWC_THRESHOLD   = 3       # ≥ 3 incidents to flag a cluster
 EWC_TIERS       = ("act", "enable")
 
+def save_evidence(url, hash_hex):
+    """
+    Persist a WARC-1.1 record of `url` under EVIDENCE_DIR/<yyyy>/<mm>/<hash>.warc.gz.
+    Returns (relative_path, sha256, iso_timestamp) on success, ('', '', '') on
+    failure. Idempotent — re-running on the same hash short-circuits if the
+    file already exists. Designed to be cheap: one HTTP GET, no library deps.
+    """
+    if not url or not url.startswith("http"):
+        return "", "", ""
+    now = datetime.now()
+    yyyy, mm = now.strftime("%Y"), now.strftime("%m")
+    subdir = os.path.join(EVIDENCE_DIR, yyyy, mm)
+    fname  = f"{hash_hex}.warc.gz"
+    fpath  = os.path.join(subdir, fname)
+    rel    = f"evidence/{yyyy}/{mm}/{fname}"
+    if os.path.isfile(fpath):
+        # Already captured — recompute the digest so the caller can store it
+        # if the original save was interrupted before the columns were set.
+        try:
+            with open(fpath, "rb") as fh:
+                sha = hashlib.sha256(fh.read()).hexdigest()
+            return rel, sha, ""
+        except Exception:
+            return "", "", ""
+    try:
+        Path(subdir).mkdir(parents=True, exist_ok=True)
+        r = session.get(url, timeout=15, allow_redirects=True)
+        body = r.content or b""
+        if not body:
+            return "", "", ""
+        ts = now.replace(microsecond=0).isoformat() + "Z"
+        # Minimal WARC/1.1 response record — no external dep required.
+        block = (
+            f"HTTP/1.1 {r.status_code} {r.reason}\r\n"
+            f"Content-Type: {r.headers.get('Content-Type','application/octet-stream')}\r\n"
+            f"Content-Length: {len(body)}\r\n\r\n"
+        ).encode("utf-8") + body
+        block_sha = hashlib.sha256(block).hexdigest()
+        record_id = "<urn:uuid:" + hashlib.sha1((hash_hex + ts).encode()).hexdigest() + ">"
+        header = (
+            "WARC/1.1\r\n"
+            "WARC-Type: response\r\n"
+            f"WARC-Record-ID: {record_id}\r\n"
+            f"WARC-Date: {ts}\r\n"
+            f"WARC-Target-URI: {url}\r\n"
+            f"WARC-Block-Digest: sha256:{block_sha}\r\n"
+            "Content-Type: application/http; msgtype=response\r\n"
+            f"Content-Length: {len(block)}\r\n"
+            "\r\n"
+        ).encode("utf-8")
+        raw = header + block + b"\r\n\r\n"
+        with gzip.open(fpath, "wb", compresslevel=6) as gz:
+            gz.write(raw)
+        # SHA of the gzipped artifact (what's actually on disk) is the
+        # tamper-evident anchor we cite later.
+        with open(fpath, "rb") as fh:
+            disk_sha = hashlib.sha256(fh.read()).hexdigest()
+        return rel, disk_sha, ts
+    except Exception as e:
+        log.info(f"save_evidence failed for {url}: {e}")
+        return "", "", ""
+
+
 def detect_clusters():
     """
     Group recent T1/T2 incidents by (country, target_type). Any group with
@@ -2362,6 +2465,70 @@ async def admin_detect_clusters(_=Depends(require_admin)):
     return JSONResponse({"ok": True, "active_clusters": n})
 
 
+# ── CITATION EXPORT (Säule 4 — MS-5) ──────────────────────────────
+@app.get("/api/incident/{inc_id}/cite")
+async def cite_incident(inc_id: int, format: str = "bibtex"):
+    """
+    BibTeX/RIS/Chicago citation for a single incident. Cites the original
+    source URL (with evidence_path + SHA-256 when available) so academic
+    and legal users can ground their analysis in a tamper-evident record.
+    """
+    r = db.execute(
+        "SELECT id,date,location,country,category,summary,description,source,url,"
+        "evidence_path,evidence_sha,evidence_ts FROM incidents WHERE id=?",
+        (inc_id,)
+    ).fetchone()
+    if not r:
+        return JSONResponse({"ok": False, "message": "not found"}, status_code=404)
+    r = dict(r)
+    title    = (r["summary"] or r["description"] or r["category"] or "Incident")[:200]
+    author   = r["source"] or "OSINT-Quelle"
+    yr       = (r["date"] or "")[:4] or "n.d."
+    site     = r["url"] or ""
+    accessed = datetime.now().date().isoformat()
+    ev_ts    = r["evidence_ts"] or ""
+    ev_sha   = r["evidence_sha"] or ""
+    fmt = (format or "bibtex").lower()
+    if fmt == "ris":
+        body = (
+            "TY  - GEN\n"
+            f"TI  - {title}\n"
+            f"AU  - {author}\n"
+            f"PY  - {yr}\n"
+            f"DA  - {r['date'] or ''}\n"
+            f"CY  - {r['location'] or ''}, {r['country'] or ''}\n"
+            f"UR  - {site}\n"
+            f"N1  - LEX EUROPE id={inc_id}; category={r['category'] or ''}; "
+            f"evidence_sha256={ev_sha}; evidence_ts={ev_ts}\n"
+            f"Y2  - {accessed}\n"
+            "ER  - \n"
+        )
+        mt = "application/x-research-info-systems"
+    elif fmt == "chicago":
+        body = (
+            f"{author}. \"{title}\" (LEX EUROPE id {inc_id}), {r['date'] or ''}, "
+            f"{r['location'] or ''}, {r['country'] or ''}. "
+            f"{site}. SHA-256: {ev_sha or 'n/a'}. Accessed {accessed}.\n"
+        )
+        mt = "text/plain; charset=utf-8"
+    else:
+        key = f"lexeurope-{inc_id}"
+        title_e = title.replace("{","\\{").replace("}","\\}")
+        body = (
+            f"@misc{{{key},\n"
+            f"  title   = {{{title_e}}},\n"
+            f"  author  = {{{author}}},\n"
+            f"  year    = {{{yr}}},\n"
+            f"  url     = {{{site}}},\n"
+            f"  note    = {{LEX EUROPE id={inc_id}; category={r['category'] or ''}; "
+            f"evidence-sha256={ev_sha}; evidence-ts={ev_ts}}},\n"
+            f"  urldate = {{{accessed}}}\n"
+            "}\n"
+        )
+        mt = "application/x-bibtex; charset=utf-8"
+    return StreamingResponse(iter([body]), media_type=mt)
+
+
 @app.get("/api/effectiveness")
 async def get_effectiveness():
     """
@@ -2374,8 +2541,7 @@ async def get_effectiveness():
       - funding_year_eur: Summe der dokumentierten Förderung im laufenden
         Jahr (Säule 3). Sobald wir einen recipient_tier-Marker haben, wird
         das auf T1/T2-Empfänger eingeschränkt.
-      - evidence_pct:  % Einträge mit WARC-Snapshot. MS-5 wird das echte
-        Feld liefern; bis dahin -1.
+      - evidence_pct:  % Einträge mit WARC-Snapshot (MS-5).
     """
     today = datetime.now().date()
     # Strafverfolgungs-Lücke
@@ -2407,6 +2573,17 @@ async def get_effectiveness():
         "SELECT COUNT(*) FROM early_warning_clusters WHERE active=1"
     ).fetchone()[0]
 
+    # Evidence coverage: crawled rows only — manuelle Einträge haben keinen
+    # URL-Snapshot und würden den Quotient sonst künstlich drücken.
+    ev_base = db.execute(
+        "SELECT COUNT(*) FROM incidents WHERE manual=0 AND url LIKE 'http%'"
+    ).fetchone()[0] or 0
+    ev_have = db.execute(
+        "SELECT COUNT(*) FROM incidents "
+        "WHERE manual=0 AND url LIKE 'http%' AND evidence_path != ''"
+    ).fetchone()[0] or 0
+    evidence_pct = round(100.0 * ev_have / ev_base) if ev_base else 0
+
     return JSONResponse({
         "prosec_gap_pct":  prosec_gap_pct,
         "prosec_gap_n":    gap,
@@ -2414,7 +2591,9 @@ async def get_effectiveness():
         "cluster_active":  cluster_active,
         "funding_year_eur": int(funding_eur),
         "funding_year":    yr,
-        "evidence_pct":    -1,          # MS-5 liefert echten Wert
+        "evidence_pct":    evidence_pct,
+        "evidence_have":   ev_have,
+        "evidence_base":   ev_base,
         "asof":            today.isoformat(),
     })
 
@@ -2473,7 +2652,8 @@ async def get_incidents(
     q = ("SELECT id,date,location,country,category,description,summary,url,"
          "lat,lon,manual,source,severity_score,actors,confidence,"
          "is_primary,is_high_risk,tier,target_type,"
-         "prosec_status,case_ref,last_status_check FROM incidents WHERE 1=1")
+         "prosec_status,case_ref,last_status_check,"
+         "evidence_path,evidence_sha,evidence_ts FROM incidents WHERE 1=1")
     p = []
     if country:   q += " AND country=?";   p.append(country)
     if category:  q += " AND category=?";  p.append(category)

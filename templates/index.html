@@ -891,11 +891,14 @@ body.mod-funding #mod-funding-view{display:grid !important;}
     <div id="det-desc"></div>
     <div id="det-conf-row" style="margin-top:12px"></div>
     <div id="det-actions">
-      <button class="det-act" onclick="detFlyTo()">Auf Karte zeigen</button>
+      <button class="det-act" onclick="detFlyTo()" data-i18n="detail.show_on_map">Auf Karte zeigen</button>
+      <!-- MS-5: Zitations-Export (BibTeX / RIS / Chicago) -->
+      <button class="det-act" id="det-cite" onclick="detCite()" title="Quelle zitieren (BibTeX / RIS / Chicago)" data-i18n="detail.cite">Zitieren</button>
       <!-- Admin-only quick controls — JS injects these when an admin cookie/session is detected -->
-      <button class="det-act det-admin" id="det-admin-edit"   style="display:none" onclick="detAdminEdit()">Bearbeiten</button>
-      <button class="det-act det-admin det-danger" id="det-admin-delete" style="display:none" onclick="detAdminDelete()">Löschen</button>
+      <button class="det-act det-admin" id="det-admin-edit"   style="display:none" onclick="detAdminEdit()" data-i18n="detail.admin_edit">Bearbeiten</button>
+      <button class="det-act det-admin det-danger" id="det-admin-delete" style="display:none" onclick="detAdminDelete()" data-i18n="detail.admin_delete">Löschen</button>
     </div>
+    <div id="det-evidence" style="margin-top:8px;display:none;font-family:var(--mono);font-size:8px;color:var(--t3);"></div>
     <a id="det-src" href="#" target="_blank" rel="noopener"></a>
   </div>
 </aside>
@@ -1555,9 +1558,46 @@ function openDetail(i){
     srcEl.style.display='none';
   }
 
+  // MS-5 — Quellensicherung anzeigen, falls vorhanden. Macht den
+  // tamper-evidenten Anker sichtbar (SHA-256 + Zeitstempel der Erfassung).
+  const evEl = document.getElementById('det-evidence');
+  if(i.evidence_path && evEl){
+    const sha8 = (i.evidence_sha || '').substring(0, 12);
+    evEl.style.display = 'block';
+    evEl.innerHTML = `<span style="color:var(--t2)">${t('detail.evidence','WARC-SNAPSHOT')}:</span> ` +
+      `<span style="color:var(--green)">${i.evidence_ts || ''}</span> · ` +
+      `<span title="${i.evidence_sha}">sha256:${sha8}…</span>`;
+  } else if(evEl){
+    evEl.style.display = 'none';
+    evEl.innerHTML = '';
+  }
+
   document.getElementById('detail').classList.add('det-open');
   document.getElementById('right').classList.add('detail-push');
   hlFeed(i.id);
+}
+
+// MS-5 — Citation-Export (BibTeX / RIS / Chicago).
+async function detCite(){
+  if(!detailItem) return;
+  const fmt = prompt(t('detail.cite_prompt','Format: bibtex | ris | chicago'), 'bibtex');
+  if(!fmt) return;
+  const f = fmt.trim().toLowerCase();
+  if(!['bibtex','ris','chicago'].includes(f)){ showToast('Unbekanntes Format'); return; }
+  try{
+    const r = await fetch(`/api/incident/${detailItem.id}/cite?format=${encodeURIComponent(f)}`);
+    if(!r.ok){ showToast('Citation fehlgeschlagen'); return; }
+    const text = await r.text();
+    try{
+      await navigator.clipboard.writeText(text);
+      showToast(t('detail.cite_copied','Zitation in die Zwischenablage kopiert'));
+    }catch(_){
+      // Fallback: open in new tab so the user can copy manually.
+      const blob = new Blob([text], {type:'text/plain'});
+      const url  = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    }
+  }catch(e){ showToast('Netzwerkfehler'); }
 }
 
 function closeDetail(){

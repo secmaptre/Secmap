@@ -77,6 +77,14 @@
   "feed.actors_empty": "NO ACTOR DATA",
   "feed.actor_last_seen": "LAST SEEN",
 
+  "detail.show_on_map": "Show on map",
+  "detail.cite": "Cite",
+  "detail.cite_prompt": "Format: bibtex | ris | chicago",
+  "detail.cite_copied": "Citation copied to clipboard",
+  "detail.admin_edit": "Edit",
+  "detail.admin_delete": "Delete",
+  "detail.evidence": "WARC SNAPSHOT",
+
   "tier.act": "T1 · Act",
   "tier.enable": "T2 · Enable",
   "tier.context": "T3 · Context",

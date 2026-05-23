@@ -77,6 +77,14 @@
   "feed.actors_empty": "KEINE AKTEURSDATEN",
   "feed.actor_last_seen": "ZULETZT",
 
+  "detail.show_on_map": "Auf Karte zeigen",
+  "detail.cite": "Zitieren",
+  "detail.cite_prompt": "Format: bibtex | ris | chicago",
+  "detail.cite_copied": "Zitation in die Zwischenablage kopiert",
+  "detail.admin_edit": "Bearbeiten",
+  "detail.admin_delete": "Löschen",
+  "detail.evidence": "WARC-SNAPSHOT",
+
   "tier.act": "T1 · Tat",
   "tier.enable": "T2 · Förderung",
   "tier.context": "T3 · Kontext",
