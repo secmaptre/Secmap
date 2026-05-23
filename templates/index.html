@@ -400,6 +400,15 @@ body.mod-funding #mod-funding-view{display:grid !important;}
 .icard.is-context{opacity:.55;}
 .icard.is-context:hover{opacity:.92;}
 
+/* ── LANGUAGE SWITCHER (topbar) ── */
+.tb-lang{display:inline-flex;gap:0;margin-right:6px;flex-shrink:0;
+  border:1px solid var(--pb);border-radius:3px;overflow:hidden;}
+.tb-lang button{font-family:var(--mono);font-size:9px;letter-spacing:1.5px;
+  padding:5px 9px;background:transparent;color:var(--t2);
+  border:0;cursor:pointer;transition:background .15s,color .15s;}
+.tb-lang button:hover{color:var(--t0);background:rgba(0,200,255,0.06);}
+.tb-lang button.on{color:var(--t0);background:var(--ag);}
+
 /* ── FUNDING VIEW ── */
 #mod-funding-view{
   display:none;position:fixed;top:var(--tbh);left:0;right:0;bottom:var(--sbh);z-index:5;
@@ -573,29 +582,34 @@ body.mod-funding #mod-funding-view{display:grid !important;}
     <span class="brand-icon">◈</span>
     <div>
       <div class="brand-name">LEX EUROPE</div>
-      <div class="brand-sub">Politische Gewalt &amp; Förderfluss — OSINT-Recherche</div>
+      <div class="brand-sub" data-i18n="brand.sub">Politische Gewalt &amp; Förderfluss — OSINT-Recherche</div>
     </div>
   </a>
   <!-- MODULE SWITCHER: Vorfälle (Karte) ↔ Finanzierung (Tracker) -->
   <div class="tb-mod">
-    <button class="gbtn on" id="mod-incidents" onclick="switchModule('incidents')" title="Vorfälle-Karte">Vorfälle</button>
-    <button class="gbtn"    id="mod-funding"   onclick="switchModule('funding')"   title="Finanzierungs-Tracker">Finanzierung</button>
+    <button class="gbtn on" id="mod-incidents" onclick="switchModule('incidents')" title="Vorfälle-Karte" data-i18n="module.incidents">Vorfälle</button>
+    <button class="gbtn"    id="mod-funding"   onclick="switchModule('funding')"   title="Finanzierungs-Tracker" data-i18n="module.funding">Finanzierung</button>
   </div>
   <div class="tb-div hide-mob"></div>
-  <div class="chip"><span class="live-dot"></span> LIVE</div>
-  <div class="chip hide-sm">EIN <b id="tc">—</b></div>
-  <div class="chip hide-mob hide-sm">GEO <b id="tg">—</b></div>
-  <div class="chip hide-mob">SYNC <b id="ts">—</b></div>
+  <div class="chip"><span class="live-dot"></span> <span data-i18n="chip.live">LIVE</span></div>
+  <div class="chip hide-sm"><span data-i18n="chip.entries">EIN</span> <b id="tc">—</b></div>
+  <div class="chip hide-mob hide-sm"><span data-i18n="chip.geocoded">GEO</span> <b id="tg">—</b></div>
+  <div class="chip hide-mob"><span data-i18n="chip.sync">SYNC</span> <b id="ts">—</b></div>
   <div class="tb-sp"></div>
-  <span class="tb-version hide-mob">v2025.5 — Open Research</span>
+  <span class="tb-version hide-mob" data-i18n="brand.version">v2025.5 — Open Research</span>
+  <!-- LANGUAGE SWITCHER (DE / EN) -->
+  <div class="tb-lang" id="tb-lang" role="group" aria-label="Sprache">
+    <button id="lang-de" data-lang="de" onclick="setLang('de')" title="Deutsch">DE</button>
+    <button id="lang-en" data-lang="en" onclick="setLang('en')" title="English">EN</button>
+  </div>
   <div class="tb-acts">
-    <button class="gbtn hide-mob mod-inc-only" onclick="cmdOpen()" title="Suche (Strg+K)">Suche</button>
-    <button class="gbtn mod-inc-only" id="btn-heat" onclick="toggleHeat()" title="Heatmap">Heatmap</button>
-    <button class="gbtn hide-mob mod-inc-only" id="btn-charts" onclick="openCharts()" title="Statistik-Charts">Charts</button>
-    <button class="gbtn hide-mob" onclick="exportJson()" title="Daten-Export">Export</button>
-    <button class="gbtn hide-mob mod-inc-only" onclick="openReport()" title="Wöchentlicher Bericht">Bericht</button>
-    <button class="gbtn" onclick="supportOpen()" title="Unterstützen / Spenden">Spenden</button>
-    <a class="gbtn" href="/admin" target="_blank" title="Administration">Admin</a>
+    <button class="gbtn hide-mob mod-inc-only" onclick="cmdOpen()" title="Suche (Strg+K)" data-i18n="topbar.search">Suche</button>
+    <button class="gbtn mod-inc-only" id="btn-heat" onclick="toggleHeat()" title="Heatmap" data-i18n="topbar.heatmap">Heatmap</button>
+    <button class="gbtn hide-mob mod-inc-only" id="btn-charts" onclick="openCharts()" title="Statistik-Charts" data-i18n="topbar.charts">Charts</button>
+    <button class="gbtn hide-mob" onclick="exportJson()" title="Daten-Export" data-i18n="topbar.export">Export</button>
+    <button class="gbtn hide-mob mod-inc-only" onclick="openReport()" title="Wöchentlicher Bericht" data-i18n="topbar.report">Bericht</button>
+    <button class="gbtn" onclick="supportOpen()" title="Unterstützen / Spenden" data-i18n="topbar.support">Spenden</button>
+    <a class="gbtn" href="/admin" target="_blank" title="Administration" data-i18n="topbar.admin">Admin</a>
   </div>
 </header>
 
@@ -756,20 +770,20 @@ body.mod-funding #mod-funding-view{display:grid !important;}
     <span class="phdr-t" id="rp-title">THREAT FEED</span>
     <span class="phdr-n" id="rcount">—</span>
     <div class="sort-toggle" style="margin-left:auto" id="feed-sort-ctrl">
-      <button class="sort-btn on" id="sort-date" onclick="sortFeed('date')" title="Nach Datum">DATUM ↓</button>
-      <button class="sort-btn" id="sort-sev" onclick="sortFeed('severity')" title="Nach Schwere">SCHWERE ↓</button>
-      <button class="sort-btn" id="toggle-context" onclick="toggleContext()" title="Kontext-Vorfälle (Demos, Verhaftungen) einblenden">+ KONTEXT</button>
+      <button class="sort-btn on" id="sort-date" onclick="sortFeed('date')" title="Nach Datum"><span data-i18n="feed.sort_date">DATUM</span> ↓</button>
+      <button class="sort-btn" id="sort-sev" onclick="sortFeed('severity')" title="Nach Schwere"><span data-i18n="feed.sort_severity">SCHWERE</span> ↓</button>
+      <button class="sort-btn" id="toggle-context" onclick="toggleContext()" title="Kontext-Vorfälle (Demos, Verhaftungen) einblenden" data-i18n="feed.toggle_context_show">+ KONTEXT</button>
     </div>
   </div>
   <div class="tab-nav">
-    <button class="tab-btn on" id="tab-feed" onclick="switchTab('feed')">FEED</button>
-    <button class="tab-btn" id="tab-akteure" onclick="switchTab('akteure')">AKTEURE</button>
+    <button class="tab-btn on" id="tab-feed" onclick="switchTab('feed')" data-i18n="feed.tab_feed">FEED</button>
+    <button class="tab-btn" id="tab-akteure" onclick="switchTab('akteure')" data-i18n="feed.tab_actors">AKTEURE</button>
   </div>
   <div class="pbody" id="feed">
-    <div class="ifempty">LADE DATENSÄTZE…</div>
+    <div class="ifempty" data-i18n="feed.loading">LADE DATENSÄTZE…</div>
   </div>
   <div class="pbody" id="actor-panel" style="display:none">
-    <div class="ifempty-actors">LADE AKTEURE…</div>
+    <div class="ifempty-actors" data-i18n="feed.actors_loading">LADE AKTEURE…</div>
   </div>
 </aside>
 
@@ -1193,8 +1207,60 @@ let fndShown=50, fndDebounceTimer=null, fndLoaded=false;
 const SEV_COL={1:'#3a5570',2:'#5a7a92',3:'#f0a500',4:'#ff6644',5:'#ff3355'};
 const SEV_BG={1:'rgba(58,85,112,0.18)',2:'rgba(90,122,146,0.18)',3:'rgba(240,165,0,0.18)',4:'rgba(255,102,68,0.18)',5:'rgba(255,51,85,0.18)'};
 
+// ── I18N (DE / EN) ─────────────────────────────────────────────────
+// Strings live in /i18n/<lang>.json (served as static assets). On first
+// visit we honour the browser's preferred language; the user can override
+// via the topbar switcher and the choice is persisted in localStorage.
+const I18N_LANGS = ['de','en'];
+let I18N = {};                 // current language dict (key → string)
+let I18N_LANG = 'de';
+function detectLang(){
+  try{
+    const stored = localStorage.getItem('lex_lang');
+    if(stored && I18N_LANGS.includes(stored)) return stored;
+  }catch(_){}
+  const nav = (navigator.language||'de').slice(0,2).toLowerCase();
+  return I18N_LANGS.includes(nav) ? nav : 'de';
+}
+function t(key, fallback){
+  const v = I18N[key];
+  return (v===undefined || v===null) ? (fallback!==undefined ? fallback : key) : v;
+}
+function applyI18n(){
+  document.documentElement.lang = I18N_LANG;
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const k = el.getAttribute('data-i18n');
+    if(!k) return;
+    const v = I18N[k];
+    if(typeof v === 'string'){ el.textContent = v; }
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el=>{
+    const k = el.getAttribute('data-i18n-placeholder');
+    const v = I18N[k];
+    if(typeof v === 'string'){ el.setAttribute('placeholder', v); }
+  });
+  document.querySelectorAll('#tb-lang button').forEach(b=>{
+    b.classList.toggle('on', b.getAttribute('data-lang') === I18N_LANG);
+  });
+  // Keep dynamically rendered widgets in sync (feed cards, distributions).
+  if(typeof renderFeed === 'function' && Array.isArray(vis)) renderFeed(vis);
+}
+async function setLang(lang){
+  if(!I18N_LANGS.includes(lang)) lang = 'de';
+  try{
+    const r = await fetch(`/i18n/${lang}.json`, {cache:'no-cache'});
+    if(!r.ok) throw new Error('http '+r.status);
+    I18N = await r.json();
+    I18N_LANG = lang;
+    try{ localStorage.setItem('lex_lang', lang); }catch(_){}
+    applyI18n();
+  }catch(e){
+    console.warn('i18n load failed', e);
+  }
+}
 // Boot screen entfernt — Daten werden direkt geladen, kein theatralisches Intro.
 function runBoot(){
+  setLang(detectLang());     // load i18n before first render
   loadData(); loadTrends(); loadTimeline();
   // Admin-Status einmal abfragen; das Cookie ist httpOnly, daher Server-Roundtrip.
   checkAdmin().then(()=>{ if(detailItem) showDetAdminButtons(); });
@@ -1452,9 +1518,14 @@ function renderFeed(list){
     view = prim.length ? prim : list;  // graceful fallback if no flags yet
   }
   animCount(rcEl,view.length);
-  if(!view.length){el.innerHTML='<div class="ifempty">KEINE VORFÄLLE GEFUNDEN</div>';return;}
+  if(!view.length){el.innerHTML='<div class="ifempty">'+t('feed.empty','KEINE VORFÄLLE GEFUNDEN')+'</div>';return;}
   const sorted=sortedFeed(view);
   const now=new Date();
+  const lbl_new = t('feed.badge_new','NEU');
+  const lbl_geo = t('feed.badge_no_geo','? ORT');
+  const lbl_hr  = t('feed.badge_high_risk','HIGH RISK');
+  const lbl_ctx = t('feed.badge_context','KONTEXT');
+  const lbl_unk = t('feed.location_unknown','? STANDORT UNBEKANNT');
   el.innerHTML=sorted.slice(0,300).map(i=>{
     const c=col(i.category),s=sev(i.category);
     // Prefer the AI summary (2-3 short German sentences). Fall back to a
@@ -1464,14 +1535,14 @@ function renderFeed(list){
     const d=raw.substring(0,200);
     const isNew=i.date&&(now-new Date(i.date))<7*24*3600*1000;
     const noGeo=!(i.lat!=null&&i.lon!=null&&!isNaN(i.lat)&&!isNaN(i.lon));
-    const newBadge=isNew?'<span class="neu-badge">NEU</span>':'';
-    const geoBadge=noGeo?'<span class="nogeo-badge">? ORT</span>':'';
+    const newBadge=isNew?`<span class="neu-badge">${lbl_new}</span>`:'';
+    const geoBadge=noGeo?`<span class="nogeo-badge">${lbl_geo}</span>`:'';
     const sc=i.severity_score||0;
     const scBadge=sc>0?`<span class="sev-score" style="background:${SEV_BG[sc]||'transparent'};color:${SEV_COL[sc]||'var(--t2)'};border:1px solid ${SEV_COL[sc]||'var(--t3)'}44">${sc}</span>`:'';
     const hr = (i.is_high_risk===1||i.is_high_risk===true);
     const isCtx = !(i.is_primary===1||i.is_primary===true);
-    const hrBadge = hr ? '<span class="hr-badge">HIGH RISK</span>' : '';
-    const ctxBadge = isCtx ? '<span class="ctx-badge">KONTEXT</span>' : '';
+    const hrBadge = hr ? `<span class="hr-badge">${lbl_hr}</span>` : '';
+    const ctxBadge = isCtx ? `<span class="ctx-badge">${lbl_ctx}</span>` : '';
     return `<div class="icard${isCtx?' is-context':''}" id="ic-${i.id}" onclick="openDetailById(${i.id})" style="border-left-color:${c}">
       <div class="icard-hd">
         ${hrBadge}${ctxBadge}
@@ -1479,7 +1550,7 @@ function renderFeed(list){
         ${scBadge}${newBadge}${geoBadge}
         <span class="idate">${i.date||'—'}</span>
       </div>
-      <div class="iloc">${noGeo?'<span style="color:var(--t3)">? STANDORT UNBEKANNT</span>':i.location+'&nbsp;·&nbsp;<span style="opacity:.6">'+i.country+'</span>'}</div>
+      <div class="iloc">${noGeo?`<span style="color:var(--t3)">${lbl_unk}</span>`:i.location+'&nbsp;·&nbsp;<span style="opacity:.6">'+i.country+'</span>'}</div>
       <div class="idesc">${d}${d.length>=200?'…':''}</div>
     </div>`;
   }).join('');
@@ -2152,7 +2223,9 @@ function toggleContext(){
   showContext=!showContext;
   const btn=document.getElementById('toggle-context');
   btn.classList.toggle('on', showContext);
-  btn.textContent = showContext ? '✓ KONTEXT' : '+ KONTEXT';
+  btn.textContent = showContext
+    ? t('feed.toggle_context_hide', '✓ KONTEXT')
+    : t('feed.toggle_context_show', '+ KONTEXT');
   if(typeof vis !== 'undefined' && vis) renderFeed(vis);
 }
 

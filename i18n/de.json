@@ -1,0 +1,66 @@
+{
+  "_meta": {
+    "lang": "de",
+    "label": "Deutsch",
+    "flag": "DE"
+  },
+  "brand.sub": "Politische Gewalt & Förderfluss — OSINT-Recherche",
+  "brand.version": "v2025.5 — Open Research",
+
+  "module.incidents": "Vorfälle",
+  "module.funding": "Finanzierung",
+
+  "chip.live": "LIVE",
+  "chip.entries": "EIN",
+  "chip.geocoded": "GEO",
+  "chip.sync": "SYNC",
+
+  "topbar.search": "Suche",
+  "topbar.heatmap": "Heatmap",
+  "topbar.charts": "Charts",
+  "topbar.export": "Export",
+  "topbar.report": "Bericht",
+  "topbar.support": "Spenden",
+  "topbar.admin": "Admin",
+  "topbar.lang_label": "Sprache",
+
+  "filter.title": "FILTER // ANALYSE",
+  "filter.search_placeholder": "Volltext-Suche…",
+  "filter.country": "Land",
+  "filter.category": "Kategorie",
+  "filter.from": "Von",
+  "filter.to": "Bis",
+  "filter.severity_min": "Min. Schwere",
+  "filter.reset": "Filter zurücksetzen",
+
+  "feed.title": "THREAT FEED",
+  "feed.tab_feed": "FEED",
+  "feed.tab_actors": "AKTEURE",
+  "feed.sort_date": "DATUM",
+  "feed.sort_severity": "SCHWERE",
+  "feed.toggle_context_show": "+ KONTEXT",
+  "feed.toggle_context_hide": "✓ KONTEXT",
+  "feed.empty": "KEINE VORFÄLLE GEFUNDEN",
+  "feed.loading": "LADE DATENSÄTZE…",
+  "feed.actors_loading": "LADE AKTEURE…",
+  "feed.badge_new": "NEU",
+  "feed.badge_no_geo": "? ORT",
+  "feed.badge_high_risk": "HIGH RISK",
+  "feed.badge_context": "KONTEXT",
+  "feed.location_unknown": "? STANDORT UNBEKANNT",
+
+  "tier.act": "T1 · Tat",
+  "tier.enable": "T2 · Förderung",
+  "tier.context": "T3 · Kontext",
+  "tier.act.short": "T1",
+  "tier.enable.short": "T2",
+  "tier.context.short": "T3",
+
+  "support.title": "Unterstützen / Spenden",
+  "support.intro": "LEX EUROPE ist unabhängige OSINT-Recherche. Keine Werbung, kein Tracking, keine externen Sponsoren.",
+  "support.bitcoin": "Bitcoin",
+  "support.monero": "Monero",
+  "support.fiat": "Fiat / Banküberweisung",
+  "support.copy": "Kopieren",
+  "support.placeholder_addr": "Adresse wird in Kürze veröffentlicht"
+}

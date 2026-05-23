@@ -1,0 +1,66 @@
+{
+  "_meta": {
+    "lang": "en",
+    "label": "English",
+    "flag": "EN"
+  },
+  "brand.sub": "Political violence & funding flows — OSINT research",
+  "brand.version": "v2025.5 — Open Research",
+
+  "module.incidents": "Incidents",
+  "module.funding": "Funding",
+
+  "chip.live": "LIVE",
+  "chip.entries": "REC",
+  "chip.geocoded": "GEO",
+  "chip.sync": "SYNC",
+
+  "topbar.search": "Search",
+  "topbar.heatmap": "Heatmap",
+  "topbar.charts": "Charts",
+  "topbar.export": "Export",
+  "topbar.report": "Report",
+  "topbar.support": "Support",
+  "topbar.admin": "Admin",
+  "topbar.lang_label": "Language",
+
+  "filter.title": "FILTERS // ANALYSIS",
+  "filter.search_placeholder": "Full-text search…",
+  "filter.country": "Country",
+  "filter.category": "Category",
+  "filter.from": "From",
+  "filter.to": "To",
+  "filter.severity_min": "Min. severity",
+  "filter.reset": "Reset filters",
+
+  "feed.title": "THREAT FEED",
+  "feed.tab_feed": "FEED",
+  "feed.tab_actors": "ACTORS",
+  "feed.sort_date": "DATE",
+  "feed.sort_severity": "SEVERITY",
+  "feed.toggle_context_show": "+ CONTEXT",
+  "feed.toggle_context_hide": "✓ CONTEXT",
+  "feed.empty": "NO INCIDENTS FOUND",
+  "feed.loading": "LOADING RECORDS…",
+  "feed.actors_loading": "LOADING ACTORS…",
+  "feed.badge_new": "NEW",
+  "feed.badge_no_geo": "? LOC",
+  "feed.badge_high_risk": "HIGH RISK",
+  "feed.badge_context": "CONTEXT",
+  "feed.location_unknown": "? LOCATION UNKNOWN",
+
+  "tier.act": "T1 · Act",
+  "tier.enable": "T2 · Enable",
+  "tier.context": "T3 · Context",
+  "tier.act.short": "T1",
+  "tier.enable.short": "T2",
+  "tier.context.short": "T3",
+
+  "support.title": "Support / Donate",
+  "support.intro": "LEX EUROPE is independent OSINT research. No ads, no tracking, no external sponsors.",
+  "support.bitcoin": "Bitcoin",
+  "support.monero": "Monero",
+  "support.fiat": "Fiat / Wire transfer",
+  "support.copy": "Copy",
+  "support.placeholder_addr": "Address will be published shortly"
+}
