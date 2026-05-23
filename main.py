@@ -177,18 +177,85 @@ def date_from_url(url):
 
 # ── GEOCODING with city fallback ──────────────────────────────────
 CITY_FALLBACK = {
+    # Deutschland — Großstädte + relevante Mittelstädte
     "berlin": (52.52, 13.405), "hamburg": (53.55, 10.00), "münchen": (48.14, 11.58),
     "munich": (48.14, 11.58), "köln": (50.94, 6.96), "frankfurt": (50.11, 8.68),
     "stuttgart": (48.78, 9.18), "düsseldorf": (51.23, 6.78), "leipzig": (51.34, 12.37),
     "dresden": (51.05, 13.74), "hannover": (52.37, 9.74), "bremen": (53.08, 8.80),
     "dortmund": (51.51, 7.47), "nürnberg": (49.45, 11.08), "bochum": (51.48, 7.22),
+    "chemnitz": (50.83, 12.92), "halle": (51.48, 11.97), "magdeburg": (52.12, 11.62),
+    "rostock": (54.09, 12.13), "essen": (51.46, 7.01), "duisburg": (51.43, 6.77),
+    "wuppertal": (51.26, 7.18), "bielefeld": (52.02, 8.53), "münster": (51.96, 7.63),
+    "augsburg": (48.37, 10.90), "karlsruhe": (49.01, 8.40), "mannheim": (49.49, 8.47),
+    "freiburg": (47.99, 7.85), "kiel": (54.32, 10.13), "lübeck": (53.87, 10.69),
+    "erfurt": (50.98, 11.03), "jena": (50.93, 11.59), "potsdam": (52.40, 13.06),
+    "göttingen": (51.54, 9.93), "kassel": (51.31, 9.49), "saarbrücken": (49.24, 6.99),
+    "weimar": (50.98, 11.32), "cottbus": (51.76, 14.33),
+    # Schweiz
     "zürich": (47.38, 8.54), "zurich": (47.38, 8.54), "bern": (46.95, 7.44),
     "genf": (46.20, 6.14), "geneva": (46.20, 6.14), "basel": (47.56, 7.59),
+    "lausanne": (46.52, 6.63), "winterthur": (47.50, 8.72), "luzern": (47.05, 8.31),
+    # Österreich
     "wien": (48.21, 16.37), "vienna": (48.21, 16.37), "graz": (47.07, 15.44),
-    "linz": (48.31, 14.29), "salzburg": (47.80, 13.05),
-    "paris": (48.85, 2.35), "rom": (41.90, 12.50), "athen": (37.98, 23.73),
+    "linz": (48.31, 14.29), "salzburg": (47.80, 13.05), "innsbruck": (47.27, 11.39),
+    "klagenfurt": (46.62, 14.31),
+    # Frankreich
+    "paris": (48.85, 2.35), "lyon": (45.76, 4.84), "marseille": (43.30, 5.37),
+    "bordeaux": (44.84, -0.58), "toulouse": (43.60, 1.44), "nantes": (47.22, -1.55),
+    "strasbourg": (48.58, 7.75), "lille": (50.63, 3.07),
+    # Italien
+    "rom": (41.90, 12.50), "rome": (41.90, 12.50), "mailand": (45.46, 9.19),
+    "milano": (45.46, 9.19), "turin": (45.07, 7.69), "torino": (45.07, 7.69),
+    "neapel": (40.85, 14.27), "napoli": (40.85, 14.27), "bologna": (44.49, 11.34),
+    # Griechenland
+    "athen": (37.98, 23.73), "athens": (37.98, 23.73), "thessaloniki": (40.64, 22.94),
+    "exarchia": (37.98, 23.73), "exarcheia": (37.98, 23.73),
+    # Spanien
+    "madrid": (40.42, -3.70), "barcelona": (41.39, 2.17), "valencia": (39.47, -0.38),
+    "bilbao": (43.26, -2.93), "sevilla": (37.39, -5.99),
+    # UK / Irland
+    "london": (51.51, -0.13), "manchester": (53.48, -2.24), "glasgow": (55.86, -4.25),
+    "edinburgh": (55.95, -3.19), "bristol": (51.45, -2.59), "dublin": (53.35, -6.26),
+    # BeNeLux
+    "amsterdam": (52.37, 4.89), "rotterdam": (51.92, 4.48), "den haag": (52.07, 4.30),
+    "brüssel": (50.85, 4.35), "brussels": (50.85, 4.35), "antwerpen": (51.22, 4.40),
+    "luxemburg": (49.61, 6.13),
+    # Nordeuropa
+    "kopenhagen": (55.68, 12.57), "copenhagen": (55.68, 12.57), "aarhus": (56.16, 10.20),
+    "stockholm": (59.33, 18.06), "göteborg": (57.71, 11.97), "malmö": (55.60, 13.00),
+    "oslo": (59.91, 10.75), "bergen": (60.39, 5.32),
+    "helsinki": (60.17, 24.94),
+    # Mittel-/Osteuropa
+    "warschau": (52.23, 21.01), "warsaw": (52.23, 21.01), "krakau": (50.06, 19.94),
+    "prag": (50.08, 14.43), "prague": (50.08, 14.43), "budapest": (47.50, 19.04),
+    "bukarest": (44.43, 26.10), "bucharest": (44.43, 26.10),
+    "sofia": (42.70, 23.32), "ljubljana": (46.06, 14.51), "zagreb": (45.81, 15.98),
+    # Portugal
+    "lissabon": (38.72, -9.14), "lisbon": (38.72, -9.14), "porto": (41.15, -8.61),
+    # USA — Schwerpunkte Antifa-/Anarcho-Szene
+    "new york": (40.71, -74.01), "nyc": (40.71, -74.01),
+    "portland": (45.51, -122.68), "seattle": (47.61, -122.33),
+    "minneapolis": (44.98, -93.27), "chicago": (41.88, -87.63),
+    "los angeles": (34.05, -118.24), "oakland": (37.80, -122.27),
+    "san francisco": (37.77, -122.42), "atlanta": (33.75, -84.39),
+    "washington": (38.91, -77.04), "boston": (42.36, -71.06),
+    "philadelphia": (39.95, -75.16), "denver": (39.74, -104.99),
+    # Country centers (used when only the country is known)
     "deutschland": (51.16, 10.45), "schweiz": (46.80, 8.22), "österreich": (47.52, 14.55),
+    "frankreich": (46.60, 2.20), "italien": (42.83, 12.83), "griechenland": (39.07, 22.94),
+    "spanien": (40.46, -3.75), "vereinigtes königreich": (54.00, -2.00),
+    "irland": (53.41, -8.24), "niederlande": (52.13, 5.29), "belgien": (50.50, 4.47),
+    "dänemark": (56.26, 9.50), "schweden": (60.13, 18.64), "norwegen": (60.47, 8.47),
+    "finnland": (61.92, 25.75), "polen": (51.92, 19.13), "tschechien": (49.82, 15.47),
+    "ungarn": (47.16, 19.50), "rumänien": (45.94, 24.97), "portugal": (39.40, -8.22),
+    "usa": (39.83, -98.58), "vereinigte staaten": (39.83, -98.58),
     "de": (51.16, 10.45), "ch": (46.80, 8.22), "at": (47.52, 14.55),
+    "fr": (46.60, 2.20), "it": (42.83, 12.83), "gr": (39.07, 22.94),
+    "es": (40.46, -3.75), "uk": (54.00, -2.00), "ie": (53.41, -8.24),
+    "nl": (52.13, 5.29), "be": (50.50, 4.47), "dk": (56.26, 9.50),
+    "se": (60.13, 18.64), "no": (60.47, 8.47), "fi": (61.92, 25.75),
+    "pl": (51.92, 19.13), "cz": (49.82, 15.47), "hu": (47.16, 19.50),
+    "ro": (45.94, 24.97), "pt": (39.40, -8.22), "us": (39.83, -98.58),
 }
 
 _last_geo = [0.0]
@@ -381,16 +448,67 @@ LOCATION_PATTERNS = [
 ]
 COUNTRY_KEYWORDS = {
     "DE": ["deutschland","berlin","hamburg","münchen","köln","frankfurt","leipzig","dresden",
-           "stuttgart","hannover","bremen","dortmund","nürnberg","sachsen","thüringen","Bayern",
-           "NRW","Baden-Württemberg"],
-    "AT": ["österreich","wien","graz","linz","salzburg","innsbruck"],
-    "CH": ["schweiz","zürich","bern","genf","basel","lausanne","winterthur"],
-    "FR": ["frankreich","paris","lyon","marseille","bordeaux"],
-    "IT": ["italien","rom","mailand","turin","neapel"],
-    "GR": ["griechenland","athen","thessaloniki"],
-    "ES": ["spanien","madrid","barcelona","valencia"],
-    "UK": ["england","großbritannien","london","manchester","glasgow"],
+           "stuttgart","hannover","bremen","dortmund","nürnberg","chemnitz","halle","magdeburg",
+           "rostock","essen","duisburg","wuppertal","bielefeld","münster","augsburg","karlsruhe",
+           "mannheim","freiburg","kiel","lübeck","erfurt","jena","potsdam","kassel","göttingen",
+           "weimar","cottbus","saarbrücken",
+           "sachsen","thüringen","bayern","nrw","baden-württemberg","brandenburg",
+           "schleswig-holstein","mecklenburg","niedersachsen","saarland","hessen","rheinland-pfalz"],
+    "AT": ["österreich","wien","graz","linz","salzburg","innsbruck","klagenfurt"],
+    "CH": ["schweiz","zürich","bern","genf","basel","lausanne","winterthur","luzern","reitschule",
+           "koch-areal"],
+    "FR": ["frankreich","paris","lyon","marseille","bordeaux","toulouse","nantes","strasbourg",
+           "lille","france"],
+    "IT": ["italien","rom","mailand","turin","neapel","bologna","italia","milano","torino"],
+    "GR": ["griechenland","athen","athens","thessaloniki","exarchia","exarcheia"],
+    "ES": ["spanien","madrid","barcelona","valencia","bilbao","sevilla","spain","catalunya"],
+    "UK": ["england","großbritannien","london","manchester","glasgow","edinburgh","britain",
+           "united kingdom","scotland","wales"],
+    "IE": ["irland","dublin","ireland","cork"],
+    "NL": ["niederlande","amsterdam","rotterdam","den haag","utrecht","netherlands"],
+    "BE": ["belgien","brüssel","brussels","antwerpen","gent","liege","belgium"],
+    "DK": ["dänemark","kopenhagen","copenhagen","aarhus","denmark"],
+    "SE": ["schweden","stockholm","göteborg","malmö","sweden"],
+    "NO": ["norwegen","oslo","bergen","trondheim","norway"],
+    "FI": ["finnland","helsinki","tampere","finland"],
+    "PL": ["polen","warschau","warsaw","krakau","krakow","danzig","gdansk","poland"],
+    "CZ": ["tschechien","prag","prague","brno","czech"],
+    "HU": ["ungarn","budapest","hungary"],
+    "RO": ["rumänien","bukarest","bucharest","romania"],
+    "PT": ["portugal","lissabon","lisbon","porto"],
+    "US": ["usa","vereinigte staaten","united states","new york","portland","seattle","minneapolis",
+           "chicago","los angeles","oakland","san francisco","atlanta","washington","boston",
+           "philadelphia","denver","antifa portland","antifa nyc","blm portland"],
 }
+
+# Reverse index: city name (lower) → country code. Built from COUNTRY_KEYWORDS
+# AND from CITY_FALLBACK so we have one authoritative city→country mapping.
+_CITY_TO_COUNTRY = {}
+for _co, _kws in COUNTRY_KEYWORDS.items():
+    for _kw in _kws:
+        _CITY_TO_COUNTRY.setdefault(_kw.lower(), _co)
+
+def _override_country_from_city(city: str, text: str, ai_country: str) -> str:
+    """
+    Defends against AI mis-classifying the country when a famous city is named.
+    Example: a doxxing post about Chemnitz with the word "Schweiz" buried in
+    the boilerplate gets classified as CH; the city Chemnitz is unambiguously
+    in DE, so we override.
+    Returns the corrected country code (or the original if no override applies).
+    """
+    if city:
+        c = _CITY_TO_COUNTRY.get(city.strip().lower())
+        if c and c != ai_country:
+            return c
+    # Fallback: scan the first 600 chars of text for a known city
+    if text:
+        head = text[:600].lower()
+        for kw, co in _CITY_TO_COUNTRY.items():
+            if len(kw) >= 5 and re.search(r'\b' + re.escape(kw) + r'\b', head):
+                if co != ai_country:
+                    return co
+                break
+    return ai_country
 
 def classify_keywords(text):
     """Fast keyword-based classifier — no API calls."""
@@ -809,7 +927,7 @@ def classify(text):
         "Antworte AUSSCHLIESSLICH mit einem kompakten JSON-Objekt — kein Markdown, "
         "keine Erklärung.\n\n"
         "Erforderliche Felder:\n"
-        '  "land":          DE|AT|CH|FR|IT|GR|ES|UK|Andere\n'
+        '  "land":          DE|AT|CH|FR|IT|GR|ES|UK|IE|NL|BE|DK|SE|NO|FI|PL|CZ|HU|RO|PT|US|Andere\n'
         '  "ort":           Stadt oder Region (oder "Unbekannt")\n'
         f'  "kategorie":     {cats}\n'
         '  "ist_gewalttat": true|false   '
@@ -926,6 +1044,117 @@ def clean_description(text):
     text = re.sub(r'\s{3,}', ' ', text).strip()
     return text
 
+# ════════════════════════════════════════════════════════════════════
+# PII / DOXXING REDACTION
+# ════════════════════════════════════════════════════════════════════
+# Doxxing-Texte aus der autonomen Szene (insbesondere Indymedia-Outings
+# gegen vermeintliche Rechte) enthalten Klarnamen + Wohnadressen. Diese
+# Daten dürfen NIE in unsere öffentliche DB oder UI gelangen — sonst
+# verlängern wir die Reichweite der Doxxing-Aktion. Vor jeder Speicherung
+# laufen Beschreibungen UND Zusammenfassungen durch redact_pii().
+#
+# Strategie:
+#   1. Adressen (Straße + Hausnummer, Plätze, Gassen, Alleen, Wege) → entfernt
+#   2. Doxxing-Marker ("wurden X, Y und Z geoutet") triggern Heavy-Redaction:
+#      die gesamte Namensliste in solchen Sätzen wird durch "[Namen entfernt]"
+#      ersetzt, NICHT nur einzelne Namen.
+#   3. Telefon-, Mail-, Geburtsdaten-Muster → entfernt.
+#   4. Auto-Kennzeichen → entfernt.
+# Bewusst NICHT entfernt: Namen bekannter Politiker, öffentliche Personen
+# in Pressekontext (Olaf Scholz, Donald Trump etc.) — diese werden über
+# Whitelist verschont.
+
+_PII_ADDRESS_RE = re.compile(
+    r'\b([A-ZÄÖÜ][a-zäöüß\-]{2,}(?:[\- ][A-ZÄÖÜ][a-zäöüß\-]+)*'
+    r'(?:straße|str\.|platz|gasse|allee|weg|ufer|damm|ring|chaussee|landstraße|hof))'
+    r'\s+\d{1,4}[a-z]?',
+    re.IGNORECASE
+)
+# Name unit: First+Last OR First+Middle+Last (up to 3 capitalised tokens)
+_NAME_UNIT = r'[A-ZÄÖÜ][a-zäöüß\-]+(?:\s+[A-ZÄÖÜ][a-zäöüß\-]+){1,2}'
+# Trigger words allow upper/lower variants explicitly. We do NOT use
+# re.IGNORECASE here because that would make _NAME_UNIT also match
+# lowercase tokens like "und"/"als"/"die", causing the regex to gobble
+# past name boundaries and leave later names un-redacted.
+_PII_DOXXING_LIST_RE = re.compile(
+    # "wurden X, Y und Z [geoutet|outet|enttarnt|veröffentlicht]"
+    r'\b[Ww]urden?\b\s+'
+    r'(' + _NAME_UNIT +
+    r'(?:\s*,\s*' + _NAME_UNIT + r'){0,5}'
+    r'(?:\s+und\s+' + _NAME_UNIT + r')?)'
+    r'\s+(?:durch|von|als|in\s+ihrem|in\s+ihrer|[Gg]eoutet|[Ee]nttarnt|[Oo]utet|veröffentlicht|bekannt)'
+)
+_PII_DOXXING_OPENER_RE = re.compile(
+    # Headline-Muster: "Wir haben X, Y und Z [in ihrem Wohnumfeld] geoutet."
+    r'\b(?:[Ww]ir\s+haben|[Aa]ntifa\s+outet|[Gg]eoutet:)\s+'
+    r'(' + _NAME_UNIT +
+    r'(?:\s*,\s*' + _NAME_UNIT + r'){0,5}'
+    r'(?:\s+und\s+' + _NAME_UNIT + r')?)'
+)
+_PII_EMAIL_RE  = re.compile(r'\b[\w\.\-]+@[\w\.\-]+\.[a-z]{2,}\b', re.IGNORECASE)
+_PII_PHONE_RE  = re.compile(r'\b(?:\+?\d{1,3}[\s\-/]?)?(?:0\d{2,4}[\s\-/]?\d{4,10})\b')
+_PII_LICENSE_RE = re.compile(r'\b[A-ZÄÖÜ]{1,3}[\s\-][A-Z]{1,2}\s?\d{1,4}\b')
+_PII_BIRTHDATE_RE = re.compile(r'\bgeb(?:oren|\.)?\s*(?:am)?\s*\d{1,2}[./]\d{1,2}[./]\d{2,4}\b', re.IGNORECASE)
+
+# Doxxing-Kontext-Detektor: triggert is_pii_heavy() = True
+_DOXXING_CONTEXT_RE = re.compile(
+    r'\b(geoutet|enttarnt|outing|outet|wohnumfeld|nachbarn\s+infor|'
+    r'klarnamen?\s+ver[öo]ffentlich|persönliche\s+daten\s+ver[öo]ffentlich|'
+    r'arbeitgeber\s+ver[öo]ffentlich|outed)\b',
+    re.IGNORECASE
+)
+
+# Politisch öffentliche Personen — bewusst nicht maskiert. Liste minimal halten.
+_PII_PUBLIC_FIGURES = {
+    "olaf scholz","friedrich merz","alice weidel","tino chrupalla","markus söder",
+    "robert habeck","annalena baerbock","christian lindner","sahra wagenknecht",
+    "donald trump","joe biden","kamala harris","emmanuel macron","giorgia meloni",
+    "ursula von der leyen","viktor orban","lina e.","horst seehofer",
+    "thomas haldenwang","sandro brotz","alain berset","viola amherd",
+    "karl nehammer","wolfgang sobotka",
+}
+
+def is_doxxing_text(text: str) -> bool:
+    """True if the text reads like a Klarnamen-Outing — used to reject entirely."""
+    if not text: return False
+    t = text.lower()
+    if not _DOXXING_CONTEXT_RE.search(t):
+        return False
+    # Heuristic: doxxing posts almost always contain ≥1 address AND a multi-name list.
+    return bool(_PII_ADDRESS_RE.search(text) or _PII_DOXXING_OPENER_RE.search(text))
+
+def redact_pii(text: str) -> str:
+    """
+    Replace personally identifying details with neutral placeholders.
+    Conservative: errs on the side of redacting more, because the cost
+    of a false-negative (publishing a private address) is much higher
+    than the cost of a false-positive (slightly less specific summary).
+    """
+    if not text:
+        return ""
+    # 1. Email + phone + license plate + birthdate
+    out = _PII_EMAIL_RE.sub("[E-Mail entfernt]", text)
+    out = _PII_PHONE_RE.sub("[Telefon entfernt]", out)
+    out = _PII_LICENSE_RE.sub("[Kennzeichen entfernt]", out)
+    out = _PII_BIRTHDATE_RE.sub("[Geburtsdatum entfernt]", out)
+    # 2. Address: street + number
+    out = _PII_ADDRESS_RE.sub("[Adresse entfernt]", out)
+    # 3. Doxxing-Namenslisten (zwei Muster)
+    def _strip_names_keep_publics(m):
+        names_block = m.group(1)
+        # Wenn alle genannten Namen öffentliche Figuren sind, lass sie stehen.
+        candidates = [n.strip().lower() for n in re.split(r',|\s+und\s+', names_block) if n.strip()]
+        if candidates and all(c in _PII_PUBLIC_FIGURES for c in candidates):
+            return m.group(0)
+        # Sonst maskieren.
+        return m.group(0).replace(names_block, "[Namen entfernt]")
+    out = _PII_DOXXING_LIST_RE.sub(_strip_names_keep_publics, out)
+    out = _PII_DOXXING_OPENER_RE.sub(_strip_names_keep_publics, out)
+    # 4. Cleanup: doppelte Platzhalter zusammenfassen
+    out = re.sub(r'(\[(?:Namen|Adresse|Telefon|E-Mail|Kennzeichen|Geburtsdatum) entfernt\])'
+                 r'(\s+\1){1,}', r'\1', out)
+    return out
+
 # Political-motive signal for Sachbeschädigung: without one of these (or a
 # known actor), the incident is treated as non-political vandalism and dropped.
 _POLITICAL_MOTIVE_RE = re.compile(
@@ -1003,6 +1232,13 @@ def save_incident(ai, text, source, url, date_str=None, manual=False):
         log.info(f"filtered: no_valid_url ({source})")
         return False
 
+    # ── DOXXING gate — never ingest Klarnamen-Outings, even when the
+    # ── action itself (Doxxing) qualifies as a militant-left act. We
+    # ── document THAT it happened (via summary), but not the names.
+    if is_doxxing_text(text):
+        log.info(f"filtered: doxxing_content — {source}")
+        return False
+
     h = mk_hash(url_norm or text[:80], text)
     if is_seen(h):
         return False
@@ -1014,14 +1250,18 @@ def save_incident(ai, text, source, url, date_str=None, manual=False):
     t_low = (text or "").lower()
 
     # ── §0 ingestion floor — Grok cannot bypass this ────────────────
+    # Slightly relaxed vs. the previous version: we now keep Schmiererei
+    # entries at sev≥2 with a threat phrase OR a known actor (was sev≥3),
+    # and accept Sonstiges at sev≥3 (was sev≥4). This was over-filtering
+    # legitimate militant reports.
     if not manual:
         if cat in ("Demo/Kundgebung", "Repression"):
             log.info(f"filtered: out_of_scope ({cat}) — {source}")
             return False
-        if cat == "Schmiererei" and not (sev >= 3 and _THREAT_PHRASE_RE.search(t_low)):
-            log.info(f"filtered: schmiererei_no_threat — {source}")
+        if cat == "Schmiererei" and not ((sev >= 2 and _THREAT_PHRASE_RE.search(t_low)) or act):
+            log.info(f"filtered: schmiererei_no_threat_no_actor — {source}")
             return False
-        if cat == "Sonstiges" and sev < 4:
+        if cat == "Sonstiges" and sev < 3:
             log.info(f"filtered: sonstiges_low_sev — {source}")
             return False
         if cat == "Sachbeschädigung" and not (act or _POLITICAL_MOTIVE_RE.search(t_low)):
@@ -1038,7 +1278,17 @@ def save_incident(ai, text, source, url, date_str=None, manual=False):
             return False
 
     # ── Geocode + flags + summary ───────────────────────────────────
-    lat, lon = geocode(ai.get("ort", ""), ai.get("land", ""))
+    # Country override: when the AI returns a country that disagrees with a
+    # clearly-recognisable city in the text (Chemnitz → DE not CH), trust
+    # the city. Prevents the Chemnitz-into-CH bug we saw in production.
+    ort_raw = ai.get("ort", "")
+    land_raw = ai.get("land", "Unbekannt")
+    land_fixed = _override_country_from_city(ort_raw, text, land_raw)
+    if land_fixed != land_raw:
+        log.info(f"country override: {land_raw} → {land_fixed} (city={ort_raw})")
+        land_raw = land_fixed
+
+    lat, lon = geocode(ort_raw, land_raw)
     is_primary, is_high_risk = compute_flags(cat, text, sev)
 
     # Verhaftung is only kept as CONTEXT, never PRIMARY.
@@ -1048,9 +1298,11 @@ def save_incident(ai, text, source, url, date_str=None, manual=False):
     summ = (ai.get("zusammenfassung") or "").strip()
     if not summ:
         summ = fallback_summary(text)
+    summ = redact_pii(summ)[:280]
 
     d = date_str or datetime.now().strftime("%Y-%m-%d")
-    desc = clean_description(text)[:500]
+    desc = redact_pii(clean_description(text))[:500]
+    ai["land"] = land_raw  # propagate the corrected value to the INSERT below
 
     try:
         db.execute(
@@ -1185,6 +1437,17 @@ def purge_garbage():
             db.execute("DELETE FROM incidents WHERE id=?", (r["id"],))
             deleted += 1
 
+    # 10) DOXXING — purge entries whose description matches the Klarnamen-
+    # outing pattern. These propagate the doxxing harm even when the action
+    # itself is a militant-left act.
+    rows = db.execute(
+        "SELECT id, description, summary FROM incidents WHERE manual=0"
+    ).fetchall()
+    for r in rows:
+        if is_doxxing_text(r["description"] or "") or is_doxxing_text(r["summary"] or ""):
+            db.execute("DELETE FROM incidents WHERE id=?", (r["id"],))
+            deleted += 1
+
     if deleted:
         db.commit()
         log.info(f"purge_garbage: removed {deleted} entries per §0 scope")
@@ -1193,26 +1456,36 @@ def purge_garbage():
 def backfill_summaries_and_flags():
     """
     For existing rows, derive summary + is_primary + is_high_risk so the new
-    UI works the moment the upgraded code starts.
+    UI works the moment the upgraded code starts. ALSO runs redact_pii() over
+    descriptions + summaries so that older rows that pre-date the PII filter
+    get retro-actively cleaned (addresses, names, phones removed).
     """
     rows = db.execute(
         "SELECT id, category, description, severity_score, summary, is_primary, is_high_risk "
-        "FROM incidents WHERE (summary IS NULL OR summary='') OR is_primary IS NULL "
-        "OR is_high_risk IS NULL"
+        "FROM incidents"
     ).fetchall()
     if not rows:
         return 0
     n = 0
     for r in rows:
-        summ = (r["summary"] or "").strip() or fallback_summary(r["description"] or "")
-        prim, hi = compute_flags(r["category"], r["description"] or "", r["severity_score"] or 0)
+        desc_in = r["description"] or ""
+        summ_in = (r["summary"] or "").strip()
+        desc_out = redact_pii(desc_in)
+        summ_out = redact_pii(summ_in or fallback_summary(desc_in))[:280]
+        prim, hi = compute_flags(r["category"], desc_in, r["severity_score"] or 0)
+        # Skip if nothing actually changed (avoid pointless writes on warm DB)
+        if (desc_out == desc_in and summ_out == (r["summary"] or "")
+                and prim == (r["is_primary"] or 0) and hi == (r["is_high_risk"] or 0)):
+            continue
         db.execute(
-            "UPDATE incidents SET summary=?, is_primary=?, is_high_risk=? WHERE id=?",
-            (summ, prim, hi, r["id"])
+            "UPDATE incidents SET description=?, summary=?, is_primary=?, is_high_risk=? "
+            "WHERE id=?",
+            (desc_out, summ_out, prim, hi, r["id"])
         )
         n += 1
     db.commit()
-    log.info(f"backfill_summaries_and_flags: updated {n} rows")
+    if n:
+        log.info(f"backfill_summaries_and_flags: updated {n} rows (PII + flags)")
     return n
 
 def backfill_enrichment():
@@ -1409,11 +1682,30 @@ def crawl_indymedia_feed():
     inserted = 0
     seen_urls: set = set()
 
-    # ── de.indymedia.org (use single-attempt, short timeout to avoid blocking) ──
+    # ── de.indymedia.org + Indymedia-Netzwerk Europa/USA ─────────────
+    # Wir crawlen jetzt nicht nur Berlin/DE, sondern auch die regional-
+    # und länderspezifischen Indymedia-Knoten. Jeder Feed wird einzeln mit
+    # kurzem Timeout angefragt; tote Knoten loggen leise und blocken nichts.
     for feed_url in [
+        # ── DE: Bundesweite Knoten ──
         "https://de.indymedia.org/RSS/newswire.xml",
         "https://de.indymedia.org/RSS/features.xml",
-        "https://de.indymedia.org/taxonomy/term/20/all/feed",
+        "https://de.indymedia.org/taxonomy/term/20/all/feed",   # Antifa
+        "https://de.indymedia.org/taxonomy/term/17/all/feed",   # Antirepression
+        "https://de.indymedia.org/taxonomy/term/22/all/feed",   # Antimilitarismus
+        "https://de.indymedia.org/taxonomy/term/18/all/feed",   # Soziale Kämpfe
+        "https://de.indymedia.org/taxonomy/term/19/all/feed",   # Globale Gerechtigkeit
+        # ── Europäische Indymedia-Knoten ──
+        "https://athens.indymedia.org/feed/",                   # GR Athen
+        "https://radar.squat.net/en/rss",                        # CH/NL/EU squat-Netzwerk
+        "https://www.indymedia.ie/rss/news",                    # IE Irland
+        "https://www.indymedia.org.uk/en/rss/articles/feed.xml",# UK
+        "https://italy.indymedia.org/rss.xml",                  # IT
+        # ── USA Indymedia-Verbund ──
+        "https://nycindymedia.org/feed",                        # US NY
+        "https://www.itsgoingdown.org/feed/",                   # US Antifa/Anarcho Newswire
+        "https://crimethinc.com/feed",                          # US Anarcho
+        "https://rosecityantifa.org/feed/",                     # US Portland
     ]:
         try:
             r = session.get(feed_url, timeout=8, allow_redirects=True)
@@ -1442,12 +1734,24 @@ def crawl_indymedia_feed():
             log.warning(f"indymedia {feed_url.split('/')[-1]}: {e}")
         time.sleep(0.3)
 
-    # ── Active alternative left-wing sources ─────────────────────
+    # ── Active alternative left-wing sources (DE/AT/CH + EU + USA) ──
     for source, url in [
-        ("labournet.de",           "https://www.labournet.de/feed/"),
-        ("perspektive-online.net", "https://perspektive-online.net/feed/"),
-        ("klassegegenklasse.org",  "https://www.klassegegenklasse.org/feed/"),
-        ("jungle.world",           "https://jungle.world/rss.xml"),
+        ("labournet.de",            "https://www.labournet.de/feed/"),
+        ("perspektive-online.net",  "https://perspektive-online.net/feed/"),
+        ("klassegegenklasse.org",   "https://www.klassegegenklasse.org/feed/"),
+        ("jungle.world",            "https://jungle.world/rss.xml"),
+        ("nd-aktuell.de",           "https://www.nd-aktuell.de/rss/aktuell.xml"),
+        ("untergrund-blättle.ch",   "https://www.untergrund-blaettle.ch/rss.xml"),
+        ("contraste.org",           "https://www.contraste.org/feed/"),
+        ("autonomes-zentrum.org",   "https://www.az-koeln.org/feed/"),
+        # ── englischsprachig (UK / US / international) ──
+        ("freedomnews.org.uk",      "https://freedomnews.org.uk/feed/"),
+        ("libcom.org",              "https://libcom.org/rss.xml"),
+        ("anarchistnews.org",       "https://anarchistnews.org/rss.xml"),
+        ("redfish.media",           "https://redfish.media/feed/"),
+        ("popularresistance.org",   "https://popularresistance.org/feed/"),
+        ("truthout.org",            "https://truthout.org/feed/"),
+        ("commondreams.org",        "https://www.commondreams.org/rss.xml"),
     ]:
         try:
             n = crawl_rss_feed(source, url, max_items=8)
@@ -1534,18 +1838,28 @@ def is_false_positive(text):
 # ── GEOCODE COUNTRY BOUNDS ────────────────────────────────────────
 # (min_lat, min_lon, max_lat, max_lon) — generous margins to avoid false rejections
 _CO_BOUNDS = {
-    "DE": (46.5, 5.5, 55.5, 15.5),
-    "AT": (46.2, 9.3, 49.2, 17.3),
-    "CH": (45.7, 5.8, 48.0, 10.7),
-    "FR": (41.2, -5.3, 51.2, 9.7),
+    "DE": (46.5,  5.5, 55.5, 15.5),
+    "AT": (46.2,  9.3, 49.2, 17.3),
+    "CH": (45.7,  5.8, 48.0, 10.7),
+    "FR": (41.2, -5.3, 51.2,  9.7),
     "IT": (35.5,  6.5, 47.2, 18.6),
     "GR": (34.5, 19.2, 42.0, 29.8),
     "ES": (35.8, -9.5, 43.9,  4.4),
     "UK": (49.7, -8.5, 61.0,  2.2),
-    # Non-DACH neighbours — used to REJECT wrong geocoding (e.g. Prag → DE)
-    "CZ": (48.5, 12.1, 51.1, 18.9),
+    "IE": (51.4, -10.6, 55.4, -5.4),
+    "NL": (50.7,  3.3, 53.6,  7.3),
+    "BE": (49.5,  2.5, 51.6,  6.5),
+    "LU": (49.4,  5.7, 50.2,  6.6),
+    "DK": (54.5,  8.0, 57.8, 15.3),
+    "SE": (55.3, 10.9, 69.1, 24.2),
+    "NO": (57.9,  4.3, 71.2, 31.3),
+    "FI": (59.7, 20.5, 70.1, 31.6),
     "PL": (49.0, 14.1, 54.9, 24.2),
+    "CZ": (48.5, 12.1, 51.1, 18.9),
     "HU": (45.7, 16.1, 48.6, 22.9),
+    "RO": (43.6, 20.2, 48.3, 29.7),
+    "PT": (36.9, -9.6, 42.2, -6.2),
+    "US": (24.5,-125.0, 49.5, -66.9),
 }
 
 def _coords_in_country(country, lat, lon):
@@ -2224,6 +2538,46 @@ tr:hover td{{background:#f8fafc;}}
 </body>
 </html>"""
     return HTMLResponse(report_html)
+
+@app.get("/api/admin-check")
+async def admin_check(request: Request):
+    """
+    Lets the public frontend ask "is this browser an authenticated admin?"
+    The admin_token cookie is httpOnly so the page cannot read it directly —
+    this endpoint reads + validates it server-side and reports a plain bool.
+    Used by index.html to reveal the in-detail Edit/Delete controls.
+    """
+    return JSONResponse({"admin": verify_token(request.cookies.get("admin_token", ""))})
+
+@app.delete("/api/admin/incident/{inc_id}")
+async def admin_inline_delete(inc_id: int, _=Depends(require_admin)):
+    """Quick-delete an incident from the public map detail panel."""
+    db.execute("DELETE FROM incidents WHERE id=?", (inc_id,))
+    db.commit()
+    return JSONResponse({"ok": True, "id": inc_id})
+
+@app.put("/api/admin/incident/{inc_id}")
+async def admin_inline_update(inc_id: int, request: Request, _=Depends(require_admin)):
+    """Quick-edit fields on a single incident from the map (admin only)."""
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "message": "Ungültiges JSON"}, status_code=400)
+    allowed = {"description","summary","location","country","category","severity_score","date","url"}
+    fields = {k: v for k, v in data.items() if k in allowed}
+    if not fields:
+        return JSONResponse({"ok": False, "message": "Keine erlaubten Felder"}, status_code=400)
+    # Run PII redaction on text fields before saving — admin shouldn't be
+    # able to bypass the safety filter even by direct edit.
+    if "description" in fields:
+        fields["description"] = redact_pii(fields["description"] or "")[:500]
+    if "summary" in fields:
+        fields["summary"] = redact_pii(fields["summary"] or "")[:280]
+    cols = ", ".join(f"{k}=?" for k in fields)
+    db.execute(f"UPDATE incidents SET {cols} WHERE id=?",
+               tuple(list(fields.values()) + [inc_id]))
+    db.commit()
+    return JSONResponse({"ok": True, "id": inc_id})
 
 @app.get("/api/diagnose")
 async def diagnose():
