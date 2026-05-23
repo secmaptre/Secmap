@@ -400,6 +400,15 @@ body.mod-funding #mod-funding-view{display:grid !important;}
 .icard.is-context{opacity:.55;}
 .icard.is-context:hover{opacity:.92;}
 
+/* ── WIRKUNGS-COUNTER (Concept §C5, status footer) ── */
+.eff-sep{border-left:1px dashed rgba(160,188,212,0.18);padding-left:12px;margin-left:4px;}
+.sv.eff{font-weight:700;letter-spacing:0.3px;color:var(--t0);}
+.sv.eff-gap{color:var(--red);text-shadow:0 0 5px rgba(212,73,93,0.35);}
+.sv.eff-cluster{color:var(--amber);}
+.sv.eff-funding{color:var(--accent);}
+.sv.eff-evidence{color:var(--green);}
+.sv.eff.pending{color:var(--t3);font-weight:400;text-shadow:none;}
+
 /* ── TIER FILTER CHIPS (Fedpol 3-tier) ── */
 .tier-chips{display:inline-flex;gap:3px;margin-left:6px;}
 .tchip{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:1.5px;
@@ -1185,6 +1194,23 @@ body.mod-funding #mod-funding-view{display:grid !important;}
   <div class="si"><span class="sk">DB</span><span class="sv" id="s-db">—</span></div>
   <svg id="tl-svg" viewBox="0 0 400 14" preserveAspectRatio="none"></svg>
   <span id="coord-lbl">LAT — · LON —</span>
+  <!-- Wirkungs-Counter (Concept §C5) — bewusst öffentlich. -->
+  <div class="si eff-sep" title="Strafverfolgungs-Lücke: % T1 Sev≥4 ohne Verfahren nach 180 Tagen">
+    <span class="sk" data-i18n="eff.gap">GAP</span>
+    <span class="sv eff eff-gap" id="eff-gap">—</span>
+  </div>
+  <div class="si" title="Aktive Frühwarn-Cluster (≥ 3 gleichartige Anschläge / 6 Wochen)">
+    <span class="sk" data-i18n="eff.cluster">WARN</span>
+    <span class="sv eff eff-cluster" id="eff-cluster">—</span>
+  </div>
+  <div class="si" title="Dokumentierte Förderung (laufendes Jahr)">
+    <span class="sk" data-i18n="eff.funding">€</span>
+    <span class="sv eff eff-funding" id="eff-funding">—</span>
+  </div>
+  <div class="si" title="Evidence-Coverage: % Einträge mit WARC + Timestamp">
+    <span class="sk" data-i18n="eff.evidence">EVI</span>
+    <span class="sv eff eff-evidence" id="eff-evidence">—</span>
+  </div>
   <div class="si"><span class="sk">CRAWLER</span><span class="sv" id="s-cr">—</span></div>
   <div id="thr-lvl"></div>
 </footer>
@@ -1336,6 +1362,11 @@ async function setLang(lang){
 function runBoot(){
   setLang(detectLang());     // load i18n before first render
   loadData(); loadTrends(); loadTimeline();
+  loadEffectiveness();        // Wirkungs-Counter im Status-Footer (§C5)
+  // Refresh every 5 min — counters change slowly (status edits, new
+  // funding entries, new incidents) and a polling interval avoids racey
+  // stale numbers when the operator leaves the tab open.
+  setInterval(loadEffectiveness, 5 * 60 * 1000);
   // Admin-Status einmal abfragen; das Cookie ist httpOnly, daher Server-Roundtrip.
   checkAdmin().then(()=>{ if(detailItem) showDetAdminButtons(); });
 }
@@ -2222,6 +2253,40 @@ function switchTab(tab){
   if(tab==='akteure'){rcEl.textContent='';loadActors();}
   else if(tab==='verfolgung'){rcEl.textContent='';loadAccountability();}
   else{animCount(rcEl,vis.length);}
+}
+
+// ── WIRKUNGS-COUNTER (Concept §C5) ─────────────────────────────────
+// Updates the status-footer widget. Pending counters (cluster, evidence)
+// stay greyed out until MS-3 / MS-5 wire them up.
+function formatEur(n){
+  if(n == null || isNaN(n)) return '—';
+  if(n >= 1e9)  return (n/1e9).toFixed(1).replace('.0','') + 'B';
+  if(n >= 1e6)  return (n/1e6).toFixed(1).replace('.0','') + 'M';
+  if(n >= 1e3)  return (n/1e3).toFixed(0) + 'k';
+  return String(n);
+}
+function setEff(id, value, pending){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.textContent = value;
+  el.classList.toggle('pending', !!pending);
+}
+async function loadEffectiveness(){
+  try{
+    const d = await fetch('/api/effectiveness').then(r=>r.json());
+    // Strafverfolgungs-Lücke
+    if(d.prosec_gap_base > 0){
+      setEff('eff-gap', `${d.prosec_gap_pct}% (${d.prosec_gap_n}/${d.prosec_gap_base})`, false);
+    }else{
+      setEff('eff-gap', '—', true);
+    }
+    // Cluster (MS-3 pending → -1)
+    setEff('eff-cluster', d.cluster_active < 0 ? '—' : String(d.cluster_active), d.cluster_active < 0);
+    // Funding (current year)
+    setEff('eff-funding', '€' + formatEur(d.funding_year_eur) + ' · ' + d.funding_year, false);
+    // Evidence (MS-5 pending → -1)
+    setEff('eff-evidence', d.evidence_pct < 0 ? '—' : (d.evidence_pct + '%'), d.evidence_pct < 0);
+  }catch(e){ /* keep last values */ }
 }
 
 // ── ACCOUNTABILITY (Säule 1 — Strafverfolgungs-Druck) ─────────────

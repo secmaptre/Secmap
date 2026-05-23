@@ -66,6 +66,11 @@
   "prosec.col_status": "STATUS",
   "prosec.col_case": "AKTENZEICHEN",
 
+  "eff.gap": "GAP",
+  "eff.cluster": "WARN",
+  "eff.funding": "€",
+  "eff.evidence": "EVI",
+
   "tier.act": "T1 · Tat",
   "tier.enable": "T2 · Förderung",
   "tier.context": "T3 · Kontext",

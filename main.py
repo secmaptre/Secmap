@@ -2162,6 +2162,59 @@ async def index(request: Request):
         "fiat_info":   os.getenv("FIAT_INFO",   ""),
     })
 
+@app.get("/api/effectiveness")
+async def get_effectiveness():
+    """
+    Säule-Wirksamkeits-Zähler für den Status-Footer (Concept §C5).
+    Liefert vier konkrete Kennzahlen — bewusst öffentlich:
+      - prosec_gap_pct: % der T1-Vorfälle Severity ≥ 4 ohne öffentliches
+        Verfahren nach 180 Tagen (Säule 1).
+      - cluster_active:  Anzahl aktiver Frühwarn-Cluster (≥ 3 gleichartige
+        Anschläge in 6 Wochen). MS-3 wird das echte Backend liefern; bis
+        dahin liefert dieser Endpoint -1 als „noch nicht verfügbar".
+      - funding_year_eur: Summe der dokumentierten Förderung im laufenden
+        Jahr (Säule 3). Sobald wir einen recipient_tier-Marker haben, wird
+        das auf T1/T2-Empfänger eingeschränkt.
+      - evidence_pct:  % Einträge mit WARC-Snapshot. MS-5 wird das echte
+        Feld liefern; bis dahin -1.
+    """
+    today = datetime.now().date()
+    # Strafverfolgungs-Lücke
+    sev_4plus = db.execute(
+        "SELECT id,date,prosec_status,case_ref FROM incidents "
+        "WHERE tier='act' AND severity_score >= 4"
+    ).fetchall()
+    elig = 0; gap = 0
+    for r in sev_4plus:
+        try:
+            d = datetime.fromisoformat(r["date"]).date()
+        except Exception:
+            continue
+        if (today - d).days < 180:
+            continue
+        elig += 1
+        if (r["prosec_status"] or "unknown") in ("unknown","none") and not (r["case_ref"] or "").strip():
+            gap += 1
+    prosec_gap_pct = round(100.0 * gap / elig) if elig else 0
+
+    # Finanzfluss-Transparenz — Summe laufendes Jahr.
+    yr = today.year
+    funding_eur = db.execute(
+        "SELECT COALESCE(SUM(amount), 0) FROM funding_records WHERE year = ?",
+        (yr,)
+    ).fetchone()[0] or 0
+
+    return JSONResponse({
+        "prosec_gap_pct":  prosec_gap_pct,
+        "prosec_gap_n":    gap,
+        "prosec_gap_base": elig,
+        "cluster_active":  -1,          # MS-3 liefert echten Wert
+        "funding_year_eur": int(funding_eur),
+        "funding_year":    yr,
+        "evidence_pct":    -1,          # MS-5 liefert echten Wert
+        "asof":            today.isoformat(),
+    })
+
 @app.get("/api/accountability")
 async def get_accountability():
     """
