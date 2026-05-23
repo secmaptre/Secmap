@@ -740,7 +740,8 @@ body.mod-funding #mod-funding-view{display:grid !important;}
     <button class="gbtn mod-inc-only" id="btn-heat" onclick="toggleHeat()" title="Heatmap" data-i18n="topbar.heatmap">Heatmap</button>
     <button class="gbtn hide-mob mod-inc-only" id="btn-charts" onclick="openCharts()" title="Statistik-Charts" data-i18n="topbar.charts">Charts</button>
     <button class="gbtn hide-mob" onclick="exportJson()" title="Daten-Export" data-i18n="topbar.export">Export</button>
-    <button class="gbtn hide-mob mod-inc-only" onclick="openReport()" title="Wöchentlicher Bericht" data-i18n="topbar.report">Bericht</button>
+    <button class="gbtn hide-mob mod-inc-only" onclick="openReport()" title="Wöchentlicher Bericht (HTML)" data-i18n="topbar.report">Bericht</button>
+    <button class="gbtn hide-mob mod-inc-only" onclick="downloadLagebericht()" title="Press-Ready Lagebericht (Markdown, für Journalist:innen)" data-i18n="topbar.lagebericht">Lagebericht</button>
     <button class="gbtn" onclick="supportOpen()" title="Unterstützen / Spenden" data-i18n="topbar.support">Spenden</button>
     <a class="gbtn" href="/admin" target="_blank" title="Administration" data-i18n="topbar.admin">Admin</a>
   </div>
@@ -2652,6 +2653,32 @@ function openReport(){
   if(co)params.set('country',co);if(ca)params.set('category',ca);
   window.open('/api/report?'+params.toString(),'_blank');
   showToast('BERICHT WIRD GENERIERT…');
+}
+
+// MS-Lagebericht — Press-Ready Markdown-Export für Journalist:innen.
+async function downloadLagebericht(){
+  try{
+    const r = await fetch('/api/lagebericht/weekly.md');
+    if(!r.ok){ showToast('Lagebericht-Generation fehlgeschlagen'); return; }
+    const md = await r.text();
+    const now = new Date();
+    const iso = `${now.getFullYear()}-W${String(getISOWeek(now)).padStart(2,'0')}`;
+    const blob = new Blob([md], {type:'text/markdown'});
+    const url  = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `lagebericht-${iso}.md`;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 300);
+    showToast('LAGEBERICHT HERUNTERGELADEN');
+  }catch(e){ showToast('Netzwerkfehler'); }
+}
+// Minimal ISO-Week helper (no date-fns).
+function getISOWeek(d){
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  return Math.ceil(((t - yearStart) / 86400000 + 1) / 7);
 }
 
 // ══════════════════════════════════════════════════════════════════

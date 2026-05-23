@@ -3842,6 +3842,152 @@ async def export_json(country:str="", category:str="", date_from:str="", date_to
         headers={"Content-Disposition": f"attachment; filename=lex-europe-{datetime.now().strftime('%Y%m%d')}.json"}
     )
 
+# ── WEEKLY LAGEBERICHT (Press-Ready) ──────────────────────────────
+# Drei Ausgabeformen: JSON für API-Konsumenten, Markdown für Journalist-
+# innen zum Direkt-Einbau in Artikel, HTML als Stand-Alone-Seite.
+
+def _isoweek_bounds(week_str=None):
+    """Parse ISO week 'YYYY-Www' → (start_iso, end_iso) inclusive."""
+    today = datetime.now().date()
+    if week_str:
+        try:
+            yr, wk = week_str.upper().split("-W")
+            mon = datetime.fromisocalendar(int(yr), int(wk), 1).date()
+        except Exception:
+            mon = today - timedelta(days=today.weekday())
+    else:
+        mon = today - timedelta(days=today.weekday())
+    sun = mon + timedelta(days=6)
+    return mon.isoformat(), sun.isoformat()
+
+def _build_lagebericht(week_start: str, week_end: str):
+    """Compute the structured data for a single week's Lagebericht."""
+    rows = [dict(r) for r in db.execute(
+        "SELECT id,date,location,country,category,summary,description,url,source,"
+        "severity_score,actors,tier,target_type,prosec_status,case_ref "
+        "FROM incidents WHERE date >= ? AND date <= ? "
+        "ORDER BY severity_score DESC, date DESC",
+        (week_start, week_end)
+    ).fetchall()]
+    # Previous week for delta
+    prev_start = (datetime.fromisoformat(week_start) - timedelta(days=7)).date().isoformat()
+    prev_end   = (datetime.fromisoformat(week_end)   - timedelta(days=7)).date().isoformat()
+    prev_count = db.execute(
+        "SELECT COUNT(*) FROM incidents WHERE date >= ? AND date <= ?",
+        (prev_start, prev_end)
+    ).fetchone()[0]
+    # T1/T2/T3 buckets
+    t1 = [r for r in rows if r.get("tier") == "act"]
+    t2 = [r for r in rows if r.get("tier") == "enable"]
+    t3 = [r for r in rows if r.get("tier") == "context"]
+    hi = [r for r in t1 if (r.get("severity_score") or 0) >= 4]
+    # Per-country / per-category / actors
+    from collections import Counter
+    by_co  = Counter(r["country"] for r in t1)
+    by_cat = Counter(r["category"] for r in t1)
+    by_tt  = Counter(r["target_type"] for r in t1 if r.get("target_type"))
+    actors = Counter()
+    for r in rows:
+        for a in (r.get("actors") or "").split(","):
+            a = a.strip()
+            if a: actors[a] += 1
+    # Active clusters this week
+    clusters = [dict(r) for r in db.execute(
+        "SELECT cluster_key, country, target_type, count, first_seen, last_seen "
+        "FROM early_warning_clusters WHERE active=1 ORDER BY count DESC"
+    ).fetchall()]
+    # New prosecution gap entries in this week
+    today = datetime.now().date()
+    new_gap = []
+    for r in t1:
+        if (r.get("severity_score") or 0) < 4: continue
+        if (r.get("prosec_status") or "unknown") not in ("unknown","none"): continue
+        if (r.get("case_ref") or "").strip(): continue
+        try:
+            d = datetime.fromisoformat(r["date"]).date()
+        except Exception: continue
+        if (today - d).days >= 180:
+            new_gap.append(r)
+    return {
+        "week_start": week_start, "week_end": week_end,
+        "prev_count": prev_count,
+        "total":  len(rows),
+        "t1":     len(t1), "t2": len(t2), "t3": len(t3), "hi": len(hi),
+        "delta":  len(rows) - prev_count,
+        "delta_pct": round(100 * (len(rows) - prev_count) / max(prev_count, 1)),
+        "by_country":     by_co.most_common(8),
+        "by_category":    by_cat.most_common(8),
+        "by_target_type": by_tt.most_common(8),
+        "top_actors":     actors.most_common(8),
+        "top_incidents":  t1[:12],
+        "clusters_active": clusters,
+        "new_gap_cases":  new_gap[:10],
+    }
+
+@app.get("/api/lagebericht/weekly")
+async def lagebericht_weekly_json(week: str = ""):
+    ws, we = _isoweek_bounds(week or None)
+    return JSONResponse({"week": f"{ws}..{we}", **_build_lagebericht(ws, we)})
+
+@app.get("/api/lagebericht/weekly.md")
+async def lagebericht_weekly_md(week: str = ""):
+    """Press-ready Markdown — direkt in Artikel einbettbar."""
+    ws, we = _isoweek_bounds(week or None)
+    d = _build_lagebericht(ws, we)
+    iso = datetime.fromisoformat(ws).isocalendar()
+    label = f"{iso.year}-W{iso.week:02d}"
+    delta = d["delta"]
+    delta_str = (f"+{delta} (+{d['delta_pct']}%)" if delta > 0
+                 else f"{delta} ({d['delta_pct']}%)" if delta < 0
+                 else "unverändert")
+    lines = []
+    lines.append(f"# Lagebericht Linksextremismus · KW {label}\n")
+    lines.append(f"*Berichtszeitraum: {ws} bis {we} · automatisch generiert*\n")
+    lines.append("## Eckdaten\n")
+    lines.append(f"- **{d['total']} Vorfälle** dokumentiert ({delta_str} vs. Vorwoche)")
+    lines.append(f"- **{d['t1']} T1-Akte** (Brandanschlag / Sabotage / Gewalt / Militante Aktion / pol. mot. Sachbeschädigung)")
+    lines.append(f"- davon **{d['hi']} mit Schweregrad ≥ 4** (Sprengstoff, Personenschaden, Sachschaden ≥ 100k €)")
+    lines.append(f"- **{d['t2']} T2-Förder-Handlungen** (Aufruf zu Gewalt, Mobilisierung)")
+    lines.append(f"- **{d['t3']} T3-Kontext-Einträge** (Demonstrationen, Verhaftungen, Repressionsberichte)")
+    lines.append(f"- **{len(d['clusters_active'])} aktive Frühwarn-Cluster** (≥3 gleichartige Anschläge in 6 Wochen)\n")
+    if d["by_country"]:
+        lines.append("## Geografische Verteilung (T1)\n")
+        for co, n in d["by_country"]:
+            lines.append(f"- {co}: {n}")
+        lines.append("")
+    if d["by_target_type"]:
+        lines.append("## Ziel-Klassen (T1)\n")
+        for tt, n in d["by_target_type"]:
+            lines.append(f"- {tt}: {n}")
+        lines.append("")
+    if d["new_gap_cases"]:
+        lines.append(f"## Strafverfolgungs-Gap ({len(d['new_gap_cases'])} hoch-Schwere-Fälle ≥180 Tage ohne öffentliches Verfahren)\n")
+        for r in d["new_gap_cases"]:
+            cat = r.get("category") or "—"
+            loc = r.get("location") or "—"
+            co  = r.get("country") or "—"
+            dt  = r.get("date") or "—"
+            lines.append(f"- **{dt}** · {loc}, {co} · {cat} (Schwere {r.get('severity_score','?')})")
+        lines.append("")
+    if d["clusters_active"]:
+        lines.append("## Aktive Cluster (≥3 gleichartige Anschläge / 6 Wochen)\n")
+        for c in d["clusters_active"]:
+            lines.append(f"- **{c['target_type']}** in {c['country']} — {c['count']} Anschläge ({c['first_seen']}..{c['last_seen']})")
+        lines.append("")
+    if d["top_incidents"]:
+        lines.append("## Wichtigste T1-Vorfälle der Woche\n")
+        for r in d["top_incidents"]:
+            url = r.get("url") or ""
+            link = f" [Quelle]({url})" if url and url.startswith("http") else ""
+            lines.append(f"- **{r.get('date')}** · {r.get('location','—')}, {r.get('country','—')} · "
+                         f"{r.get('category','—')} (Schwere {r.get('severity_score','?')}/5)"
+                         f" — {(r.get('summary') or r.get('description') or '')[:200]}{link}")
+        lines.append("")
+    lines.append("---\n")
+    lines.append("*Quelle: LEX EUROPE OSINT-Plattform. Methodik & Schwellenwerte siehe Plattform-Disclaimer.*\n")
+    md = "\n".join(lines)
+    return StreamingResponse(iter([md]), media_type="text/markdown; charset=utf-8")
+
 @app.get("/api/report")
 async def generate_report(days: int = 7):
     since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
