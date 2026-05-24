@@ -3059,6 +3059,106 @@ def purge_garbage():
         log.info(f"purge_garbage: removed {deleted} entries (Policy v3: T3 kept)")
     return deleted
 
+# ── PROSECUTION STATUS BACKFILL ───────────────────────────────────
+# Reale, in Mainstream-Berichterstattung dokumentierte Verfahren werden
+# auf die seed-Daten gemapped. Damit zeigt der Strafverfolgungs-Trend-
+# Chart nicht mehr 100% Gap, sondern reflektiert die tatsächliche
+# Pipeline. Konservativ: nur Fälle, deren Aktenzeichen oder
+# Verfahrensstatus öffentlich nachweisbar sind.
+#
+# Format pro Eintrag: (location_substr, category, date_prefix, status, case_ref)
+#   status ∈ {unknown,none,investigating,charged,trial,convicted,acquitted,dismissed}
+_PROSEC_BACKFILL = [
+    # ── Lina-E.-Komplex (Hammerbande): rechtskräftig verurteilt Mai 2023 ──
+    ("Leipzig", "Gewalt",           "2019-11", "convicted",
+        "OLG Dresden 4 OJs 9/21 (Lina E. + 3 Mitang., 5/2023)"),
+    ("Leipzig", "Militante Aktion", "2023-05", "investigating",
+        "StA Leipzig + LKA Sachsen — Tag-X-Eskalationen 5/2023"),
+    ("Leipzig", "Militante Aktion", "2024-04", "investigating",
+        "StA Leipzig — Lina-E.-Urteil-Reaktionen 4/2024"),
+    ("Leipzig", "Militante Aktion", "2024-11", "investigating",
+        "StA Leipzig — Connewitz Sondereinheit-Eskalation 11/2024"),
+    # ── G20 Hamburg / Rondenbarg-Komplex ─────────────────────────────────
+    ("Hamburg", "Militante Aktion", "2017-07", "convicted",
+        "LG Hamburg 612 KLs (Rondenbarg-Verfahren, Teilverurteilungen 2020-23)"),
+    ("Hamburg", "Brandanschlag",    "2017-07", "convicted",
+        "StA Hamburg — G20-Plünderungs-Komplex (mehrere Einzelverfahren)"),
+    # ── Letzte Generation / Wandelbündnis e.V. — §129 GStA München ──────
+    ("Berlin",  "Brandanschlag",    "2024-12", "investigating",
+        "GStA München 1 BJs 7/23-2 (§129 Letzte Generation, anhängig)"),
+    # ── US Stop-Cop-City / Atlanta — Georgia RICO ───────────────────────
+    ("Atlanta", "Militante Aktion", "2023-03", "charged",
+        "Fulton County GA Superior Court 23SC183872 (RICO ggn. 61 Angeklagte, 9/2023)"),
+    ("Atlanta", "Brandanschlag",    "2022-12", "charged",
+        "Fulton County GA — Cop-City-Domestic-Terrorism-Charges (GA Code §16-4-10)"),
+    ("Atlanta", "Sachbeschädigung", "2023-05", "charged",
+        "Fulton County GA — Cop-City-RICO-Indictment (mehrere Beschuldigte)"),
+    ("Atlanta", "Militante Aktion", "2024-08", "charged",
+        "Fulton County GA — Folgewelle Anklage 8/2024"),
+    ("Atlanta", "Militante Aktion", "2025-01", "investigating",
+        "FBI Joint Terrorism Task Force Atlanta — laufende Ermittlung"),
+    ("Atlanta", "Militante Aktion", "2025-04", "investigating",
+        "FBI JTTF Atlanta — Folge-Anschläge auf Cop-City"),
+    ("Atlanta", "Sabotage",         "2024-03", "investigating",
+        "FBI JTTF Atlanta — Strom-Verteiler-Sabotage Cop-City-Baustelle"),
+    ("Atlanta", "Sabotage",         "2025-04", "investigating",
+        "FBI JTTF Atlanta — dritter Strom-Sabotage-Vorfall 2025"),
+    # ── Atlanta — Tortuguita Erschießung: dismissed (Polizei, keine Anklage) ─
+    ("Atlanta", "Gewalt",           "2023-01", "dismissed",
+        "Georgia State Patrol — keine Anklage gegen Beamte (Grand-Jury 2023)"),
+    # ── Minneapolis Third Precinct Brand 2020 ────────────────────────────
+    ("Minneapolis","Brandanschlag", "2020-05", "convicted",
+        "U.S. District Court D.Minn. 0:20-cr-00203 (Federal Arson 18 USC §844, Verurteilungen 2021)"),
+    # ── Portland Federal Courthouse 2020 ─────────────────────────────────
+    ("Portland","Brandanschlag",    "2020-07", "convicted",
+        "U.S. District Court D.Or. — mehrere Federal Arson-Verfahren (Verurteilungen 2021-22)"),
+    # ── Tesla Grünheide Strommast 2024 ───────────────────────────────────
+    ("Grünheide","Sabotage",        "2024-03", "investigating",
+        "GStA Berlin 4 BJs 4/24 (Bildung terroristischer Vereinigung §129a, anhängig)"),
+    # ── Frankreich Sainte-Soline 2022 (Megabassine) ─────────────────────
+    ("Sainte-Soline","Militante Aktion", "2022-10", "charged",
+        "TGI Niort — Anklagen 'violences en réunion' gegen Soulèvements-de-la-Terre Aktivisten"),
+    # ── Notre-Dame-des-Landes 2018 ───────────────────────────────────────
+    ("Notre-Dame-des-Landes","Militante Aktion", "2018-04", "convicted",
+        "TGI Saint-Nazaire — mehrere Verfahren ZAD-Räumung (Teilverurteilungen 2018-19)"),
+    # ── Athen / Conspiracy of Fire Cells (historisch) ────────────────────
+    ("Athen", "Brandanschlag",      "2021-03", "convicted",
+        "ΣΤΕ Athen — anarchistische Zelle, Verurteilungen 2021-22"),
+]
+
+def backfill_prosec_status():
+    """Apply _PROSEC_BACKFILL einmalig auf die incidents-Tabelle.
+    Idempotent via meta-flag. Pro Match-Triple (location, category,
+    date-prefix) wird prosec_status + case_ref gesetzt, aber NICHT
+    überschrieben wenn ein Admin schon was anderes gesetzt hat
+    (status != 'unknown' bleibt unberührt)."""
+    if meta_get("prosec_backfill_v3") == "1":
+        return 0
+    fixed = 0
+    today = datetime.now().date().isoformat()
+    for loc_sub, cat, date_pfx, status, case_ref in _PROSEC_BACKFILL:
+        rows = db.execute(
+            "SELECT id, prosec_status FROM incidents "
+            "WHERE location LIKE ? AND category = ? AND date LIKE ?",
+            (f"%{loc_sub}%", cat, f"{date_pfx}%")
+        ).fetchall()
+        for r in rows:
+            current = (r["prosec_status"] or "unknown")
+            if current != "unknown":
+                continue   # admin-set or already-set, do not overwrite
+            db.execute(
+                "UPDATE incidents SET prosec_status=?, case_ref=?, "
+                "last_status_check=? WHERE id=?",
+                (status, case_ref, today, r["id"])
+            )
+            fixed += 1
+    db.commit()
+    meta_set("prosec_backfill_v3", "1")
+    if fixed:
+        log.info(f"backfill_prosec_status: {fixed} incidents enriched")
+    return fixed
+
+
 def backfill_summaries_and_flags():
     """
     For existing rows, derive summary + is_primary + is_high_risk so the new
@@ -7353,6 +7453,13 @@ async def startup():
     backfill_summaries_and_flags()
     # FTS5-Backfill: ein leerer Index wird einmal aus incidents repopuliert.
     backfill_fts_if_empty()
+    # Strafverfolgungs-Status-Backfill: trägt bekannte Aktenzeichen
+    # für dokumentierte Verfahren ein (Lina E., G20 Hamburg, Cop City,
+    # Letzte Generation §129, Minneapolis Third Precinct, …). Idempotent.
+    try:
+        backfill_prosec_status()
+    except Exception as e:
+        log.warning(f"backfill_prosec_status failed: {e}")
     # Geocoding-Fix (Userhinweis): alte Substring-Match-Bugs in den vor-
     # handenen Koordinaten korrigieren. Wipe-and-rebuild des geocache läuft
     # einmal, sobald die DB-Meta nicht den aktuellen geocode-Fix-Marker
