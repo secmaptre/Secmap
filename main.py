@@ -343,6 +343,26 @@ def require_admin(request: Request):
         raise HTTPException(401, "Unauthorized")
 
 # ── HTTP ──────────────────────────────────────────────────────────
+# ── HTTP Session + Cloudflare-Bypass (cloudscraper) ───────────────
+# Viele Bewegungs-Outlets (barrikade.info insbesondere) liegen hinter
+# Cloudflare's "I'm Under Attack"-Modus oder ähnlichem Anti-Bot-Schutz,
+# der die JS-Challenge erst lösen muss. Cloudscraper macht das per
+# stdlib-only ohne echten Browser. Wir benutzen ihn als Fallback,
+# nicht als Default — für 90% der Quellen reicht requests.Session.
+try:
+    import cloudscraper
+    _scraper = cloudscraper.create_scraper(browser={"browser":"chrome", "platform":"darwin", "mobile":False})
+    _HAS_CLOUDSCRAPER = True
+except Exception as _e:
+    _scraper = None
+    _HAS_CLOUDSCRAPER = False
+
+# Hosts, für die direkt cloudscraper genommen wird (Anti-Bot-Bekannte).
+_CLOUDFLARE_HOSTS = {
+    "barrikade.info",
+    "linksunten.indymedia.org",  # historisch geblockt; cloudscraper hilft
+}
+
 session = requests.Session()
 # Vollständiger Browser-Header-Satz — viele Anti-Bot-Schutze (auch
 # Cloudflare-Lite, Sucuri, Imperva) prüfen auf das Vorhandensein
@@ -388,23 +408,63 @@ def _warmup_host(url):
     except Exception:
         pass
 
+def _fetch_via_cloudscraper(url, timeout=25):
+    """Cloudscraper-Pfad: löst die Cloudflare-JS-Challenge automatisch.
+    Aktiv für Hosts in _CLOUDFLARE_HOSTS oder als Fallback."""
+    if not _HAS_CLOUDSCRAPER:
+        return None
+    try:
+        r = _scraper.get(url, timeout=timeout, allow_redirects=True)
+        r.raise_for_status()
+        return r.text
+    except Exception as e:
+        log.info(f"cloudscraper FAIL {url}: {str(e)[:160]}")
+        return None
+
+def _fetch_via_archive(url, timeout=25):
+    """Letzter Fallback: web.archive.org Snapshot. Wenn die Origin
+    aktiv blockt, finden wir auf archive.org oft den letzten Snapshot.
+    Wir nehmen die /web/2id_/-URL (id_ = original, ohne archive-Toolbar).
+    """
+    arc = f"https://web.archive.org/web/2id_/{url}"
+    try:
+        # Archive.org braucht keinen Browser-Header-Trick
+        r = requests.get(arc, timeout=timeout, allow_redirects=True,
+                         headers={"User-Agent": "Mozilla/5.0 LEX-EUROPE-Mirror/1.0"})
+        if r.status_code == 200 and r.text:
+            log.info(f"archive.org Mirror HIT für {url}")
+            return r.text
+    except Exception as e:
+        log.info(f"archive.org FAIL für {url}: {str(e)[:120]}")
+    return None
+
 def fetch(url, timeout=25):
-    """Robuster Fetcher: Browser-Headers, Per-Host-Warmup, Retry mit
-    expon. Backoff, kontextbezogene Referer-Header für Sub-Pages.
-    Bei 403/429 wird auf zwei alternative UAs (Firefox, mobiles Safari)
-    probiert; bei finalem 403 wird ein 200-Byte-Excerpt der Antwort
-    ins log geschrieben, damit Admins auf Production diagnostizieren
-    können WAS das Anti-Bot-System zurückgibt."""
+    """Robuster Fetcher mit 3-stufigem Fallback:
+      1. requests.Session() mit Browser-Headers + UA-Rotation
+      2. cloudscraper (Cloudflare-JS-Challenge-Solver) für bekannte
+         Anti-Bot-Hosts oder bei finalem 403/429 als Fallback
+      3. web.archive.org als letzter Strohhalm
+    Bei finalem Block wird ein 200-Byte-Excerpt geloggt."""
     _warmup_host(url)
     headers = {}
+    host = ""
     try:
         from urllib.parse import urlparse
         p = urlparse(url)
+        host = p.netloc
         if p.path and p.path != "/":
             headers["Referer"] = f"{p.scheme}://{p.netloc}/"
             headers["Sec-Fetch-Site"] = "same-origin"
     except Exception:
         pass
+
+    # Bekannte Cloudflare-Hosts: direkt cloudscraper, kein Detour.
+    if host in _CLOUDFLARE_HOSTS and _HAS_CLOUDSCRAPER:
+        result = _fetch_via_cloudscraper(url, timeout)
+        if result:
+            return result
+        # Falls cloudscraper auch nicht hilft, fall through zum normalen Pfad.
+
     # UA-Rotation bei 403/429
     UA_ALT = [
         "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0",
@@ -413,29 +473,47 @@ def fetch(url, timeout=25):
         "curl/8.4.0",
     ]
     last_err = None
+    last_status = 0
+    last_excerpt = ""
     for attempt in range(3):
         try:
             r = session.get(url, timeout=timeout, allow_redirects=True, headers=headers)
+            last_status = r.status_code
             if r.status_code in (403, 429):
                 # Probiere mehrere alternative UAs
                 for ua in UA_ALT:
                     r2 = session.get(url, timeout=timeout, allow_redirects=True,
                                      headers={**headers, "User-Agent": ua})
+                    last_status = r2.status_code
                     if r2.status_code not in (403, 429):
                         r = r2
                         break
-            if r.status_code in (403, 429) and attempt == 2:
-                # Diagnose-Logging bei finaler Aufgabe
-                excerpt = (r.text or "")[:200].replace("\n", " ")
-                log.info(f"fetch BLOCKED {url} (HTTP {r.status_code}): {excerpt!r}")
+            last_excerpt = (r.text or "")[:200].replace("\n", " ")
             r.raise_for_status()
             return r.text
         except Exception as e:
             last_err = e
             if attempt == 2:
-                raise
+                break
             time.sleep(2 ** attempt)
-    raise last_err  # unreachable
+
+    # ── Fallback 2: cloudscraper für nicht-CF-Hosts ──────────────
+    if last_status in (403, 429, 503) and _HAS_CLOUDSCRAPER:
+        log.info(f"fetch trying cloudscraper-fallback for {url}")
+        result = _fetch_via_cloudscraper(url, timeout)
+        if result:
+            return result
+
+    # ── Fallback 3: web.archive.org Mirror ───────────────────────
+    if last_status in (403, 429, 404, 503):
+        result = _fetch_via_archive(url, timeout)
+        if result:
+            return result
+
+    if last_status in (403, 429):
+        log.info(f"fetch BLOCKED {url} (HTTP {last_status}): {last_excerpt!r}")
+    if last_err: raise last_err
+    raise requests.HTTPError(f"all fallbacks exhausted (last status {last_status})")
 
 
 def fetch_diagnostic(url: str, timeout: int = 12) -> dict:
@@ -483,6 +561,34 @@ def fetch_diagnostic(url: str, timeout: int = 12) -> dict:
                 return out
         except Exception as e:
             out["error"] = str(e)[:200]
+    # Letzte Versuche: cloudscraper + archive.org
+    if _HAS_CLOUDSCRAPER:
+        out["tried_ua"].append("cloudscraper")
+        try:
+            cs = _scraper.get(url, timeout=timeout, allow_redirects=True)
+            out["status_code"] = cs.status_code
+            out["len"]    = len(cs.content)
+            out["excerpt"]= (cs.text or "")[:400].replace("\r"," ").replace("\n"," ")
+            if 200 <= cs.status_code < 400:
+                out["ok"] = True
+                out["winning_ua"] = "cloudscraper"
+                return out
+        except Exception as e:
+            out["error"] = (out.get("error") or "") + " | cs: " + str(e)[:120]
+    out["tried_ua"].append("archive.org")
+    try:
+        arc = f"https://web.archive.org/web/2id_/{url}"
+        ra = requests.get(arc, timeout=timeout, allow_redirects=True,
+                          headers={"User-Agent":"Mozilla/5.0 LEX-EUROPE-Mirror/1.0"})
+        if 200 <= ra.status_code < 400:
+            out["status_code"] = ra.status_code
+            out["len"]    = len(ra.content)
+            out["excerpt"]= (ra.text or "")[:400].replace("\r"," ").replace("\n"," ")
+            out["ok"] = True
+            out["winning_ua"] = "archive.org"
+            return out
+    except Exception as e:
+        out["error"] = (out.get("error") or "") + " | arc: " + str(e)[:120]
     return out
 
 def get_text(url):
