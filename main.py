@@ -390,29 +390,44 @@ def _warmup_host(url):
 
 def fetch(url, timeout=25):
     """Robuster Fetcher: Browser-Headers, Per-Host-Warmup, Retry mit
-    expon. Backoff, kontextbezogene Referer-Header für Sub-Pages."""
+    expon. Backoff, kontextbezogene Referer-Header für Sub-Pages.
+    Bei 403/429 wird auf zwei alternative UAs (Firefox, mobiles Safari)
+    probiert; bei finalem 403 wird ein 200-Byte-Excerpt der Antwort
+    ins log geschrieben, damit Admins auf Production diagnostizieren
+    können WAS das Anti-Bot-System zurückgibt."""
     _warmup_host(url)
-    # Set Referer für Sub-Pages (Anti-Bot prüft das oft).
     headers = {}
     try:
         from urllib.parse import urlparse
         p = urlparse(url)
         if p.path and p.path != "/":
             headers["Referer"] = f"{p.scheme}://{p.netloc}/"
-            # Sub-Pages bekommen Sec-Fetch-Site=same-origin statt none.
             headers["Sec-Fetch-Site"] = "same-origin"
     except Exception:
         pass
+    # UA-Rotation bei 403/429
+    UA_ALT = [
+        "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0",
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+        "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+        "curl/8.4.0",
+    ]
     last_err = None
     for attempt in range(3):
         try:
             r = session.get(url, timeout=timeout, allow_redirects=True, headers=headers)
-            # 403/429 → einmal mit alternativem UA retry'en, dann aufgeben.
-            if r.status_code in (403, 429) and attempt == 0:
-                alt_ua = ("Mozilla/5.0 (X11; Linux x86_64; rv:128.0) "
-                          "Gecko/20100101 Firefox/128.0")
-                r = session.get(url, timeout=timeout, allow_redirects=True,
-                                headers={**headers, "User-Agent": alt_ua})
+            if r.status_code in (403, 429):
+                # Probiere mehrere alternative UAs
+                for ua in UA_ALT:
+                    r2 = session.get(url, timeout=timeout, allow_redirects=True,
+                                     headers={**headers, "User-Agent": ua})
+                    if r2.status_code not in (403, 429):
+                        r = r2
+                        break
+            if r.status_code in (403, 429) and attempt == 2:
+                # Diagnose-Logging bei finaler Aufgabe
+                excerpt = (r.text or "")[:200].replace("\n", " ")
+                log.info(f"fetch BLOCKED {url} (HTTP {r.status_code}): {excerpt!r}")
             r.raise_for_status()
             return r.text
         except Exception as e:
@@ -421,6 +436,54 @@ def fetch(url, timeout=25):
                 raise
             time.sleep(2 ** attempt)
     raise last_err  # unreachable
+
+
+def fetch_diagnostic(url: str, timeout: int = 12) -> dict:
+    """Diagnostic fetch — never raises, returns structured information about
+    what the upstream actually returned. Genutzt vom Admin-Endpoint, damit
+    Operatoren auf Production sehen warum eine Quelle nicht funktioniert."""
+    _warmup_host(url)
+    out = {"url": url, "ok": False, "status_code": 0, "error": None,
+           "elapsed_ms": 0, "len": 0, "content_type": "", "excerpt": "",
+           "server": "", "via": "", "redirected_to": None,
+           "tried_ua": []}
+    UA_TRY = [
+        ("default-chrome", None),
+        ("firefox-linux",  "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"),
+        ("mobile-safari",  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+                            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"),
+        ("curl",           "curl/8.4.0"),
+        ("googlebot",      "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"),
+    ]
+    import time as _t
+    for ua_label, ua in UA_TRY:
+        out["tried_ua"].append(ua_label)
+        try:
+            t0 = _t.time()
+            headers = {}
+            if ua: headers["User-Agent"] = ua
+            from urllib.parse import urlparse
+            p = urlparse(url)
+            if p.path and p.path != "/":
+                headers["Referer"] = f"{p.scheme}://{p.netloc}/"
+            r = session.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+            out["elapsed_ms"] = int((_t.time() - t0) * 1000)
+            out["status_code"] = r.status_code
+            out["content_type"] = r.headers.get("content-type", "")
+            out["server"] = r.headers.get("server", "")
+            out["via"]    = r.headers.get("via", "")
+            out["len"]    = len(r.content)
+            if str(r.url) != url:
+                out["redirected_to"] = str(r.url)
+            body = (r.text or "")
+            out["excerpt"] = body[:400].replace("\r"," ").replace("\n"," ")
+            if 200 <= r.status_code < 400:
+                out["ok"] = True
+                out["winning_ua"] = ua_label
+                return out
+        except Exception as e:
+            out["error"] = str(e)[:200]
+    return out
 
 def get_text(url):
     try:
@@ -2732,48 +2795,112 @@ def barrikade_latest_id():
         log.warning(f"barrikade_latest_id: {e}")
         return 7600
 
+def _barrikade_discover_urls():
+    """Discover recent barrikade article URLs via multiple strategies.
+    Returns a list of unique URLs sorted newest-first (best-effort).
+    Probiert in dieser Reihenfolge:
+      1. Mehrere RSS-/Atom-Endpoint-Kandidaten (Drupal/WP-Standard-Pfade)
+      2. sitemap.xml und sitemap_index.xml
+      3. Homepage-Scrape mit Regex für /article/<id>
+    Damit ist der Crawler robust gegenüber Anti-Bot-Schutz auf
+    einzelnen Pfaden — wenn EIN Endpoint geht, kommen die Artikel rein.
+    """
+    candidates = [
+        # RSS/Atom Standard-Pfade
+        ("rss-feed",      "https://barrikade.info/feed"),
+        ("rss-feed-slash","https://barrikade.info/feed/"),
+        ("rss-rss",       "https://barrikade.info/rss"),
+        ("rss-rss-xml",   "https://barrikade.info/rss.xml"),
+        ("rss-index",     "https://barrikade.info/index.rss"),
+        ("rss-atom",      "https://barrikade.info/atom"),
+        # Drupal default
+        ("drupal-feeds",  "https://barrikade.info/feeds/all.rss.xml"),
+        # Sitemap discovery
+        ("sitemap",       "https://barrikade.info/sitemap.xml"),
+        ("sitemap-index", "https://barrikade.info/sitemap_index.xml"),
+        # Homepage scrape (always last, fewest signals)
+        ("homepage",      "https://barrikade.info/"),
+    ]
+    found = []  # preserve order
+    seen  = set()
+    for label, u in candidates:
+        try:
+            body = fetch(u, timeout=12)
+            if not body or len(body) < 100:
+                continue
+            # Extract article URLs/IDs via three different parsers depending
+            # on what we got back.
+            urls = []
+            if "<rss" in body[:200].lower() or "<feed" in body[:200].lower() or "<atom" in body[:200].lower():
+                # RSS/Atom — extract <link> tags
+                for m in re.finditer(r"<link[^>]*>([^<]+)</link>", body):
+                    href = m.group(1).strip()
+                    if "/article/" in href or "barrikade.info" in href:
+                        urls.append(href)
+                # Atom-style <link href="…"/>
+                for m in re.finditer(r'<link[^>]+href=["\']([^"\']+)["\']', body):
+                    href = m.group(1).strip()
+                    if "/article/" in href:
+                        urls.append(href)
+            elif "<urlset" in body[:200].lower() or "<sitemapindex" in body[:200].lower():
+                # sitemap.xml
+                for m in re.finditer(r"<loc>([^<]+)</loc>", body):
+                    href = m.group(1).strip()
+                    if "/article/" in href:
+                        urls.append(href)
+            else:
+                # HTML scrape
+                for m in re.finditer(r"/article/(\d+)", body):
+                    urls.append(f"https://barrikade.info/article/{m.group(1)}")
+            log.info(f"barrikade discover [{label}] HTTP-200, parsed {len(urls)} candidate URLs")
+            for u in urls:
+                if u not in seen:
+                    seen.add(u); found.append(u)
+            # If we have a healthy number, stop probing further endpoints.
+            if len(found) >= 30:
+                break
+        except Exception as e:
+            log.info(f"barrikade discover [{label}] failed: {str(e)[:120]}")
+    return found
+
 def crawl_barrikade_range(start_id, stop_id):
     """Crawl barrikade article IDs from start_id down to stop_id.
 
-    Resilience-Härtung (User-Hinweis: Crawler funktioniert nicht):
-      - Erst RSS-Feed crawlen, damit zumindest die letzten ~20 Artikel
-        ohne ID-Sweeping reinkommen (RSS umgeht 403-Probleme bei
-        einzelnen Article-IDs).
-      - Bei wiederholten 403-Antworten Backoff statt sofortigem Abbruch.
-      - "miss"-Logik trennt 404 (Article existiert nicht) von 403/429
-        (Anti-Bot) — 403 erhöht den Backoff aber NICHT die miss-Quote.
+    Resilience v3 (User-Hinweis: Crawler funktioniert immer noch nicht):
+      1. Versuche zuerst Multi-URL-Discovery (RSS/Atom/Sitemap/Homepage,
+         insgesamt 10 verschiedene Pfade) — irgendeiner davon wird
+         funktionieren.
+      2. Falls Discovery URLs liefert: parse jeden, klassifiziere, speichere.
+      3. Falls Discovery komplett scheitert: ID-Sweep mit aggressivem
+         Backoff bei 403/429.
     """
     inserted = 0
 
-    # 1) Quick win: RSS-Feed durchgehen — funktioniert oft auch wenn
-    # einzelne /article/<id>-Seiten 403 geben.
-    try:
-        rss_xml = fetch("https://barrikade.info/feed")
-        if rss_xml and len(rss_xml) > 200:
-            items = parse_rss(rss_xml)
-            log.info(f"barrikade RSS: {len(items)} items")
-            for it in items:
-                link  = it.get("link") or ""
-                title = it.get("title") or ""
-                desc  = it.get("desc")  or ""
-                if not link: continue
-                h = mk_hash(link, title + desc)
+    # 1) Multi-URL-Discovery (RSS, Atom, Sitemap, Homepage-Scrape)
+    discovered = _barrikade_discover_urls()
+    if discovered:
+        log.info(f"barrikade: {len(discovered)} URLs from discovery — processing")
+        for link in discovered[:50]:  # cap to avoid runaway
+            try:
+                h = mk_hash(link, link)
                 if is_seen(h): continue
-                # Versuche full text, fallback auf title+desc.
                 full = get_text(link)
-                text = full if len(full) >= 100 else f"{title}. {desc}"
-                if len(text) < 60: continue
-                if not any(kw in text.lower() for kw in BARRIKADE_RELEVANCE_KWS):
+                if len(full) < 60: continue
+                if not any(kw in full.lower() for kw in BARRIKADE_RELEVANCE_KWS):
                     continue
-                if is_false_positive(text): continue
-                ai = smart_classify(text)
+                if is_false_positive(full): continue
+                ai = smart_classify(full)
                 if ai:
-                    if save_incident(ai, text, "barrikade.info", link,
-                                     date_from_url(link)):
+                    if save_incident(ai, full, "barrikade.info", link, date_from_url(link)):
                         inserted += 1
                 time.sleep(0.4)
-    except Exception as e:
-        log.info(f"barrikade RSS fetch failed (will fall back to ID sweep): {e}")
+            except Exception as e:
+                log.info(f"barrikade link={link}: {str(e)[:100]}")
+        if inserted > 0:
+            log.info(f"barrikade discovery path saved {inserted} new incidents")
+            # Wenn Discovery erfolgreich war, ID-Sweep ist optional —
+            # er kostet API-Calls und der RSS hat ja die neuesten Artikel.
+            return inserted
 
     # 2) ID-Sweep (Historie + neueste IDs die noch nicht im RSS waren).
     misses = 0
@@ -5763,6 +5890,85 @@ async def admin_source_health_reset(source: str, _=Depends(require_admin)):
     )
     db.commit()
     return JSONResponse({"ok": True, "source": source})
+
+
+# ── CRAWLER DIAGNOSTIC ───────────────────────────────────────────
+@app.get("/admin/api/crawler/probe")
+async def admin_crawler_probe(url: str, _=Depends(require_admin)):
+    """Diagnose-Endpoint: probiert eine URL mit verschiedenen UAs durch
+    und gibt zurück was der Upstream konkret antwortet. Hilft Admins
+    auf Production zu sehen, warum eine Quelle nicht funktioniert
+    (Anti-Bot, 404, Cloudflare-Challenge, …)."""
+    if not url.startswith("http"):
+        return JSONResponse({"ok": False, "message": "url muss http(s) sein"}, status_code=400)
+    return JSONResponse(fetch_diagnostic(url))
+
+
+@app.get("/admin/api/crawler/barrikade-discover")
+async def admin_crawler_barrikade_discover(_=Depends(require_admin)):
+    """Live-Test der barrikade.info Discovery — gibt zurück, welche der
+    10 Discovery-Pfade funktionieren und wieviele URLs jeder liefert.
+    Operatoren sehen sofort, ob Anti-Bot greift oder welche Endpoints
+    Daten liefern."""
+    out = {"endpoints": [], "summary": {}}
+    candidates = [
+        ("rss-feed",      "https://barrikade.info/feed"),
+        ("rss-feed-slash","https://barrikade.info/feed/"),
+        ("rss-rss",       "https://barrikade.info/rss"),
+        ("rss-rss-xml",   "https://barrikade.info/rss.xml"),
+        ("rss-index",     "https://barrikade.info/index.rss"),
+        ("rss-atom",      "https://barrikade.info/atom"),
+        ("drupal-feeds",  "https://barrikade.info/feeds/all.rss.xml"),
+        ("sitemap",       "https://barrikade.info/sitemap.xml"),
+        ("sitemap-index", "https://barrikade.info/sitemap_index.xml"),
+        ("homepage",      "https://barrikade.info/"),
+    ]
+    working = 0
+    for label, u in candidates:
+        diag = fetch_diagnostic(u, timeout=10)
+        n_urls = 0
+        body_marker = ""
+        if diag.get("ok"):
+            working += 1
+            excerpt = diag.get("excerpt", "")
+            if "<rss" in excerpt[:200].lower():     body_marker = "RSS"
+            elif "<feed" in excerpt[:200].lower():  body_marker = "Atom"
+            elif "<urlset" in excerpt[:200].lower():body_marker = "Sitemap"
+            elif "<html" in excerpt[:200].lower():  body_marker = "HTML"
+            else: body_marker = "?"
+            # quick URL-count heuristic
+            import re as _re
+            n_urls = len(_re.findall(r"/article/\d+", diag.get("excerpt","")))
+        out["endpoints"].append({
+            "label":       label,
+            "url":         u,
+            "ok":          diag.get("ok"),
+            "status_code": diag.get("status_code"),
+            "content_type":diag.get("content_type"),
+            "len":         diag.get("len"),
+            "elapsed_ms":  diag.get("elapsed_ms"),
+            "winning_ua":  diag.get("winning_ua"),
+            "body_marker": body_marker,
+            "url_hits_excerpt": n_urls,
+            "error":       diag.get("error"),
+        })
+    out["summary"] = {"working": working, "total": len(candidates)}
+    return JSONResponse(out)
+
+
+@app.post("/admin/api/crawler/barrikade-run")
+async def admin_crawler_barrikade_run(bg: BackgroundTasks, _=Depends(require_admin)):
+    """Triggert einen Discovery-Run gegen barrikade.info im Hintergrund.
+    Ergebnis ist später in /admin/api/status (running flag) bzw. der
+    incidents-DB sichtbar."""
+    def _run():
+        try:
+            n = crawl_barrikade_range(barrikade_latest_id(), barrikade_latest_id() - 50)
+            log.info(f"manual barrikade run: {n} new incidents")
+        except Exception as e:
+            log.warning(f"manual barrikade run failed: {e}")
+    bg.add_task(_run)
+    return JSONResponse({"ok": True, "status": "Discovery-Run gestartet"})
 
 @app.post("/admin/api/grok-test")
 async def admin_grok(_=Depends(require_admin)):
