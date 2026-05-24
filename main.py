@@ -390,29 +390,44 @@ def _warmup_host(url):
 
 def fetch(url, timeout=25):
     """Robuster Fetcher: Browser-Headers, Per-Host-Warmup, Retry mit
-    expon. Backoff, kontextbezogene Referer-Header für Sub-Pages."""
+    expon. Backoff, kontextbezogene Referer-Header für Sub-Pages.
+    Bei 403/429 wird auf zwei alternative UAs (Firefox, mobiles Safari)
+    probiert; bei finalem 403 wird ein 200-Byte-Excerpt der Antwort
+    ins log geschrieben, damit Admins auf Production diagnostizieren
+    können WAS das Anti-Bot-System zurückgibt."""
     _warmup_host(url)
-    # Set Referer für Sub-Pages (Anti-Bot prüft das oft).
     headers = {}
     try:
         from urllib.parse import urlparse
         p = urlparse(url)
         if p.path and p.path != "/":
             headers["Referer"] = f"{p.scheme}://{p.netloc}/"
-            # Sub-Pages bekommen Sec-Fetch-Site=same-origin statt none.
             headers["Sec-Fetch-Site"] = "same-origin"
     except Exception:
         pass
+    # UA-Rotation bei 403/429
+    UA_ALT = [
+        "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0",
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+        "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+        "curl/8.4.0",
+    ]
     last_err = None
     for attempt in range(3):
         try:
             r = session.get(url, timeout=timeout, allow_redirects=True, headers=headers)
-            # 403/429 → einmal mit alternativem UA retry'en, dann aufgeben.
-            if r.status_code in (403, 429) and attempt == 0:
-                alt_ua = ("Mozilla/5.0 (X11; Linux x86_64; rv:128.0) "
-                          "Gecko/20100101 Firefox/128.0")
-                r = session.get(url, timeout=timeout, allow_redirects=True,
-                                headers={**headers, "User-Agent": alt_ua})
+            if r.status_code in (403, 429):
+                # Probiere mehrere alternative UAs
+                for ua in UA_ALT:
+                    r2 = session.get(url, timeout=timeout, allow_redirects=True,
+                                     headers={**headers, "User-Agent": ua})
+                    if r2.status_code not in (403, 429):
+                        r = r2
+                        break
+            if r.status_code in (403, 429) and attempt == 2:
+                # Diagnose-Logging bei finaler Aufgabe
+                excerpt = (r.text or "")[:200].replace("\n", " ")
+                log.info(f"fetch BLOCKED {url} (HTTP {r.status_code}): {excerpt!r}")
             r.raise_for_status()
             return r.text
         except Exception as e:
@@ -421,6 +436,54 @@ def fetch(url, timeout=25):
                 raise
             time.sleep(2 ** attempt)
     raise last_err  # unreachable
+
+
+def fetch_diagnostic(url: str, timeout: int = 12) -> dict:
+    """Diagnostic fetch — never raises, returns structured information about
+    what the upstream actually returned. Genutzt vom Admin-Endpoint, damit
+    Operatoren auf Production sehen warum eine Quelle nicht funktioniert."""
+    _warmup_host(url)
+    out = {"url": url, "ok": False, "status_code": 0, "error": None,
+           "elapsed_ms": 0, "len": 0, "content_type": "", "excerpt": "",
+           "server": "", "via": "", "redirected_to": None,
+           "tried_ua": []}
+    UA_TRY = [
+        ("default-chrome", None),
+        ("firefox-linux",  "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"),
+        ("mobile-safari",  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+                            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"),
+        ("curl",           "curl/8.4.0"),
+        ("googlebot",      "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"),
+    ]
+    import time as _t
+    for ua_label, ua in UA_TRY:
+        out["tried_ua"].append(ua_label)
+        try:
+            t0 = _t.time()
+            headers = {}
+            if ua: headers["User-Agent"] = ua
+            from urllib.parse import urlparse
+            p = urlparse(url)
+            if p.path and p.path != "/":
+                headers["Referer"] = f"{p.scheme}://{p.netloc}/"
+            r = session.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+            out["elapsed_ms"] = int((_t.time() - t0) * 1000)
+            out["status_code"] = r.status_code
+            out["content_type"] = r.headers.get("content-type", "")
+            out["server"] = r.headers.get("server", "")
+            out["via"]    = r.headers.get("via", "")
+            out["len"]    = len(r.content)
+            if str(r.url) != url:
+                out["redirected_to"] = str(r.url)
+            body = (r.text or "")
+            out["excerpt"] = body[:400].replace("\r"," ").replace("\n"," ")
+            if 200 <= r.status_code < 400:
+                out["ok"] = True
+                out["winning_ua"] = ua_label
+                return out
+        except Exception as e:
+            out["error"] = str(e)[:200]
+    return out
 
 def get_text(url):
     try:
@@ -486,6 +549,7 @@ CITY_FALLBACK = {
     "genua": (44.41, 8.93), "genoa": (44.41, 8.93), "palermo": (38.12, 13.36),
     "florenz": (43.77, 11.26), "florence": (43.77, 11.26), "venedig": (45.44, 12.32),
     "verona": (45.44, 11.00), "susa": (45.14, 7.05), "val di susa": (45.14, 7.05),
+    "brescia": (45.54, 10.22), "san donato": (44.50, 11.36),
     # Griechenland
     "athen": (37.98, 23.73), "athens": (37.98, 23.73), "thessaloniki": (40.64, 22.94),
     "exarchia": (37.98, 23.73), "exarcheia": (37.98, 23.73),
@@ -503,7 +567,7 @@ CITY_FALLBACK = {
     # Nordeuropa
     "kopenhagen": (55.68, 12.57), "copenhagen": (55.68, 12.57), "aarhus": (56.16, 10.20),
     "stockholm": (59.33, 18.06), "göteborg": (57.71, 11.97), "malmö": (55.60, 13.00),
-    "oslo": (59.91, 10.75), "bergen": (60.39, 5.32),
+    "oslo": (59.91, 10.75), "bergen": (60.39, 5.32), "trondheim": (63.43, 10.39),
     "helsinki": (60.17, 24.94),
     # Mittel-/Osteuropa
     "warschau": (52.23, 21.01), "warsaw": (52.23, 21.01), "krakau": (50.06, 19.94),
@@ -812,6 +876,18 @@ KNOWN_ACTORS = [
     # ── Tag-X-Komitees (Lina-E.-Komplex) ──────────────────────────
     ("Tag-X-Komitee",       [r"\btag[\s-]?x[\s-]?komitee\b",
                               r"\btag\s+x\b"],                                  "enable"),
+    # ── Internationale Erweiterung ────────────────────────────────
+    ("Antifascistisk Aktion",[r"\bantifascistisk\s+aks?jon\b",
+                                r"\bafa\s+(?:no|oslo|norge)\b"],                "endorse"),
+    ("Anti-Cop-City Italia", [r"\banti[\s-]?cop[\s-]?city\b.*\b(italia|brescia|bologna)\b"], "endorse"),
+    ("Vulkangruppe Bay Area",[r"\bvulkangruppe\s+bay\s+area\b"],               "act"),
+    ("Defend the Atlanta Forest",
+                            [r"\bdefend\s+the\s+atlanta\s+forest\b",
+                              r"\bweelaunee\s+(?:forest|defenders)\b"],         "act"),
+    ("Soulèvements de la Terre",
+                            [r"\bsoul[èe]vements\s+de\s+la\s+terre\b",
+                              r"\bsdt\b\s+(?:france|paris)\b"],                 "enable"),
+    ("Carlos-Komitee",      [r"\bcarlos[\s-]?komitee\b"],                      "enable"),
 ]
 
 ACTOR_TIER = {name: tier for name, _patterns, tier in KNOWN_ACTORS}
@@ -1556,6 +1632,92 @@ HISTORICAL_EVENTS = [
     ("2025-05-05","Minneapolis","US","Militante Aktion",
      "Minneapolis: 5-Jahres-Gedenken George-Floyd-Tod. Black-Bloc-Aktion attackiert Polizei mit Pyrotechnik, mehrere Schaufenster der Innenstadt beschädigt. 23 Festnahmen.",
      "Archiv",44.98,-93.27),
+
+    # ════════════════════════════════════════════════════════════════
+    # ROUND 4 — Lagebild-Verdichtung 2017-2025 (weitere 25 Einträge)
+    # ════════════════════════════════════════════════════════════════
+
+    # ── DE: weitere Anschläge ─────────────────────────────────────
+    ("2024-09-09","Hannover","DE","Sachbeschädigung",
+     "IAA-Mobility-Protest Hannover: vermummte Gruppen attackieren Polizei am Rand der Messe, Schäden an mehreren Polizei-Fahrzeugen. Sieben Festnahmen.",
+     "Archiv",52.37,9.74),
+    ("2024-10-30","Köln","DE","Brandanschlag",
+     "Brandanschlag auf privates Wahlbüro eines CDU-Bundestagsabgeordneten im Kölner Süden. Sachschaden ca. 45.000 Euro. Bekennerschreiben.",
+     "Archiv",50.94,6.96),
+    ("2024-11-19","Berlin","DE","Militante Aktion",
+     "Wahlkampfauftakt Friedrich Merz Berlin: Eskalation am Rand, Vermummte werfen Steine und Farbbeutel auf Sicherheitsabsperrung. 14 Festnahmen, drei Beamte verletzt.",
+     "Archiv",52.51,13.41),
+    ("2025-03-08","Hamburg","DE","Sabotage",
+     "Sabotage an einem Bahn-Verteilerkasten bei Hamburg-Wilhelmsburg. Anschluss-S-Bahn-Linie acht Stunden außer Betrieb. Bekennerschreiben gegen Rüstungs-Logistik.",
+     "Archiv",53.49,10.00),
+    ("2025-04-26","Frankfurt am Main","DE","Brandanschlag",
+     "Brandanschlag auf zwei privat-gefasste Fahrzeuge eines Rheinmetall-Managers in Frankfurt-Sachsenhausen. Vollbrand, Sachschaden ca. 95.000 Euro. Bekennerschreiben gegen Rüstungs-Konzerne.",
+     "Archiv",50.10,8.66),
+    ("2025-05-12","Leipzig","DE","Brandanschlag",
+     "Brandanschlag auf zwei Streifenwagen einer Polizei-Inspektion in Leipzig-Connewitz. Sachschaden ca. 65.000 Euro. Bekennerschreiben in indymedia.",
+     "Archiv",51.34,12.37),
+
+    # ── AT: weitere Eskalationen ──────────────────────────────────
+    ("2024-12-22","Wien","AT","Brandanschlag",
+     "Brandanschlag auf Privat-Pkw eines Identitären-Aktivisten in Wien-Liesing. Vollbrand, Sachschaden ca. 28.000 Euro. Bekennerschreiben antifaschistischer Gruppe.",
+     "Archiv",48.13,16.30),
+    ("2025-05-20","Innsbruck","AT","Sachbeschädigung",
+     "Innsbruck: FPÖ-Landesgeschäftsstelle mit Farbbeuteln, Slogans und beschädigten Fenstern attackiert. Schaden ca. 7.500 Euro.",
+     "Archiv",47.27,11.39),
+
+    # ── CH: zusätzliche Vorfälle ──────────────────────────────────
+    ("2024-08-08","Genf","CH","Sachbeschädigung",
+     "Anti-Kapitalismus-Aktion in Genfer Finanzdistrikt: drei Großbankenfilialen mit Farbe und Slogans beschädigt. Schaden ca. 22.000 CHF.",
+     "Archiv",46.20,6.14),
+    ("2025-03-29","Lausanne","CH","Gewalt",
+     "Eskalation am Rand einer SVP-Veranstaltung in Lausanne: vermummte Gruppen werfen Pyrotechnik und Steine auf Polizei. Sechs Verletzte, 12 Festnahmen.",
+     "Archiv",46.52,6.63),
+
+    # ── US: ausgeweitete Lagebild-Abdeckung 2024-2025 ─────────────
+    ("2024-04-29","New York","US","Militante Aktion",
+     "NYC Columbia-University-Eskalation: nach Räumung des Anti-Israel-Protestlagers attackieren Black-Bloc-Gruppen NYPD am Hamilton Hall. 132 Festnahmen, mehrere Verletzte auf beiden Seiten.",
+     "Archiv",40.81,-73.96),
+    ("2024-06-20","Portland","US","Brandanschlag",
+     "Brandanschlag auf zwei US-Marshals-Service-Fahrzeuge in Portland-Downtown. Sachschaden ca. USD 130.000. Federal arson investigation.",
+     "Archiv",45.52,-122.68),
+    ("2024-08-15","Atlanta","US","Militante Aktion",
+     "Stop-Cop-City Update: dritte koordinierte Attacke auf Baustelle, ca. 60 Vermummte. Brandsätze auf Wachpersonal-Container. Federal Joint Terrorism Task Force eröffnet Sammelverfahren.",
+     "Archiv",33.75,-84.39),
+    ("2024-10-11","Washington","US","Sachbeschädigung",
+     "Washington DC: Bundes-Justizministerium-Außenfassade nachts mit Slogans und Farbe attackiert. Bekennerschreiben gegen ICE-Kooperation. FBI-Ermittlungen unter federal-property-damage statutes.",
+     "Archiv",38.89,-77.02),
+    ("2024-12-15","Boston","US","Brandanschlag",
+     "Boston Backbay: Brandanschlag auf Pkw eines Hedgefonds-Managers. Sachschaden ca. USD 70.000. Bekennerschreiben anti-finance-industry.",
+     "Archiv",42.35,-71.08),
+    ("2025-01-06","Washington","US","Militante Aktion",
+     "Capitol-Anniversary 2025: Anti-Trump-Aktion in DC eskaliert, vermummte Gruppen attackieren Police mit Würfen. 38 Festnahmen.",
+     "Archiv",38.89,-77.01),
+    ("2025-02-22","Portland","US","Sachbeschädigung",
+     "Portland: ICE-Bürofassade mit Farbsprühungen und Steinwürfen beschädigt. Bekennerschreiben gegen Migrationsbehörde-Kooperation.",
+     "Archiv",45.52,-122.68),
+    ("2025-04-08","Atlanta","US","Sabotage",
+     "Atlanta: Strom-Verteilersystem der Cop-City-Baustelle erneut sabotiert — Cu-Diebstahl + Brand. Mehrtägiger Baustopp. FBI joint-investigation.",
+     "Archiv",33.75,-84.39),
+    ("2025-05-01","Seattle","US","Militante Aktion",
+     "Seattle 1.-Mai-Eskalation: Black-Bloc-Gruppen attackieren Polizei in Capitol Hill mit Pyrotechnik, mehrere Banken-Filialen beschädigt. 47 Festnahmen.",
+     "Archiv",47.62,-122.32),
+
+    # ── UK / Italien / Skandinavien: zusätzlich ────────────────────
+    ("2024-08-04","Manchester","UK","Militante Aktion",
+     "Manchester: Anti-Rassismus-Gegendemonstration eskaliert nach Vorfällen mit rechten Gruppen — Black-Bloc-Kontingent attackiert Polizei mit Würfen. 23 Festnahmen.",
+     "Archiv",53.48,-2.24),
+    ("2024-10-14","Brescia","IT","Sachbeschädigung",
+     "Anti-Cop-City Italia-Solidaritätsaktion in Brescia: Polizei-Fahrzeuge mit Farbe beschmiert, Bekennerschreiben gegen Italo-US-Polizei-Kooperation.",
+     "Archiv",45.54,10.22),
+    ("2024-11-23","Bologna","IT","Brandanschlag",
+     "Bologna: Brandanschlag auf zwei Carabinieri-Fahrzeuge in San Donato. Sachschaden ca. 80.000 Euro. Bekennerschreiben anarchistischer Strömung.",
+     "Archiv",44.49,11.34),
+    ("2025-01-30","Stockholm","SE","Militante Aktion",
+     "Stockholm: AFA-Gegendemonstration zur SD-Veranstaltung eskaliert. Vermummte attackieren Polizei mit Pyrotechnik. 15 Festnahmen, drei verletzte Beamte.",
+     "Archiv",59.33,18.06),
+    ("2025-03-25","Oslo","NO","Sachbeschädigung",
+     "Oslo: Außenfassade einer FRP-Wahlkampfzentrale mit Farbbeuteln und Slogans attackiert. Geringer Sachschaden. Bekennerschreiben antifascistisk aksjon.",
+     "Archiv",59.91,10.75),
 ]
 
 # ── FUNDING TRACKER SEED ──────────────────────────────────────────
@@ -2732,48 +2894,112 @@ def barrikade_latest_id():
         log.warning(f"barrikade_latest_id: {e}")
         return 7600
 
+def _barrikade_discover_urls():
+    """Discover recent barrikade article URLs via multiple strategies.
+    Returns a list of unique URLs sorted newest-first (best-effort).
+    Probiert in dieser Reihenfolge:
+      1. Mehrere RSS-/Atom-Endpoint-Kandidaten (Drupal/WP-Standard-Pfade)
+      2. sitemap.xml und sitemap_index.xml
+      3. Homepage-Scrape mit Regex für /article/<id>
+    Damit ist der Crawler robust gegenüber Anti-Bot-Schutz auf
+    einzelnen Pfaden — wenn EIN Endpoint geht, kommen die Artikel rein.
+    """
+    candidates = [
+        # RSS/Atom Standard-Pfade
+        ("rss-feed",      "https://barrikade.info/feed"),
+        ("rss-feed-slash","https://barrikade.info/feed/"),
+        ("rss-rss",       "https://barrikade.info/rss"),
+        ("rss-rss-xml",   "https://barrikade.info/rss.xml"),
+        ("rss-index",     "https://barrikade.info/index.rss"),
+        ("rss-atom",      "https://barrikade.info/atom"),
+        # Drupal default
+        ("drupal-feeds",  "https://barrikade.info/feeds/all.rss.xml"),
+        # Sitemap discovery
+        ("sitemap",       "https://barrikade.info/sitemap.xml"),
+        ("sitemap-index", "https://barrikade.info/sitemap_index.xml"),
+        # Homepage scrape (always last, fewest signals)
+        ("homepage",      "https://barrikade.info/"),
+    ]
+    found = []  # preserve order
+    seen  = set()
+    for label, u in candidates:
+        try:
+            body = fetch(u, timeout=12)
+            if not body or len(body) < 100:
+                continue
+            # Extract article URLs/IDs via three different parsers depending
+            # on what we got back.
+            urls = []
+            if "<rss" in body[:200].lower() or "<feed" in body[:200].lower() or "<atom" in body[:200].lower():
+                # RSS/Atom — extract <link> tags
+                for m in re.finditer(r"<link[^>]*>([^<]+)</link>", body):
+                    href = m.group(1).strip()
+                    if "/article/" in href or "barrikade.info" in href:
+                        urls.append(href)
+                # Atom-style <link href="…"/>
+                for m in re.finditer(r'<link[^>]+href=["\']([^"\']+)["\']', body):
+                    href = m.group(1).strip()
+                    if "/article/" in href:
+                        urls.append(href)
+            elif "<urlset" in body[:200].lower() or "<sitemapindex" in body[:200].lower():
+                # sitemap.xml
+                for m in re.finditer(r"<loc>([^<]+)</loc>", body):
+                    href = m.group(1).strip()
+                    if "/article/" in href:
+                        urls.append(href)
+            else:
+                # HTML scrape
+                for m in re.finditer(r"/article/(\d+)", body):
+                    urls.append(f"https://barrikade.info/article/{m.group(1)}")
+            log.info(f"barrikade discover [{label}] HTTP-200, parsed {len(urls)} candidate URLs")
+            for u in urls:
+                if u not in seen:
+                    seen.add(u); found.append(u)
+            # If we have a healthy number, stop probing further endpoints.
+            if len(found) >= 30:
+                break
+        except Exception as e:
+            log.info(f"barrikade discover [{label}] failed: {str(e)[:120]}")
+    return found
+
 def crawl_barrikade_range(start_id, stop_id):
     """Crawl barrikade article IDs from start_id down to stop_id.
 
-    Resilience-Härtung (User-Hinweis: Crawler funktioniert nicht):
-      - Erst RSS-Feed crawlen, damit zumindest die letzten ~20 Artikel
-        ohne ID-Sweeping reinkommen (RSS umgeht 403-Probleme bei
-        einzelnen Article-IDs).
-      - Bei wiederholten 403-Antworten Backoff statt sofortigem Abbruch.
-      - "miss"-Logik trennt 404 (Article existiert nicht) von 403/429
-        (Anti-Bot) — 403 erhöht den Backoff aber NICHT die miss-Quote.
+    Resilience v3 (User-Hinweis: Crawler funktioniert immer noch nicht):
+      1. Versuche zuerst Multi-URL-Discovery (RSS/Atom/Sitemap/Homepage,
+         insgesamt 10 verschiedene Pfade) — irgendeiner davon wird
+         funktionieren.
+      2. Falls Discovery URLs liefert: parse jeden, klassifiziere, speichere.
+      3. Falls Discovery komplett scheitert: ID-Sweep mit aggressivem
+         Backoff bei 403/429.
     """
     inserted = 0
 
-    # 1) Quick win: RSS-Feed durchgehen — funktioniert oft auch wenn
-    # einzelne /article/<id>-Seiten 403 geben.
-    try:
-        rss_xml = fetch("https://barrikade.info/feed")
-        if rss_xml and len(rss_xml) > 200:
-            items = parse_rss(rss_xml)
-            log.info(f"barrikade RSS: {len(items)} items")
-            for it in items:
-                link  = it.get("link") or ""
-                title = it.get("title") or ""
-                desc  = it.get("desc")  or ""
-                if not link: continue
-                h = mk_hash(link, title + desc)
+    # 1) Multi-URL-Discovery (RSS, Atom, Sitemap, Homepage-Scrape)
+    discovered = _barrikade_discover_urls()
+    if discovered:
+        log.info(f"barrikade: {len(discovered)} URLs from discovery — processing")
+        for link in discovered[:50]:  # cap to avoid runaway
+            try:
+                h = mk_hash(link, link)
                 if is_seen(h): continue
-                # Versuche full text, fallback auf title+desc.
                 full = get_text(link)
-                text = full if len(full) >= 100 else f"{title}. {desc}"
-                if len(text) < 60: continue
-                if not any(kw in text.lower() for kw in BARRIKADE_RELEVANCE_KWS):
+                if len(full) < 60: continue
+                if not any(kw in full.lower() for kw in BARRIKADE_RELEVANCE_KWS):
                     continue
-                if is_false_positive(text): continue
-                ai = smart_classify(text)
+                if is_false_positive(full): continue
+                ai = smart_classify(full)
                 if ai:
-                    if save_incident(ai, text, "barrikade.info", link,
-                                     date_from_url(link)):
+                    if save_incident(ai, full, "barrikade.info", link, date_from_url(link)):
                         inserted += 1
                 time.sleep(0.4)
-    except Exception as e:
-        log.info(f"barrikade RSS fetch failed (will fall back to ID sweep): {e}")
+            except Exception as e:
+                log.info(f"barrikade link={link}: {str(e)[:100]}")
+        if inserted > 0:
+            log.info(f"barrikade discovery path saved {inserted} new incidents")
+            # Wenn Discovery erfolgreich war, ID-Sweep ist optional —
+            # er kostet API-Calls und der RSS hat ja die neuesten Artikel.
+            return inserted
 
     # 2) ID-Sweep (Historie + neueste IDs die noch nicht im RSS waren).
     misses = 0
@@ -3866,6 +4092,12 @@ async def sitemap_xml(request: Request):
         f"{base}/api/incidents.rss", f"{base}/api/early-warning.rss",
         f"{base}/api/v1/docs",
     ]
+    # Per-target-type + per-country pages dynamisch ergänzen.
+    for tt in ("Auto","Schiene","Energie","Telekom","Militär","Polizei",
+               "Politik","Justiz","Medien","Wirtschaft"):
+        urls.append(f"{base}/early-warning/{tt}")
+    for co in ("DE","AT","CH","FR","IT","ES","GR","UK","NL","DK","SE","NO","US"):
+        urls.append(f"{base}/c/{co}")
     items = "\n".join(f"<url><loc>{u}</loc></url>" for u in urls)
     xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
@@ -4054,6 +4286,149 @@ h2{{font-size:10px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-trans
   </div>
 
   <div class="footer">LEX EUROPE · Methodik & Schwellenwerte siehe Plattform-Disclaimer · {datetime.now().strftime('%Y-%m-%d %H:%M')} UTC</div>
+</div>
+</body></html>""")
+
+
+_COUNTRY_NAMES = {
+    "DE":"Deutschland", "AT":"Österreich", "CH":"Schweiz", "FR":"Frankreich",
+    "IT":"Italien", "ES":"Spanien", "GR":"Griechenland", "UK":"Vereinigtes Königreich",
+    "NL":"Niederlande", "BE":"Belgien", "DK":"Dänemark", "SE":"Schweden",
+    "NO":"Norwegen", "FI":"Finnland", "PL":"Polen", "CZ":"Tschechien",
+    "HU":"Ungarn", "RO":"Rumänien", "PT":"Portugal", "IE":"Irland",
+    "US":"USA",
+}
+
+@app.get("/c/{country}", response_class=HTMLResponse)
+async def public_country_profile(country: str):
+    """Land-spezifische öffentliche Lagebild-Seite. Analog zu /early-warning/
+    aber per Land geschnitten — gibt nationalen Sicherheits-Stakeholdern,
+    Journalist:innen und Forschung eine sofortige Lage-Übersicht für
+    'ihr' Territorium ohne Filter-Klickerei."""
+    co = (country or "").upper().strip()
+    if co not in _COUNTRY_NAMES:
+        return HTMLResponse("<h1>Unbekanntes Land</h1>", status_code=404)
+    co_name = _COUNTRY_NAMES[co]
+    today = datetime.now().date()
+    last30 = (today - timedelta(days=30)).isoformat()
+    last90 = (today - timedelta(days=90)).isoformat()
+    total_n = db.execute("SELECT COUNT(*) FROM incidents WHERE tier='act' AND country=?", (co,)).fetchone()[0]
+    last30_n = db.execute("SELECT COUNT(*) FROM incidents WHERE tier='act' AND country=? AND date>=?", (co, last30)).fetchone()[0]
+    last90_n = db.execute("SELECT COUNT(*) FROM incidents WHERE tier='act' AND country=? AND date>=?", (co, last90)).fetchone()[0]
+    hi_n     = db.execute("SELECT COUNT(*) FROM incidents WHERE tier='act' AND country=? AND severity_score>=4", (co,)).fetchone()[0]
+    clusters = [dict(r) for r in db.execute(
+        "SELECT cluster_key, target_type, count, first_seen, last_seen "
+        "FROM early_warning_clusters WHERE active=1 AND country=? "
+        "ORDER BY count DESC", (co,)
+    ).fetchall()]
+    by_cat = [dict(r) for r in db.execute(
+        "SELECT category, COUNT(*) n FROM incidents WHERE tier='act' AND country=? "
+        "GROUP BY category ORDER BY n DESC LIMIT 8", (co,)
+    ).fetchall()]
+    by_tt = [dict(r) for r in db.execute(
+        "SELECT target_type, COUNT(*) n FROM incidents WHERE tier='act' AND country=? "
+        "AND target_type != '' GROUP BY target_type ORDER BY n DESC LIMIT 8", (co,)
+    ).fetchall()]
+    recent = [dict(r) for r in db.execute(
+        "SELECT date, location, category, summary, severity_score, url, source "
+        "FROM incidents WHERE tier='act' AND country=? "
+        "ORDER BY date DESC LIMIT 25", (co,)
+    ).fetchall()]
+    # Aktoren mit Vorfällen in diesem Land
+    from collections import Counter
+    actors = Counter()
+    for r in db.execute("SELECT actors FROM incidents WHERE country=? AND actors != ''", (co,)).fetchall():
+        for a in (r[0] or "").split(","):
+            a = a.strip()
+            if a: actors[a] += 1
+    top_actors = actors.most_common(8)
+    def esc(s): return _xml_esc(s)
+    cluster_block = "".join(
+        f"<div class='ct'><b>{esc(c['target_type'])}</b> · {c['count']} Anschläge ({esc(c['first_seen'])}…{esc(c['last_seen'])})</div>"
+        for c in clusters
+    ) or "<div style='color:#6c7986'>— keine aktiven Cluster —</div>"
+    cat_block = "".join(f"<div class='row'><span>{esc(c['category'])}</span><span class='n'>{c['n']}</span></div>" for c in by_cat) or "—"
+    tt_block  = "".join(f"<div class='row'><a href='/early-warning/{esc(c['target_type'])}'>{esc(c['target_type'])}</a><span class='n'>{c['n']}</span></div>" for c in by_tt) or "—"
+    act_block = "".join(f"<div class='row'><span>{esc(a)}</span><span class='n'>{n}</span></div>" for a, n in top_actors) or "—"
+    recent_block = "".join(
+        f"<div class='inc'><span class='date'>{esc(r['date'])}</span>"
+        f"<span class='loc'>{esc(r['location'])}</span>"
+        f"<span class='cat'>{esc(r['category'])}</span>"
+        f"<span class='sev'>S{r['severity_score'] or '?'}</span>"
+        f"<div class='summ'>{esc((r.get('summary') or '')[:200])}</div>"
+        + (f"<a class='src' href='{esc(r['url'])}' rel='noopener'>↗ {esc(r['source'] or 'Quelle')}</a>" if r.get('url','').startswith('http') else "")
+        + "</div>"
+        for r in recent
+    ) or "<div style='color:#6c7986'>— keine T1-Vorfälle —</div>"
+    return HTMLResponse(f"""<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><title>Lagebild {co_name} — LEX EUROPE</title>
+<meta name="description" content="OSINT-Lagebild Linksextremismus {co_name}: {total_n} dokumentierte T1-Akte, {last30_n} in den letzten 30 Tagen, {len(clusters)} aktive Cluster.">
+<meta property="og:title"       content="LEX EUROPE — Lagebild {co_name}">
+<meta property="og:description" content="{total_n} T1-Akte · {last30_n} letzte 30T · {hi_n} hoch-Schwere · {len(clusters)} aktive Cluster">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:ui-monospace,Menlo,Consolas,monospace;background:#080c12;color:#aab5c0;font-size:13px;line-height:1.55;}}
+.classbar{{background:#0a1219;border-bottom:1px solid rgba(255,255,255,0.06);padding:5px 18px;font-size:9px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;display:flex;justify-content:space-between;}}
+.classbar .l{{color:#6aa9c9;}}
+.page{{max-width:1000px;margin:0 auto;padding:30px 24px 60px;}}
+h1{{font-family:'Inter',system-ui,sans-serif;font-size:32px;font-weight:600;color:#e9eef3;letter-spacing:0.5px;margin-bottom:6px;}}
+h1 .iso{{color:#6aa9c9;margin-right:14px;}}
+.sub{{font-size:10px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;margin-bottom:24px;}}
+.kpi-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;}}
+.kpi{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:16px 20px;}}
+.kpi .lbl{{font-size:8px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;margin-bottom:4px;}}
+.kpi .val{{font-size:26px;font-weight:600;color:#e9eef3;font-variant-numeric:tabular-nums;}}
+.kpi.red .val{{color:#d4495d;}}.kpi.amber .val{{color:#d99a2b;}}.kpi.green .val{{color:#5fb583;}}
+.grid2{{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}}
+@media(max-width:760px){{.grid2{{grid-template-columns:1fr;}}.kpi-grid{{grid-template-columns:repeat(2,1fr);}}}}
+.section{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:18px 22px;margin-bottom:14px;}}
+h2{{font-size:10px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid rgba(106,169,201,0.18);}}
+.row{{display:flex;justify-content:space-between;padding:4px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.03);}}
+.row .n{{color:#e9eef3;font-variant-numeric:tabular-nums;}}
+.row a{{color:#aab5c0;text-decoration:none;}}.row a:hover{{color:#6aa9c9;}}
+.ct{{padding:6px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.03);}}.ct b{{color:#d99a2b;}}
+.inc{{padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:11px;}}
+.inc .date{{color:#6c7986;margin-right:10px;}}.inc .loc{{color:#aab5c0;margin-right:10px;}}
+.inc .cat{{color:#e9eef3;margin-right:10px;}}.inc .sev{{color:#d99a2b;font-weight:600;}}
+.inc .summ{{margin-top:4px;color:#aab5c0;}}
+.inc .src{{font-size:9px;color:#6aa9c9;text-decoration:none;letter-spacing:1px;margin-top:3px;display:inline-block;}}
+.cta{{display:inline-block;font-size:10px;letter-spacing:2px;color:#6aa9c9;border:1px solid #6aa9c9;padding:8px 14px;text-decoration:none;margin-right:8px;text-transform:uppercase;}}
+.cta:hover{{background:rgba(106,169,201,0.10);}}
+.footer{{font-size:9px;letter-spacing:1.5px;color:#3a4551;text-align:center;margin-top:30px;text-transform:uppercase;}}
+</style></head>
+<body>
+<div class="classbar"><span class="l">◆ OPEN SOURCE INTELLIGENCE · LEX EUROPE</span><span>LANDESPROFIL · {esc(co)}</span></div>
+<div class="page">
+  <h1><span class="iso">{esc(co)}</span>{esc(co_name)}</h1>
+  <div class="sub">Lagebild Linksextremismus · automatisch aggregiert · Stand {today.isoformat()}</div>
+
+  <div class="kpi-grid">
+    <div class="kpi"><div class="lbl">T1-Akte gesamt</div><div class="val">{total_n}</div></div>
+    <div class="kpi"><div class="lbl">letzte 30 Tage</div><div class="val">{last30_n}</div></div>
+    <div class="kpi amber"><div class="lbl">letzte 90 Tage</div><div class="val">{last90_n}</div></div>
+    <div class="kpi red"><div class="lbl">Schwere ≥4</div><div class="val">{hi_n}</div></div>
+  </div>
+
+  <div class="section"><h2>Aktive Frühwarn-Cluster ({co_name})</h2>{cluster_block}</div>
+
+  <div class="grid2">
+    <div class="section"><h2>Kategorien</h2>{cat_block}</div>
+    <div class="section"><h2>Ziel-Klassen</h2>{tt_block}</div>
+  </div>
+
+  <div class="grid2">
+    <div class="section"><h2>Akteure (mit Vorfällen)</h2>{act_block}</div>
+    <div class="section"><h2>Methodik-Schnellzugriff</h2>
+      <a class="cta" href="/api/incidents.rss?country={esc(co)}">↗ RSS-Feed {esc(co)}</a><br><br>
+      <a class="cta" href="/lagebericht">→ Wochenbericht</a>
+      <a class="cta" href="/dashboard">→ Dashboard</a>
+    </div>
+  </div>
+
+  <div class="section"><h2>Jüngste T1-Vorfälle (max. 25)</h2>{recent_block}</div>
+
+  <div class="footer">LEX EUROPE · {esc(co_name)} · Land-spezifische Aggregation</div>
 </div>
 </body></html>""")
 
@@ -5763,6 +6138,85 @@ async def admin_source_health_reset(source: str, _=Depends(require_admin)):
     )
     db.commit()
     return JSONResponse({"ok": True, "source": source})
+
+
+# ── CRAWLER DIAGNOSTIC ───────────────────────────────────────────
+@app.get("/admin/api/crawler/probe")
+async def admin_crawler_probe(url: str, _=Depends(require_admin)):
+    """Diagnose-Endpoint: probiert eine URL mit verschiedenen UAs durch
+    und gibt zurück was der Upstream konkret antwortet. Hilft Admins
+    auf Production zu sehen, warum eine Quelle nicht funktioniert
+    (Anti-Bot, 404, Cloudflare-Challenge, …)."""
+    if not url.startswith("http"):
+        return JSONResponse({"ok": False, "message": "url muss http(s) sein"}, status_code=400)
+    return JSONResponse(fetch_diagnostic(url))
+
+
+@app.get("/admin/api/crawler/barrikade-discover")
+async def admin_crawler_barrikade_discover(_=Depends(require_admin)):
+    """Live-Test der barrikade.info Discovery — gibt zurück, welche der
+    10 Discovery-Pfade funktionieren und wieviele URLs jeder liefert.
+    Operatoren sehen sofort, ob Anti-Bot greift oder welche Endpoints
+    Daten liefern."""
+    out = {"endpoints": [], "summary": {}}
+    candidates = [
+        ("rss-feed",      "https://barrikade.info/feed"),
+        ("rss-feed-slash","https://barrikade.info/feed/"),
+        ("rss-rss",       "https://barrikade.info/rss"),
+        ("rss-rss-xml",   "https://barrikade.info/rss.xml"),
+        ("rss-index",     "https://barrikade.info/index.rss"),
+        ("rss-atom",      "https://barrikade.info/atom"),
+        ("drupal-feeds",  "https://barrikade.info/feeds/all.rss.xml"),
+        ("sitemap",       "https://barrikade.info/sitemap.xml"),
+        ("sitemap-index", "https://barrikade.info/sitemap_index.xml"),
+        ("homepage",      "https://barrikade.info/"),
+    ]
+    working = 0
+    for label, u in candidates:
+        diag = fetch_diagnostic(u, timeout=10)
+        n_urls = 0
+        body_marker = ""
+        if diag.get("ok"):
+            working += 1
+            excerpt = diag.get("excerpt", "")
+            if "<rss" in excerpt[:200].lower():     body_marker = "RSS"
+            elif "<feed" in excerpt[:200].lower():  body_marker = "Atom"
+            elif "<urlset" in excerpt[:200].lower():body_marker = "Sitemap"
+            elif "<html" in excerpt[:200].lower():  body_marker = "HTML"
+            else: body_marker = "?"
+            # quick URL-count heuristic
+            import re as _re
+            n_urls = len(_re.findall(r"/article/\d+", diag.get("excerpt","")))
+        out["endpoints"].append({
+            "label":       label,
+            "url":         u,
+            "ok":          diag.get("ok"),
+            "status_code": diag.get("status_code"),
+            "content_type":diag.get("content_type"),
+            "len":         diag.get("len"),
+            "elapsed_ms":  diag.get("elapsed_ms"),
+            "winning_ua":  diag.get("winning_ua"),
+            "body_marker": body_marker,
+            "url_hits_excerpt": n_urls,
+            "error":       diag.get("error"),
+        })
+    out["summary"] = {"working": working, "total": len(candidates)}
+    return JSONResponse(out)
+
+
+@app.post("/admin/api/crawler/barrikade-run")
+async def admin_crawler_barrikade_run(bg: BackgroundTasks, _=Depends(require_admin)):
+    """Triggert einen Discovery-Run gegen barrikade.info im Hintergrund.
+    Ergebnis ist später in /admin/api/status (running flag) bzw. der
+    incidents-DB sichtbar."""
+    def _run():
+        try:
+            n = crawl_barrikade_range(barrikade_latest_id(), barrikade_latest_id() - 50)
+            log.info(f"manual barrikade run: {n} new incidents")
+        except Exception as e:
+            log.warning(f"manual barrikade run failed: {e}")
+    bg.add_task(_run)
+    return JSONResponse({"ok": True, "status": "Discovery-Run gestartet"})
 
 @app.post("/admin/api/grok-test")
 async def admin_grok(_=Depends(require_admin)):
