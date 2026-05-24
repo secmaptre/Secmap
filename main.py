@@ -262,8 +262,49 @@ def get_db():
         active INTEGER DEFAULT 1
     )''')
     c.execute("CREATE INDEX IF NOT EXISTS idx_sh_active ON source_health(active)")
+
+    # ── FTS5 FULL-TEXT SEARCH ──────────────────────────────────────
+    # Virtuelle Tabelle deckt Beschreibung + Summary + Ort + Aktoren ab.
+    # Triggers halten sie automatisch synchron — keine separate Indexing-
+    # Logik nötig. Suche via /api/incidents?q=…&fts=1.
+    try:
+        c.execute("CREATE VIRTUAL TABLE IF NOT EXISTS incidents_fts USING fts5("
+                  "  description, summary, location, actors, category,"
+                  "  content='incidents', content_rowid='id', "
+                  "  tokenize='unicode61 remove_diacritics 2')")
+        # Triggers: keep FTS in sync with incidents row mutations.
+        c.execute("CREATE TRIGGER IF NOT EXISTS incidents_ai AFTER INSERT ON incidents BEGIN "
+                  "  INSERT INTO incidents_fts(rowid, description, summary, location, actors, category) "
+                  "  VALUES (new.id, new.description, new.summary, new.location, new.actors, new.category); "
+                  "END;")
+        c.execute("CREATE TRIGGER IF NOT EXISTS incidents_ad AFTER DELETE ON incidents BEGIN "
+                  "  INSERT INTO incidents_fts(incidents_fts, rowid, description, summary, location, actors, category) "
+                  "  VALUES ('delete', old.id, old.description, old.summary, old.location, old.actors, old.category); "
+                  "END;")
+        c.execute("CREATE TRIGGER IF NOT EXISTS incidents_au AFTER UPDATE ON incidents BEGIN "
+                  "  INSERT INTO incidents_fts(incidents_fts, rowid, description, summary, location, actors, category) "
+                  "  VALUES ('delete', old.id, old.description, old.summary, old.location, old.actors, old.category); "
+                  "  INSERT INTO incidents_fts(rowid, description, summary, location, actors, category) "
+                  "  VALUES (new.id, new.description, new.summary, new.location, new.actors, new.category); "
+                  "END;")
+    except Exception as e:
+        log.warning(f"FTS5 setup skipped: {e}")
     c.commit()
     return c
+
+
+def backfill_fts_if_empty():
+    """Initial-Indexierung: wenn FTS leer ist aber incidents nicht, einmal
+    populieren. Wird beim Startup nach den Migrations gerufen."""
+    try:
+        fts_n = db.execute("SELECT COUNT(*) FROM incidents_fts").fetchone()[0]
+        inc_n = db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
+        if fts_n < inc_n:
+            db.execute("INSERT INTO incidents_fts(incidents_fts) VALUES ('rebuild')")
+            db.commit()
+            log.info(f"FTS5 backfill: indexed {inc_n} incidents")
+    except Exception as e:
+        log.info(f"FTS5 backfill skipped: {e}")
 
 db = get_db()
 
@@ -4017,6 +4058,124 @@ h2{{font-size:10px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-trans
 </body></html>""")
 
 
+@app.get("/early-warning/{target_type}", response_class=HTMLResponse)
+async def public_target_profile(target_type: str):
+    """Dedicated public page per Ziel-Klasse (Säule 2) — gibt Betreibern
+    eine fokussierte Lagebild-Sicht: aktive Cluster + jüngste Vorfälle
+    für ihren Ziel-Typ (Energie, Schiene, Auto, Polizei, …)."""
+    tt = (target_type or "").strip()
+    if tt not in _TARGET_TYPE_ALLOWED or not tt:
+        return HTMLResponse("<h1>Unbekannter Ziel-Typ</h1>", status_code=404)
+    # Cluster pulled für diesen Typ
+    clusters = [dict(r) for r in db.execute(
+        "SELECT cluster_key, country, count, first_seen, last_seen, sample_titles "
+        "FROM early_warning_clusters WHERE active=1 AND target_type=? "
+        "ORDER BY count DESC, last_seen DESC", (tt,)
+    ).fetchall()]
+    for c in clusters:
+        try: c["sample_titles"] = json.loads(c["sample_titles"] or "[]")
+        except: c["sample_titles"] = []
+    # Recent incidents für diesen Typ
+    recent = [dict(r) for r in db.execute(
+        "SELECT date,country,location,category,summary,severity_score,url,source "
+        "FROM incidents WHERE tier='act' AND target_type=? "
+        "ORDER BY date DESC LIMIT 30", (tt,)
+    ).fetchall()]
+    today = datetime.now().date()
+    last90 = (today - timedelta(days=90)).isoformat()
+    last90_n = db.execute(
+        "SELECT COUNT(*) FROM incidents WHERE tier='act' AND target_type=? AND date>=?",
+        (tt, last90)
+    ).fetchone()[0]
+    total_n = db.execute(
+        "SELECT COUNT(*) FROM incidents WHERE tier='act' AND target_type=?", (tt,)
+    ).fetchone()[0]
+    by_co = [dict(r) for r in db.execute(
+        "SELECT country, COUNT(*) n FROM incidents WHERE tier='act' AND target_type=? "
+        "GROUP BY country ORDER BY n DESC LIMIT 10", (tt,)
+    ).fetchall()]
+    def esc(s): return _xml_esc(s)
+    cluster_block = "".join(
+        f"<div class='cluster'><div class='ck'><b>{esc(c['country'])}</b> · {c['count']} Anschläge</div>"
+        f"<div class='cm'>{esc(c['first_seen'])} → {esc(c['last_seen'])}</div>"
+        + "".join(f"<div class='st'>• {esc(t)}</div>" for t in c['sample_titles'])
+        + "</div>"
+        for c in clusters
+    ) or "<div style='color:#6c7986'>— keine aktiven Cluster für diesen Ziel-Typ —</div>"
+    recent_block = "".join(
+        f"<div class='inc'><span class='date'>{esc(r['date'])}</span>"
+        f"<span class='loc'>{esc(r['location'])}, {esc(r['country'])}</span>"
+        f"<span class='cat'>{esc(r['category'])}</span>"
+        f"<span class='sev'>S{r['severity_score'] or '?'}</span>"
+        f"<div class='summ'>{esc((r.get('summary') or '')[:200])}</div>"
+        + (f"<a class='src' href='{esc(r['url'])}' rel='noopener'>↗ Quelle ({esc(r['source'] or '')})</a>" if r.get('url','').startswith('http') else "")
+        + "</div>" for r in recent
+    ) or "<div style='color:#6c7986'>— keine Vorfälle für diesen Ziel-Typ —</div>"
+    co_block = "".join(f"<div class='co-row'><span>{esc(c['country'])}</span><span class='n'>{c['n']}</span></div>" for c in by_co) or "<div style='color:#6c7986'>—</div>"
+    return HTMLResponse(f"""<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><title>Frühwarn-Profil: {esc(tt)} — LEX EUROPE</title>
+<meta name="description" content="Lagebild-Profil für Ziel-Klasse {esc(tt)}: {total_n} dokumentierte T1-Akte, {last90_n} in den letzten 90 Tagen, {len(clusters)} aktive Cluster.">
+<meta property="og:title"       content="LEX EUROPE — Frühwarn-Profil {esc(tt)}">
+<meta property="og:description" content="{total_n} T1-Akte gegen {esc(tt)} · {len(clusters)} aktive Cluster">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:ui-monospace,Menlo,Consolas,monospace;background:#080c12;color:#aab5c0;font-size:13px;line-height:1.55;}}
+.classbar{{background:#0a1219;border-bottom:1px solid rgba(255,255,255,0.06);padding:5px 18px;font-size:9px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;display:flex;justify-content:space-between;}}
+.classbar .l{{color:#6aa9c9;}}
+.page{{max-width:1000px;margin:0 auto;padding:30px 24px 60px;}}
+h1{{font-family:'Inter',system-ui,sans-serif;font-size:30px;font-weight:600;color:#e9eef3;letter-spacing:0.5px;margin-bottom:6px;}}
+h1 .label{{color:#6aa9c9;}}
+.sub{{font-size:10px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;margin-bottom:24px;}}
+.kpi-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px;}}
+.kpi{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:16px 20px;}}
+.kpi .lbl{{font-size:9px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;margin-bottom:4px;}}
+.kpi .val{{font-size:28px;font-weight:600;color:#e9eef3;font-variant-numeric:tabular-nums;}}
+.kpi.red .val{{color:#d4495d;}}.kpi.amber .val{{color:#d99a2b;}}
+.section{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:18px 22px;margin-bottom:14px;}}
+h2{{font-size:10px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid rgba(106,169,201,0.18);}}
+.cluster{{padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04);}}
+.cluster .ck{{font-size:13px;color:#e9eef3;}}.cluster .ck b{{color:#d99a2b;}}
+.cluster .cm{{font-size:9px;color:#6c7986;letter-spacing:1px;margin:2px 0 6px;}}
+.cluster .st{{font-size:11px;color:#aab5c0;padding-left:8px;}}
+.inc{{padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:11px;}}
+.inc .date{{color:#6c7986;margin-right:10px;}}.inc .loc{{color:#aab5c0;margin-right:10px;}}
+.inc .cat{{color:#e9eef3;margin-right:10px;}}.inc .sev{{color:#d99a2b;font-weight:600;}}
+.inc .summ{{margin-top:4px;color:#aab5c0;}}
+.inc .src{{font-size:9px;color:#6aa9c9;text-decoration:none;letter-spacing:1px;margin-top:3px;display:inline-block;}}
+.co-row{{display:flex;justify-content:space-between;padding:3px 0;font-size:11px;}}
+.co-row .n{{color:#e9eef3;font-variant-numeric:tabular-nums;}}
+.cta{{display:inline-block;font-size:10px;letter-spacing:2px;color:#6aa9c9;border:1px solid #6aa9c9;padding:8px 14px;text-decoration:none;margin-right:8px;text-transform:uppercase;}}
+.cta:hover{{background:rgba(106,169,201,0.10);}}
+.footer{{font-size:9px;letter-spacing:1.5px;color:#3a4551;text-align:center;margin-top:30px;text-transform:uppercase;}}
+</style></head>
+<body>
+<div class="classbar"><span class="l">◆ OPEN SOURCE INTELLIGENCE · LEX EUROPE</span><span>FRÜHWARN-PROFIL · {esc(tt).upper()}</span></div>
+<div class="page">
+  <h1>Ziel-Profil: <span class="label">{esc(tt)}</span></h1>
+  <div class="sub">Säule 2 — Frühwarnung · automatisch aggregiert · Stand {today.isoformat()}</div>
+
+  <div class="kpi-grid">
+    <div class="kpi"><div class="lbl">T1-Akte gesamt</div><div class="val">{total_n}</div></div>
+    <div class="kpi amber"><div class="lbl">letzte 90 Tage</div><div class="val">{last90_n}</div></div>
+    <div class="kpi red"><div class="lbl">aktive Cluster</div><div class="val">{len(clusters)}</div></div>
+  </div>
+
+  <div class="section"><h2>Aktive Frühwarn-Cluster ({esc(tt)})</h2>{cluster_block}</div>
+  <div class="section"><h2>Geografische Verteilung (T1, alle Jahre)</h2>{co_block}</div>
+  <div class="section"><h2>Jüngste T1-Vorfälle (max. 30)</h2>{recent_block}</div>
+
+  <div class="section" style="text-align:center">
+    <a class="cta" href="/api/early-warning.rss">↗ RSS-Frühwarn-Feed</a>
+    <a class="cta" href="/dashboard">→ Dashboard</a>
+    <a class="cta" href="/">→ Karte</a>
+  </div>
+
+  <div class="footer">LEX EUROPE · {esc(tt)} · Methodik: Cluster = ≥3 gleichartige Anschläge / 6 Wochen pro Land</div>
+</div>
+</body></html>""")
+
+
 @app.post("/admin/api/detect-clusters")
 async def admin_detect_clusters(_=Depends(require_admin)):
     n = detect_clusters()
@@ -4558,12 +4717,16 @@ async def get_incidents(
     country: str = "", category: str = "", date_from: str = "",
     date_to: str = "", search: str = "", severity_min: int = 0,
     primary_only: int = 0, tier: str = "", target_type: str = "",
+    fts: int = 0,
 ):
     """
     primary_only=1 → only is_primary=1 rows (default UI behaviour for the
     incidents feed; the "INKL. KONTEXT" toggle clears the flag).
     tier=act|enable|context → filter on the Fedpol 3-tier taxonomy.
     target_type=Energie|Schiene|… → filter on Säule-2 target routing.
+    fts=1 + search="…" → SQLite FTS5 match query (schneller + relevanter
+      als LIKE). Beispiele: 'Brandanschlag AND Polizei', 'Tesla OR Hyperloop',
+      'antifa NEAR/5 demo'. Bei syntaxfehlern fällt es auf LIKE zurück.
     """
     q = ("SELECT id,date,location,country,category,description,summary,url,"
          "lat,lon,manual,source,severity_score,actors,confidence,"
@@ -4576,9 +4739,27 @@ async def get_incidents(
     if date_from: q += " AND date>=?";     p.append(date_from)
     if date_to:   q += " AND date<=?";     p.append(date_to)
     if search:
-        q += " AND (description LIKE ? OR summary LIKE ? OR location LIKE ? OR category LIKE ?)"
-        s = f"%{search}%"
-        p.extend([s, s, s, s])
+        # FTS5-Pfad: erst Match-Query versuchen, fallback auf LIKE.
+        used_fts = False
+        if fts:
+            try:
+                rids = [r["rowid"] for r in db.execute(
+                    "SELECT rowid FROM incidents_fts WHERE incidents_fts MATCH ? "
+                    "ORDER BY rank LIMIT 2000", (search,)
+                ).fetchall()]
+                if rids:
+                    q += " AND id IN (" + ",".join("?" * len(rids)) + ")"
+                    p.extend(rids)
+                else:
+                    # FTS matched nothing; return empty without falling back.
+                    return JSONResponse([])
+                used_fts = True
+            except Exception as e:
+                log.info(f"FTS5 query failed, falling back to LIKE: {e}")
+        if not used_fts:
+            q += " AND (description LIKE ? OR summary LIKE ? OR location LIKE ? OR category LIKE ?)"
+            s = f"%{search}%"
+            p.extend([s, s, s, s])
     if severity_min > 0:
         q += " AND severity_score >= ?"
         p.append(severity_min)
@@ -5723,6 +5904,8 @@ async def startup():
     # the flag/summary backfill so is_high_risk sees the real severity.
     backfill_enrichment()
     backfill_summaries_and_flags()
+    # FTS5-Backfill: ein leerer Index wird einmal aus incidents repopuliert.
+    backfill_fts_if_empty()
     # Geocoding-Fix (Userhinweis): alte Substring-Match-Bugs in den vor-
     # handenen Koordinaten korrigieren. Wipe-and-rebuild des geocache läuft
     # einmal, sobald die DB-Meta nicht den aktuellen geocode-Fix-Marker
