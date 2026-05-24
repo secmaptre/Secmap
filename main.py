@@ -242,6 +242,26 @@ def get_db():
     )''')
     c.execute("CREATE INDEX IF NOT EXISTS idx_wh_active ON webhook_subscriptions(active)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_wd_sub    ON webhook_deliveries(sub_id)")
+
+    # ── SOURCE HEALTH (Crawler-Observability) ─────────────────────
+    # Pro RSS-Feed/Crawler-Quelle wird der jüngste Fetch protokolliert:
+    # Erfolg, Items, Fehler-Stack. Nach `max_failures` aufeinanderfolgenden
+    # Fehlern wird die Quelle auf active=0 gesetzt (Auto-Disable) — verhindert
+    # endloses Retry-Pinging gegen tote Feeds.
+    c.execute('''CREATE TABLE IF NOT EXISTS source_health (
+        source TEXT PRIMARY KEY,
+        url TEXT,
+        last_attempt TEXT,
+        last_success TEXT,
+        last_error TEXT,
+        consecutive_failures INTEGER DEFAULT 0,
+        total_attempts INTEGER DEFAULT 0,
+        total_successes INTEGER DEFAULT 0,
+        items_last_run INTEGER DEFAULT 0,
+        items_total INTEGER DEFAULT 0,
+        active INTEGER DEFAULT 1
+    )''')
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sh_active ON source_health(active)")
     c.commit()
     return c
 
@@ -3159,8 +3179,56 @@ def parse_date(s):
         except: pass
     return None
 
+SOURCE_MAX_FAILURES = 10  # auto-disable nach N aufeinanderfolgenden Fails
+
+def should_skip_feed(source: str) -> bool:
+    """True wenn die Quelle aktuell wegen Health-Issues disabled ist."""
+    row = db.execute(
+        "SELECT active FROM source_health WHERE source=?", (source,)
+    ).fetchone()
+    return row is not None and (row["active"] or 0) == 0
+
+def record_crawl_result(source: str, url: str, ok: bool, items: int = 0,
+                         error: str = "") -> None:
+    """Schreibt das Ergebnis eines RSS-Fetches in source_health.
+    Auto-Disable nach SOURCE_MAX_FAILURES consecutive failures."""
+    now = datetime.now().isoformat(timespec="seconds")
+    row = db.execute(
+        "SELECT consecutive_failures, total_attempts, total_successes, items_total "
+        "FROM source_health WHERE source=?", (source,)
+    ).fetchone()
+    if not row:
+        db.execute(
+            "INSERT OR REPLACE INTO source_health "
+            "(source, url, last_attempt, last_success, last_error, "
+            " consecutive_failures, total_attempts, total_successes, "
+            " items_last_run, items_total, active) "
+            "VALUES (?,?,?,?,?,?,1,?,?,?,1)",
+            (source, url, now, now if ok else None, "" if ok else error[:280],
+             0 if ok else 1, 1 if ok else 0, items, items if ok else 0)
+        )
+    else:
+        cf = 0 if ok else (row["consecutive_failures"] or 0) + 1
+        active = 0 if cf >= SOURCE_MAX_FAILURES else 1
+        if active == 0 and (row["consecutive_failures"] or 0) < SOURCE_MAX_FAILURES:
+            log.warning(f"source_health AUTO-DISABLE: {source} after {cf} consecutive failures")
+        db.execute(
+            "UPDATE source_health SET "
+            "url=?, last_attempt=?, last_success=COALESCE(?, last_success), "
+            "last_error=?, consecutive_failures=?, total_attempts=total_attempts+1, "
+            "total_successes=total_successes+?, items_last_run=?, items_total=items_total+?, "
+            "active=? "
+            "WHERE source=?",
+            (url, now, now if ok else None, "" if ok else error[:280],
+             cf, 1 if ok else 0, items, items, active, source)
+        )
+    db.commit()
+
 def crawl_rss_feed(source, feed_url, max_items=15):
+    if should_skip_feed(source):
+        return 0
     inserted = 0
+    err_msg  = ""
     try:
         xml   = fetch(feed_url, timeout=18)
         items = parse_rss(xml)
@@ -3181,8 +3249,11 @@ def crawl_rss_feed(source, feed_url, max_items=15):
                 if save_incident(ai, text, source, link, d):
                     inserted += 1
             time.sleep(0.5)
+        record_crawl_result(source, feed_url, ok=True, items=inserted)
     except Exception as e:
-        log.warning(f"RSS {source}: {e}")
+        err_msg = str(e)[:280]
+        log.warning(f"RSS {source}: {err_msg}")
+        record_crawl_result(source, feed_url, ok=False, error=err_msg)
     return inserted
 
 def crawl_gnews():
@@ -5462,6 +5533,55 @@ async def admin_regeocode_fix(_=Depends(require_admin)):
     alle Incidents, deren Koordinaten ausserhalb ihres Landes liegen."""
     n = regeocode_all_inconsistent()
     return JSONResponse({"ok": True, "fixed": n})
+
+# ── SOURCE HEALTH ADMIN ──────────────────────────────────────────
+@app.get("/admin/api/source-health")
+async def admin_source_health(_=Depends(require_admin)):
+    """Liefert alle Crawl-Quellen mit Health-Status. Sortiert: zuerst
+    disabled, dann hoch-Fehler-Quellen, dann gesunde."""
+    rows = db.execute(
+        "SELECT source, url, last_attempt, last_success, last_error, "
+        "consecutive_failures, total_attempts, total_successes, "
+        "items_last_run, items_total, active "
+        "FROM source_health "
+        "ORDER BY active ASC, consecutive_failures DESC, source ASC"
+    ).fetchall()
+    # Augment with status label for the UI.
+    out = []
+    for r in rows:
+        d = dict(r)
+        cf = d["consecutive_failures"] or 0
+        if not d["active"]:
+            d["status"] = "disabled"
+        elif cf >= 5:
+            d["status"] = "warning"
+        elif cf > 0:
+            d["status"] = "degraded"
+        else:
+            d["status"] = "healthy"
+        out.append(d)
+    return JSONResponse({
+        "sources":   out,
+        "max_failures": SOURCE_MAX_FAILURES,
+        "totals": {
+            "healthy":  sum(1 for s in out if s["status"]=="healthy"),
+            "degraded": sum(1 for s in out if s["status"]=="degraded"),
+            "warning":  sum(1 for s in out if s["status"]=="warning"),
+            "disabled": sum(1 for s in out if s["status"]=="disabled"),
+            "active_count": sum(1 for s in out if s["active"]),
+            "total":     len(out),
+        },
+    })
+
+@app.post("/admin/api/source-health/{source}/reset")
+async def admin_source_health_reset(source: str, _=Depends(require_admin)):
+    """Re-aktiviert eine Quelle und nullt den Failure-Zähler."""
+    db.execute(
+        "UPDATE source_health SET consecutive_failures=0, active=1, "
+        "last_error='' WHERE source=?", (source,)
+    )
+    db.commit()
+    return JSONResponse({"ok": True, "source": source})
 
 @app.post("/admin/api/grok-test")
 async def admin_grok(_=Depends(require_admin)):
