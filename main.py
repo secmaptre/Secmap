@@ -1014,6 +1014,13 @@ SOURCE_CONFIDENCE = {
     "polizei-": 5, "presseportal.de": 5,
     "bundestag.de": 5, "bundestag-": 5,
     "bundesregierung.de": 5, "bundesregierung": 5,
+    # US-Behörden-Primärquellen
+    "justice.gov": 5, "us-attorney-press": 5,
+    "fbi.gov": 5, "dhs.gov": 5, "dhs-cisa-alerts": 5,
+    "nsa-press": 5, "usga-bureau-investigation": 5,
+    "spd-blotter-seattle": 5, "portland-police": 5, "nypd-news": 5,
+    "lapd-news": 5, "sfpd-news": 5, "philly-police": 5,
+    "apd-atlanta": 5, "dpd-denver": 5, "mpd-minneapolis": 5,
     # Konfidenz 4 — öffentlich-rechtlich oder etablierte Leitmedien
     "tagesschau.de": 4, "zdf.de": 4, "deutschlandfunk.de": 4,
     "spiegel.de": 4, "zeit.de": 4, "sueddeutsche.de": 4, "faz.net": 4,
@@ -1022,6 +1029,12 @@ SOURCE_CONFIDENCE = {
     "tagesanzeiger.ch": 4, "diepresse.com": 4,
     "lemonde.fr": 4, "liberation.fr": 4, "repubblica.it": 4, "corriere.it": 4,
     "elpais.com": 4, "euronews.com": 4,
+    # US Mainstream-Outlets
+    "nytimes-us": 4, "washingtonpost-politics": 4, "politico-politics": 4,
+    "bbc-us-canada": 4, "axios-politics": 4, "usatoday-news": 4, "thehill": 4,
+    "splcenter.org": 4, "gwu-extremism": 4,
+    "apnews-politics": 4, "reuters-us": 4, "counterextremism.com": 4, "adl.org": 4,
+    "npr-national": 4,
     # Konfidenz 3 — regionale öffentlich-rechtliche + Boulevard-Leit
     "tagesspiegel.de": 3, "mdr.de": 3, "rbb24.de": 3, "ndr.de": 3,
     "wdr.de": 3, "br.de": 3, "hr.de": 3, "swr.de": 3, "ntv.de": 3,
@@ -1029,6 +1042,7 @@ SOURCE_CONFIDENCE = {
     "bzbasel.ch": 3, "watson.ch": 3, "rts.ch": 3,
     "kurier.at": 3, "kleinezeitung.at": 3, "noen.at": 3, "krone.at": 3,
     "wien.orf.at": 3,
+    "willamette-week-portland": 3, "ajc-atlanta": 3,
     # Konfidenz 2 — szenenahe Quellen, brauchen Cross-Check
     "barrikade.info": 2, "de.indymedia.org": 2, "nd-aktuell.de": 2,
     "jungle.world": 2, "gnews": 2, "labournet.de": 2, "woz.ch": 2,
@@ -3559,9 +3573,36 @@ RSS_FEEDS = [
     ("counterextremism.com",  "https://www.counterextremism.com/rss"),
     ("adl.org",               "https://www.adl.org/feeds/rss/news"),
     # ── US — lokale Polizei-Pressestellen (high-density-Schwerpunkte)
+    # ── US Federal — Sicherheitsbehörden + Counter-Extremism ──────
+    ("dhs-cisa-alerts",       "https://www.cisa.gov/cybersecurity-advisories/all.xml"),
+    ("us-attorney-press",     "https://www.justice.gov/feeds/usao/usao-news.xml"),
+    ("nsa-press",             "https://www.nsa.gov/Press-Room/Press-Releases/feed/"),
+    # ── US Mainstream — politische Schwerpunkt-Outlets ─────────────
+    ("nytimes-us",            "https://rss.nytimes.com/services/xml/rss/nyt/US.xml"),
+    ("washingtonpost-politics","https://feeds.washingtonpost.com/rss/national"),
+    ("politico-politics",     "https://rss.politico.com/politics-news.xml"),
+    ("bbc-us-canada",         "https://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml"),
+    ("axios-politics",        "https://www.axios.com/feeds/feed.rss"),
+    ("usatoday-news",         "https://rssfeeds.usatoday.com/usatoday-newstopstories"),
+    ("thehill",               "https://thehill.com/rss/syndicator/19110"),
+    # ── US Local Police — high-density Antifa-/Anarcho-Schwerpunkte
     ("spd-blotter-seattle",   "https://spdblotter.seattle.gov/feed/"),
     ("portland-police",       "https://www.portland.gov/police/news.rss"),
     ("nypd-news",             "https://www1.nyc.gov/site/nypd/news/news.page.rss"),
+    ("lapd-news",             "https://www.lapdonline.org/feed/"),
+    ("sfpd-news",             "https://www.sanfranciscopolice.org/news/feed"),
+    ("philly-police",         "https://news.phila.gov/feed/?feed=topics&topics=police"),
+    ("apd-atlanta",           "https://www.atlantapd.org/Home/Components/RssFeeds/RssFeed/1/14"),
+    ("dpd-denver",            "https://denverpolice.org/rss-feed/"),
+    ("mpd-minneapolis",       "https://www.minneapolismn.gov/news/feed/"),
+    # ── US Counter-Extremism Research ─────────────────────────────
+    ("splcenter.org",         "https://www.splcenter.org/rss.xml"),
+    ("gwu-extremism",         "https://extremism.gwu.edu/feed"),
+    ("usga-bureau-investigation",
+                              "https://gbi.georgia.gov/press-releases/rss"),
+    # ── US lokale Outlets in Antifa-Hotspot-Städten ───────────────
+    ("willamette-week-portland","https://www.wweek.com/news/feed/"),
+    ("ajc-atlanta",           "https://www.ajc.com/arc/outboundfeeds/rss/?outputType=xml"),
     # ── Einschlägige Quellen (szenenah + extremismusbeobachtend) ──
     ("barrikade.info",        "https://barrikade.info/feed"),
     ("belltower.news",        "https://www.belltower.news/feed/"),
