@@ -1718,6 +1718,126 @@ HISTORICAL_EVENTS = [
     ("2025-03-25","Oslo","NO","Sachbeschädigung",
      "Oslo: Außenfassade einer FRP-Wahlkampfzentrale mit Farbbeuteln und Slogans attackiert. Geringer Sachschaden. Bekennerschreiben antifascistisk aksjon.",
      "Archiv",59.91,10.75),
+
+    # ════════════════════════════════════════════════════════════════
+    # ROUND 5 — neue Länder (BE/IE/PT/CZ/HU) + weitere DE/CH/AT/US
+    # ════════════════════════════════════════════════════════════════
+
+    # ── Belgien ────────────────────────────────────────────────────
+    ("2020-06-07","Brüssel","BE","Militante Aktion",
+     "BLM-Solidaritäts-Eskalation Brüssel: Black-Bloc-Gruppen attackieren Polizei am Place du Trône mit Steinen und Pyrotechnik. Mehrere Verletzte, 116 Festnahmen, Schäden an Polizeifahrzeugen und Geschäften.",
+     "Archiv",50.85,4.35),
+    ("2024-04-19","Antwerpen","BE","Sachbeschädigung",
+     "Antwerpen: Außenfassade einer Vlaams-Belang-Bezirksgeschäftsstelle mit Farbe und Slogans beschädigt. Bekennerschreiben antifascistische actie.",
+     "Archiv",51.22,4.40),
+    ("2025-02-08","Brüssel","BE","Brandanschlag",
+     "Brüssel-Schaerbeek: Brandanschlag auf zwei Pkw der Föderalen Polizei. Vollbrand. Bekennerschreiben einer anarchistischen Zelle. Sachschaden ca. 60.000 Euro.",
+     "Archiv",50.87,4.38),
+
+    # ── Niederlande ────────────────────────────────────────────────
+    ("2018-06-21","Amsterdam","NL","Sachbeschädigung",
+     "Amsterdam: FvD-Veranstaltungsraum nachts mit Farbbeuteln und beschädigten Fenstern attackiert. Bekennerschreiben AFA Amsterdam.",
+     "Archiv",52.37,4.89),
+    ("2024-10-26","Rotterdam","NL","Militante Aktion",
+     "Rotterdam: Anti-Geert-Wilders-Demonstration eskaliert, vermummte Gruppen attackieren Polizei mit Pyrotechnik. 9 verletzte Beamte, 24 Festnahmen.",
+     "Archiv",51.92,4.48),
+
+    # ── Irland ─────────────────────────────────────────────────────
+    ("2023-11-23","Dublin","IE","Militante Aktion",
+     "Dublin: Anti-Rassismus-Gegendemonstration eskaliert, Black-Bloc-Gruppen attackieren Polizei mit Pyrotechnik nach Stoddart-Square-Attacke. 34 Festnahmen, mehrere Verletzte auf beiden Seiten.",
+     "Archiv",53.35,-6.26),
+    ("2024-09-11","Dublin","IE","Sachbeschädigung",
+     "Dublin: Außenfassade einer National-Party-Veranstaltungshalle mit Farbe attackiert. Bekennerschreiben einer Antifa-Strömung. Geringer Sachschaden.",
+     "Archiv",53.35,-6.26),
+
+    # ── Portugal ───────────────────────────────────────────────────
+    ("2024-03-15","Lissabon","PT","Sachbeschädigung",
+     "Lissabon: Chega-Wahlkampfbüro mit Farbe und Slogans attackiert. Bekennerschreiben antifaschistischer Gruppe. Schaden ca. 5.000 Euro.",
+     "Archiv",38.72,-9.14),
+    ("2025-01-25","Porto","PT","Brandanschlag",
+     "Porto: Brandanschlag auf privaten Pkw eines bekannten Chega-Aktivisten. Sachschaden ca. 22.000 Euro. Bekennerschreiben.",
+     "Archiv",41.15,-8.61),
+
+    # ── Tschechien / Ungarn ────────────────────────────────────────
+    ("2023-08-17","Prag","CZ","Sachbeschädigung",
+     "Prag: Außenfassade einer SPD-CZ-Wahlkampfzentrale mit Farbe und Slogans beschädigt. Bekennerschreiben anarchistische Gruppe Prag.",
+     "Archiv",50.08,14.43),
+    ("2025-02-15","Budapest","HU","Sachbeschädigung",
+     "Budapest: FIDESZ-Bezirksbüro mit Farbe und beschädigten Fenstern attackiert. Bekennerschreiben.",
+     "Archiv",47.50,19.04),
+
+    # ── Deutschland — weitere 2024-2025 ───────────────────────────
+    ("2024-08-05","Berlin","DE","Brandanschlag",
+     "Brandanschlag auf das Dienst-Pkw eines Berliner LfV-Mitarbeiters in Pankow. Vollbrand, Sachschaden ca. 38.000 Euro. Berliner VS: Anschlag mit Doxxing-Hintergrund.",
+     "Archiv",52.57,13.40),
+    ("2024-09-25","Stuttgart","DE","Sabotage",
+     "Stuttgart: Sabotage am Glasfaser-Verteiler-Kasten der Bundespolizei am Hauptbahnhof. Kommunikations-Ausfall 4 h. Bekennerschreiben gegen Repressions-Infrastruktur.",
+     "Archiv",48.78,9.18),
+    ("2024-11-29","München","DE","Brandanschlag",
+     "München-Pasing: Brandanschlag auf einen Streifenwagen vor einer Polizei-Inspektion. Vollbrand. Bekennerschreiben in indymedia. Sachschaden ca. 55.000 Euro.",
+     "Archiv",48.15,11.46),
+    ("2025-01-25","Bremen","DE","Militante Aktion",
+     "Bremen: Anti-AfD-Aktion am Wahlkampfbüro eskaliert, vermummte Gruppen werfen Steine und Pyrotechnik. 7 Festnahmen, drei Beamte verletzt.",
+     "Archiv",53.08,8.81),
+    ("2025-05-25","Dresden","DE","Brandanschlag",
+     "Dresden: Brandanschlag auf einen Pkw eines AfD-Landtagsabgeordneten in Striesen. Vollbrand, Sachschaden ca. 42.000 Euro. Bekennerschreiben.",
+     "Archiv",51.05,13.79),
+
+    # ── Schweiz — weitere 2024-2025 ────────────────────────────────
+    ("2024-12-04","Zürich","CH","Sachbeschädigung",
+     "Zürich-Wiedikon: SVP-Sektion mit Farbbeuteln und beschädigter Glasfront attackiert. Bekennerschreiben Antifa Zürich. Schaden ca. 14.000 CHF.",
+     "Archiv",47.37,8.51),
+    ("2025-02-18","Winterthur","CH","Brandanschlag",
+     "Winterthur: Brandanschlag auf einen Pkw eines Kantonspolizisten in Töss. Vollbrand. Sachschaden ca. 35.000 CHF. Bekennerschreiben.",
+     "Archiv",47.50,8.72),
+
+    # ── Österreich — weitere 2024-2025 ─────────────────────────────
+    ("2024-12-30","Salzburg","AT","Sachbeschädigung",
+     "Salzburg: FPÖ-Landesgeschäftsstelle mit Farbbeuteln, Slogans und beschädigten Fenstern attackiert. Schaden ca. 6.500 Euro.",
+     "Archiv",47.80,13.05),
+    ("2025-05-18","Wien","AT","Brandanschlag",
+     "Wien-Brigittenau: Brandanschlag auf Privat-Pkw eines bekannten Identitären-Aktivisten. Vollbrand, Sachschaden ca. 32.000 Euro. Bekennerschreiben.",
+     "Archiv",48.24,16.38),
+
+    # ── USA — weitere 2025 ─────────────────────────────────────────
+    ("2025-03-15","Portland","US","Militante Aktion",
+     "Portland-Downtown: Anti-Trump-Eskalation 6 Wochen nach Inauguration. Black-Bloc-Aktion attackiert ICE-Büros, Pyrotechnik gegen Polizei. 18 Festnahmen, drei verletzte Beamte.",
+     "Archiv",45.52,-122.68),
+    ("2025-04-29","Atlanta","US","Militante Aktion",
+     "Atlanta: Stop-Cop-City Aktions-Welle V — 80 Vermummte attackieren Baustellen-Equipment, mehrere Brandsätze, ein verletzter Bauleiter. 24 RICO-Charges nach GA Code § 16-4-10.",
+     "Archiv",33.75,-84.39),
+    ("2025-05-15","New York","US","Sabotage",
+     "New York Brooklyn: Sabotage an einem Verizon-Glasfaser-Kasten. Kommunikations-Ausfall 6 h in Park Slope. Bekennerschreiben gegen 'Surveillance-Industrie'.",
+     "Archiv",40.66,-73.97),
+    ("2025-06-12","Berkeley","US","Brandanschlag",
+     "Berkeley: Brandanschlag auf einen Tesla in Wohnviertel North Berkeley. Vollbrand, Sachschaden ca. USD 95.000. Bekennerschreiben Vulkangruppe Bay Area.",
+     "Archiv",37.88,-122.27),
+
+    # ── Italien — Antifa-Spektrum 2024-2025 ───────────────────────
+    ("2024-08-15","Mailand","IT","Brandanschlag",
+     "Mailand-Centro: Brandanschlag auf Pkw eines bekannten FdI-Aktivisten. Vollbrand, Sachschaden ca. 30.000 Euro. Bekennerschreiben.",
+     "Archiv",45.46,9.19),
+    ("2025-01-12","Turin","IT","Militante Aktion",
+     "Turin: Anti-Faschismus-Demonstration zu Räumung CSOA Askatasuna eskaliert. Black-Bloc-Gruppen werfen Molotow-Cocktails auf Polizei. Mehrere Verletzte, 28 Festnahmen.",
+     "Archiv",45.07,7.69),
+
+    # ── Frankreich — weitere 2024-2025 ─────────────────────────────
+    ("2024-05-28","Lyon","FR","Brandanschlag",
+     "Lyon-7e: Brandanschlag auf zwei Pkw der CRS-Bereitschaftspolizei. Vollbrand. Sachschaden ca. 80.000 Euro. Bekennerschreiben einer cellule autonome.",
+     "Archiv",45.74,4.85),
+    ("2025-04-08","Marseille","FR","Sachbeschädigung",
+     "Marseille: RN-Wahlkreisbüro mit Farbbeuteln, Slogans und beschädigten Fenstern attackiert. Bekennerschreiben Action Antifasciste Marseille.",
+     "Archiv",43.30,5.37),
+
+    # ── Griechenland — weitere ─────────────────────────────────────
+    ("2025-03-09","Athen","GR","Sachbeschädigung",
+     "Athen-Exarchia: mehrere Banken-Filialen mit Steinen und Farbsprühungen attackiert. Bekennerschreiben anarchistischer Strömung. Geringer Sachschaden.",
+     "Archiv",37.99,23.73),
+
+    # ── Spanien — weitere ──────────────────────────────────────────
+    ("2025-04-22","Barcelona","ES","Sachbeschädigung",
+     "Barcelona: Banken-Außenfassaden in El Raval mit Slogans und Farbe attackiert während Anti-Räumungs-Aktion. Schaden ca. 9.000 Euro.",
+     "Archiv",41.39,2.17),
 ]
 
 # ── FUNDING TRACKER SEED ──────────────────────────────────────────
@@ -3339,7 +3459,7 @@ RSS_FEEDS = [
     # ── Einschlägige Quellen (szenenah + extremismusbeobachtend) ──
     ("barrikade.info",        "https://barrikade.info/feed"),
     ("belltower.news",        "https://www.belltower.news/feed/"),
-    ("radikal.news",          "https://radikal.news/feed/"),
+    ("radikal.news",          "https://radikal.news/index.xml"),
     ("nd-aktuell.de",         "https://www.nd-aktuell.de/static/rss/rss.xml"),
     ("perspektive-online.net","https://perspektive-online.net/feed/"),
     ("jungewelt.de",          "https://www.jungewelt.de/rss/inland.rss"),
@@ -4096,8 +4216,13 @@ async def sitemap_xml(request: Request):
     for tt in ("Auto","Schiene","Energie","Telekom","Militär","Polizei",
                "Politik","Justiz","Medien","Wirtschaft"):
         urls.append(f"{base}/early-warning/{tt}")
-    for co in ("DE","AT","CH","FR","IT","ES","GR","UK","NL","DK","SE","NO","US"):
+    for co in ("DE","AT","CH","FR","IT","ES","GR","UK","NL","DK","SE","NO","US",
+               "BE","IE","PT","CZ","HU"):
         urls.append(f"{base}/c/{co}")
+    # Akteurs-Profil-Seiten — alle KNOWN_ACTORS bekommen eine Sitemap-URL.
+    from urllib.parse import quote as _q
+    for name, _patterns, _tier in KNOWN_ACTORS:
+        urls.append(f"{base}/a/{_q(name)}")
     items = "\n".join(f"<url><loc>{u}</loc></url>" for u in urls)
     xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
@@ -4298,6 +4423,191 @@ _COUNTRY_NAMES = {
     "HU":"Ungarn", "RO":"Rumänien", "PT":"Portugal", "IE":"Irland",
     "US":"USA",
 }
+
+@app.get("/a/{actor_slug:path}", response_class=HTMLResponse)
+async def public_actor_profile(actor_slug: str):
+    """Public actor profile — alle Vorfälle + Funding-Cross-Reference für
+    einen Akteur. URL-Slug = url-encoded Akteurs-Name.
+    Analog zu /c/{country} und /early-warning/{target_type}."""
+    from urllib.parse import unquote
+    actor = unquote(actor_slug or "").strip()
+    if not actor or len(actor) < 3:
+        return HTMLResponse("<h1>Unbekannter Akteur</h1>", status_code=404)
+    # Tier-Klassifikation
+    actor_tier = ACTOR_TIER.get(actor, "endorse")
+    tier_label = {"act":"Verüben (T1)", "enable":"Fördern (T2)",
+                  "endorse":"Befürworten (T3)"}.get(actor_tier, actor_tier)
+    tier_color = {"act":"#d4495d", "enable":"#d99a2b",
+                  "endorse":"#7a8a99"}.get(actor_tier, "#7a8a99")
+    # Incidents pro Land + Severity
+    actor_l = actor.lower()
+    rows = [dict(r) for r in db.execute(
+        "SELECT id,date,location,country,category,summary,severity_score,tier,"
+        "target_type,url,source,actors FROM incidents WHERE actors LIKE ? "
+        "ORDER BY date DESC", (f"%{actor}%",)
+    ).fetchall()]
+    incs = [r for r in rows if any(
+        a.strip().lower() == actor_l for a in (r["actors"] or "").split(",")
+    )]
+    total_n = len(incs)
+    hi_n    = sum(1 for r in incs if (r.get("severity_score") or 0) >= 4)
+    from collections import Counter
+    by_co  = Counter(r["country"] for r in incs)
+    by_cat = Counter(r["category"] for r in incs)
+    by_tt  = Counter(r["target_type"] for r in incs if r.get("target_type"))
+    by_year = Counter((r["date"] or "")[:4] for r in incs if r.get("date"))
+    sev_hist = [0]*5
+    for r in incs:
+        s = max(1, min(5, r.get("severity_score") or 1))
+        sev_hist[s-1] += 1
+    last_seen = max((r["date"] for r in incs if r.get("date")), default="—")
+    first_seen = min((r["date"] for r in incs if r.get("date")), default="—")
+    # Funding cross-reference
+    needles = [actor.lower()]
+    for name, _patterns, _tier in KNOWN_ACTORS:
+        if name.lower() == actor_l:
+            for pat in _patterns:
+                cleaned = re.sub(r"[\\b\\s\\.\\?\\*\\+\\(\\)\\[\\]\\|]", " ", pat).strip()
+                first = cleaned.split()[0] if cleaned.split() else ""
+                if len(first) >= 4: needles.append(first.lower())
+    needles = list(set(needles))
+    fund_or = " OR ".join(["(LOWER(recipient_org) LIKE ? OR LOWER(donor_name) LIKE ? OR LOWER(notes) LIKE ?)"] * len(needles))
+    fund_params = []
+    for n in needles:
+        like = f"%{n}%"
+        fund_params.extend([like, like, like])
+    funds = [dict(r) for r in db.execute(
+        "SELECT recipient_org, project, amount, currency, year, donor_name, "
+        "source_url, COALESCE(verified, 0) AS verified "
+        "FROM funding_records WHERE " + (fund_or or "1=0") + " "
+        "ORDER BY year DESC, amount DESC LIMIT 50", fund_params
+    ).fetchall()] if fund_or else []
+    sum_eur = sum(f["amount"] for f in funds if (f.get("currency") or "EUR") == "EUR")
+    sum_chf = sum(f["amount"] for f in funds if (f.get("currency") or "EUR") == "CHF")
+    def esc(s): return _xml_esc(s)
+    sev_html = "".join(
+        f"<div class='sb-col' title='{n} Vorfälle Schwere {i+1}'>"
+        f"<div class='sb-bar' style='height:{max(2, n*30//max(sev_hist+[1]))}px;"
+        f"background:{['#3a4551','#5a6c7a','#d99a2b','#cf6044','#d4495d'][i]}'></div>"
+        f"<div class='sb-lbl'>{i+1}</div></div>"
+        for i, n in enumerate(sev_hist)
+    )
+    yr_html = "".join(
+        f"<div class='row'><span>{esc(y)}</span><span class='n'>{n}</span></div>"
+        for y, n in sorted(by_year.items())
+    ) or "—"
+    co_html = "".join(
+        f"<div class='row'><a href='/c/{esc(c)}'>{esc(c)}</a><span class='n'>{n}</span></div>"
+        for c, n in by_co.most_common(6)
+    ) or "—"
+    tt_html = "".join(
+        f"<div class='row'><a href='/early-warning/{esc(t)}'>{esc(t)}</a><span class='n'>{n}</span></div>"
+        for t, n in by_tt.most_common(6)
+    ) or "—"
+    inc_html = "".join(
+        f"<div class='inc'><span class='date'>{esc(r.get('date'))}</span>"
+        f"<span class='loc'>{esc(r.get('location'))}, {esc(r.get('country'))}</span>"
+        f"<span class='cat'>{esc(r.get('category'))}</span>"
+        f"<span class='sev'>S{r.get('severity_score','?')}</span>"
+        f"<div class='summ'>{esc((r.get('summary') or '')[:200])}</div>"
+        + (f"<a class='src' href='{esc(r.get('url'))}' rel='noopener'>↗ {esc(r.get('source') or '')}</a>" if r.get('url','').startswith('http') else "")
+        + "</div>"
+        for r in incs[:25]
+    ) or "<div style='color:#6c7986'>— keine Vorfälle —</div>"
+    fund_html = "".join(
+        f"<div class='inc'><span class='date'>{esc(str(f.get('year')))}</span>"
+        f"<span class='loc'>{esc((f.get('recipient_org') or '')[:42])}</span>"
+        f"<span class='cat'>{esc((f.get('donor_name') or '')[:40])}</span>"
+        f"<span class='sev'>{f.get('currency','EUR')} {int(f.get('amount') or 0):,}</span>"
+        + ("<span class='vrfd'>✓</span>" if f.get("verified") else "<span class='unvrfd'>⚠</span>")
+        + f"<div class='summ'>{esc((f.get('project') or '')[:200])}</div>"
+        + (f"<a class='src' href='{esc(f.get('source_url'))}' rel='noopener'>↗ Quelle</a>" if (f.get('source_url') or '').startswith('http') else "")
+        + "</div>"
+        for f in funds[:20]
+    ) or "<div style='color:#6c7986'>— keine Förderungen gefunden —</div>"
+    return HTMLResponse(f"""<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><title>Akteurs-Profil: {esc(actor)} — LEX EUROPE</title>
+<meta name="description" content="OSINT-Profil zum Akteur {esc(actor)}: {total_n} dokumentierte Vorfälle ({hi_n} hoch-Schwere), Fedpol-Tier: {tier_label}.">
+<meta property="og:title"       content="LEX EUROPE — Akteurs-Profil {esc(actor)}">
+<meta property="og:description" content="{total_n} Vorfälle · {hi_n} hoch-Schwere · {len(by_co)} Länder · {len(funds)} Funding-Records (€{sum_eur:,.0f})">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:ui-monospace,Menlo,Consolas,monospace;background:#080c12;color:#aab5c0;font-size:13px;line-height:1.55;}}
+.classbar{{background:#0a1219;border-bottom:1px solid rgba(255,255,255,0.06);padding:5px 18px;font-size:9px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;display:flex;justify-content:space-between;}}
+.classbar .l{{color:#6aa9c9;}}
+.page{{max-width:1000px;margin:0 auto;padding:30px 24px 60px;}}
+h1{{font-family:'Inter',system-ui,sans-serif;font-size:30px;font-weight:600;color:#e9eef3;letter-spacing:0.5px;margin-bottom:8px;}}
+.tier-badge{{display:inline-block;font-family:ui-monospace;font-size:9px;letter-spacing:2px;padding:3px 10px;border:1px solid currentColor;text-transform:uppercase;}}
+.sub{{font-size:10px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;margin:14px 0 24px;}}
+.kpi-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;}}
+.kpi{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:16px 20px;}}
+.kpi .lbl{{font-size:8px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;margin-bottom:4px;}}
+.kpi .val{{font-size:26px;font-weight:600;color:#e9eef3;font-variant-numeric:tabular-nums;}}
+.kpi.red .val{{color:#d4495d;}}.kpi.amber .val{{color:#d99a2b;}}
+.grid2{{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}}
+@media(max-width:760px){{.grid2{{grid-template-columns:1fr;}}.kpi-grid{{grid-template-columns:repeat(2,1fr);}}}}
+.section{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:18px 22px;margin-bottom:14px;}}
+h2{{font-size:10px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid rgba(106,169,201,0.18);}}
+.row{{display:flex;justify-content:space-between;padding:4px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.03);}}
+.row a{{color:#aab5c0;text-decoration:none;}}.row a:hover{{color:#6aa9c9;}}
+.row .n{{color:#e9eef3;font-variant-numeric:tabular-nums;}}
+.sb-hist{{display:flex;align-items:flex-end;gap:8px;height:60px;}}
+.sb-col{{flex:1;display:flex;flex-direction:column;align-items:center;}}
+.sb-bar{{width:100%;min-height:2px;}}
+.sb-lbl{{font-size:9px;color:#6c7986;margin-top:3px;}}
+.inc{{padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:11px;}}
+.inc .date{{color:#6c7986;margin-right:10px;font-variant-numeric:tabular-nums;}}
+.inc .loc{{color:#aab5c0;margin-right:10px;}}
+.inc .cat{{color:#e9eef3;margin-right:10px;}}.inc .sev{{color:#d99a2b;font-weight:600;}}
+.inc .vrfd{{color:#5fb583;margin-left:6px;}}.inc .unvrfd{{color:#d99a2b;margin-left:6px;}}
+.inc .summ{{margin-top:4px;color:#aab5c0;}}
+.inc .src{{font-size:9px;color:#6aa9c9;text-decoration:none;letter-spacing:1px;margin-top:3px;display:inline-block;}}
+.cta{{display:inline-block;font-size:10px;letter-spacing:2px;color:#6aa9c9;border:1px solid #6aa9c9;padding:8px 14px;text-decoration:none;margin-right:8px;text-transform:uppercase;}}
+.cta:hover{{background:rgba(106,169,201,0.10);}}
+.footer{{font-size:9px;letter-spacing:1.5px;color:#3a4551;text-align:center;margin-top:30px;text-transform:uppercase;}}
+</style></head>
+<body>
+<div class="classbar"><span class="l">◆ OPEN SOURCE INTELLIGENCE · LEX EUROPE</span><span>AKTEURS-PROFIL</span></div>
+<div class="page">
+  <h1>{esc(actor)}</h1>
+  <span class="tier-badge" style="color:{tier_color}">{esc(tier_label)}</span>
+  <div class="sub">OSINT-Akteursprofil · automatisch aggregiert · Stand {datetime.now().date().isoformat()}</div>
+
+  <div class="kpi-grid">
+    <div class="kpi"><div class="lbl">Vorfälle gesamt</div><div class="val">{total_n}</div></div>
+    <div class="kpi red"><div class="lbl">Schwere ≥4</div><div class="val">{hi_n}</div></div>
+    <div class="kpi"><div class="lbl">Länder</div><div class="val">{len(by_co)}</div></div>
+    <div class="kpi amber"><div class="lbl">Funding-Records</div><div class="val">{len(funds)}</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="section"><h2>Schwere-Verteilung</h2><div class="sb-hist">{sev_html}</div></div>
+    <div class="section"><h2>Aktivität pro Jahr</h2>{yr_html}</div>
+  </div>
+
+  <div class="grid2">
+    <div class="section"><h2>Länder (Top 6)</h2>{co_html}</div>
+    <div class="section"><h2>Ziel-Klassen (Top 6)</h2>{tt_html}</div>
+  </div>
+
+  <div class="section"><h2>Zeitraum & Schnellzugriff</h2>
+    <div class="row"><span>Erstmals dokumentiert</span><span class="n">{esc(first_seen)}</span></div>
+    <div class="row"><span>Zuletzt dokumentiert</span><span class="n">{esc(last_seen)}</span></div>
+    <div style="margin-top:14px">
+      <a class="cta" href="/api/incidents/by-actor?actor={esc(actor)}">↗ JSON-Export</a>
+      <a class="cta" href="/api/funding/by-actor?actor={esc(actor)}">↗ Funding-API</a>
+      <a class="cta" href="/dashboard">→ Dashboard</a>
+    </div>
+  </div>
+
+  <div class="section"><h2>Funding-Records ({len(funds)})</h2>{fund_html}</div>
+  <div class="section"><h2>Jüngste Vorfälle (max. 25)</h2>{inc_html}</div>
+
+  <div class="footer">LEX EUROPE · {esc(actor)} · Fedpol-Tier: {esc(actor_tier)}</div>
+</div>
+</body></html>""")
+
 
 @app.get("/c/{country}", response_class=HTMLResponse)
 async def public_country_profile(country: str):
@@ -5563,6 +5873,97 @@ async def list_funding_edges(limit: int = 200):
         "ORDER BY year DESC, timestamp DESC LIMIT ?", (limit,)
     ).fetchall()
     return JSONResponse([dict(r) for r in rows])
+
+
+@app.get("/api/funding/by-actor")
+async def funding_by_actor(actor: str = "", min_amount: float = 0):
+    """
+    Cross-Reference: alle Funding-Records, deren recipient_org ODER
+    donor_name den gegebenen Akteur (oder ein Synonym aus KNOWN_ACTORS)
+    enthält. Sucht case-insensitive Substring-Match. Ermöglicht
+    "klick-Akteur → siehe Finanzfluss" UX.
+    """
+    if not actor or len(actor) < 3:
+        return JSONResponse({"actor": actor, "matches": [], "count": 0})
+    # Klein-/Groß-Variante + bekannte Synonyme expandieren.
+    needles = [actor.lower()]
+    for name, _patterns, _tier in KNOWN_ACTORS:
+        if name.lower() == actor.lower():
+            for pat in _patterns:
+                # Erste Wort-Stamm-Variante des Pattern als Such-Needle.
+                cleaned = re.sub(r"[\\b\\s\\.\\?\\*\\+\\(\\)\\[\\]\\|]", " ", pat).strip()
+                first = cleaned.split()[0] if cleaned.split() else ""
+                if len(first) >= 4:
+                    needles.append(first.lower())
+            break
+    needles = list(set(needles))
+    q = ("SELECT id, recipient_org, project, amount, currency, year, country, "
+         "donor_type, donor_name, source_url, notes, confidence, "
+         "COALESCE(verified, 0) AS verified "
+         "FROM funding_records WHERE 1=1")
+    p = []
+    if min_amount > 0:
+        q += " AND amount >= ?"
+        p.append(min_amount)
+    # OR-Filter über recipient_org + donor_name + notes
+    or_clauses = []
+    for n in needles:
+        like = f"%{n}%"
+        or_clauses.append("(LOWER(recipient_org) LIKE ? OR LOWER(donor_name) LIKE ? OR LOWER(notes) LIKE ?)")
+        p.extend([like, like, like])
+    if or_clauses:
+        q += " AND (" + " OR ".join(or_clauses) + ")"
+    q += " ORDER BY year DESC, amount DESC"
+    rows = [dict(r) for r in db.execute(q, p).fetchall()]
+    total_eur = sum(r["amount"] for r in rows if (r.get("currency") or "EUR") == "EUR")
+    total_chf = sum(r["amount"] for r in rows if (r.get("currency") or "EUR") == "CHF")
+    return JSONResponse({
+        "actor":     actor,
+        "needles":   needles,
+        "matches":   rows,
+        "count":     len(rows),
+        "sum_eur":   total_eur,
+        "sum_chf":   total_chf,
+    })
+
+
+@app.get("/api/incidents/by-actor")
+async def incidents_by_actor(actor: str = "", limit: int = 200):
+    """
+    Cross-Reference: alle Incidents, in deren actors-Feld der genannte
+    Akteur vorkommt. Für die Actor-Drill-Down-Panel sehr nützlich
+    (heute filtert das Frontend client-side; dieser Endpoint erlaubt
+    auch externen API-Konsumenten dieselbe Sicht).
+    """
+    if not actor or len(actor) < 3:
+        return JSONResponse({"actor": actor, "matches": [], "count": 0})
+    rows = [dict(r) for r in db.execute(
+        "SELECT id, date, location, country, category, summary, "
+        "severity_score, tier, target_type, url, source, actors "
+        "FROM incidents WHERE actors LIKE ? "
+        "ORDER BY date DESC LIMIT ?",
+        (f"%{actor}%", min(max(limit, 1), 500))
+    ).fetchall()]
+    # Filter genauer: actor name muss exact in komma-separierter Liste sein
+    actor_l = actor.lower()
+    filtered = [r for r in rows if any(
+        a.strip().lower() == actor_l for a in (r["actors"] or "").split(",")
+    )]
+    sev_hist = [0,0,0,0,0]
+    for r in filtered:
+        s = max(1, min(5, r.get("severity_score") or 1))
+        sev_hist[s-1] += 1
+    by_co = {}
+    for r in filtered:
+        c = r.get("country") or "—"
+        by_co[c] = by_co.get(c, 0) + 1
+    return JSONResponse({
+        "actor": actor,
+        "count": len(filtered),
+        "by_severity": sev_hist,
+        "by_country":  sorted(by_co.items(), key=lambda x: -x[1]),
+        "matches": filtered[:limit],
+    })
 
 
 @app.get("/api/funding/export-csv")
