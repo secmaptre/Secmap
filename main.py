@@ -207,6 +207,41 @@ def get_db():
     )''')
     c.execute("CREATE INDEX IF NOT EXISTS idx_audit_token ON api_audit(token_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_audit_ts    ON api_audit(timestamp)")
+
+    # ── WEBHOOK SUBSCRIPTIONS (Säule 2 — operativ) ────────────────
+    # Betreiber gefährdeter Infrastruktur (Bahn, Energie, Polizei,
+    # IHK-Sicherheitsbeauftragte) abonnieren ein Filter-Set (target_type,
+    # country, min_severity) und bekommen automatisch HMAC-signierte
+    # POSTs bei neuen Cluster-Detections und neuen T1-Vorfällen, die
+    # ihre Filter matchen. Jede Lieferung wird in webhook_deliveries
+    # geloggt (Code + Zeit + Body-Length).
+    c.execute('''CREATE TABLE IF NOT EXISTS webhook_subscriptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        url TEXT NOT NULL,
+        label TEXT NOT NULL,
+        target_types TEXT DEFAULT '',
+        countries TEXT DEFAULT '',
+        min_severity INTEGER DEFAULT 4,
+        events TEXT DEFAULT 'cluster,incident',
+        secret TEXT NOT NULL,
+        active INTEGER DEFAULT 1,
+        created_at TEXT,
+        last_delivery TEXT,
+        delivery_count INTEGER DEFAULT 0,
+        failure_count INTEGER DEFAULT 0
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS webhook_deliveries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sub_id INTEGER,
+        event_type TEXT,
+        event_key TEXT,
+        status_code INTEGER,
+        body_len INTEGER,
+        delivered_at TEXT,
+        error TEXT
+    )''')
+    c.execute("CREATE INDEX IF NOT EXISTS idx_wh_active ON webhook_subscriptions(active)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_wd_sub    ON webhook_deliveries(sub_id)")
     c.commit()
     return c
 
@@ -2314,6 +2349,27 @@ def save_incident(ai, text, source, url, date_str=None, manual=False):
             f"SAVED [sev={sev}/conf={conf}/tier={tier}/hi={is_high_risk}/"
             f"target={target_type or '-'}]: {cat} / {ai.get('ort')} / {source}"
         )
+        # ── Webhook-Fan-Out: nur T1-act-Vorfälle pushen, NIE doxxing-
+        # sanitisierte oder T3-Kontext-Einträge — die haben keinen
+        # operativen Mehrwert für Betreiber-Frühwarnung.
+        if tier == "act" and not doxxing_sanitized and not manual:
+            try:
+                _fanout_webhook("incident.new", h, {
+                    "event":           "incident.new",
+                    "hash":            h,
+                    "date":            d,
+                    "location":        ai.get("ort"),
+                    "country":         ai.get("land"),
+                    "category":        cat,
+                    "tier":            tier,
+                    "target_type":     target_type,
+                    "severity_score":  sev,
+                    "summary":         summ,
+                    "source":          source,
+                    "url":             url_norm,
+                })
+            except Exception as e:
+                log.info(f"webhook fan-out (incident) failed: {e}")
         return True
     except Exception as e:
         log.warning(f"save_incident: {e}")
@@ -3407,7 +3463,103 @@ def detect_clusters():
         "SELECT COUNT(*) FROM early_warning_clusters WHERE active=1"
     ).fetchone()[0]
     log.info(f"detect_clusters: {n_active} active clusters (threshold ≥{EWC_THRESHOLD} / {EWC_WINDOW_DAYS}d)")
+    # ── Webhook-Fan-Out: neue oder eskalierende Cluster pushen ────
+    # Wir benutzen die zuvor in `seen_keys` gesammelten *aktuell aktiven*
+    # Cluster (alles was im Window meets-threshold ist). Subscriber mit
+    # passendem Filter (target_type, country, min_count) bekommen einen
+    # signierten POST.
+    try:
+        for key in seen_keys:
+            row = db.execute(
+                "SELECT cluster_key, country, target_type, count, first_seen, "
+                "last_seen, sample_titles "
+                "FROM early_warning_clusters WHERE cluster_key = ?", (key,)
+            ).fetchone()
+            if row:
+                d = dict(row)
+                try:
+                    d["sample_titles"] = json.loads(d["sample_titles"] or "[]")
+                except Exception:
+                    d["sample_titles"] = []
+                _fanout_webhook("cluster", d["cluster_key"], {
+                    "event":        "cluster.active",
+                    "cluster_key":  d["cluster_key"],
+                    "country":      d["country"],
+                    "target_type":  d["target_type"],
+                    "count":        d["count"],
+                    "window_days":  EWC_WINDOW_DAYS,
+                    "first_seen":   d["first_seen"],
+                    "last_seen":    d["last_seen"],
+                    "sample_titles":d["sample_titles"],
+                })
+    except Exception as e:
+        log.warning(f"webhook fan-out failed: {e}")
     return n_active
+
+
+# ── WEBHOOK DELIVERY ENGINE (Säule 2) ─────────────────────────────
+def _hmac_sign(secret: str, body_bytes: bytes) -> str:
+    import hmac, hashlib as _h
+    return "sha256=" + hmac.new(secret.encode(), body_bytes,
+                                _h.sha256).hexdigest()
+
+def _fanout_webhook(event_type: str, event_key: str, payload: dict):
+    """Fire matching webhooks for an event. Filters are AND-ed:
+    target_types (empty=any), countries (empty=any), min_severity (incident-only),
+    events (must contain event_type's family: 'cluster' or 'incident')."""
+    subs = db.execute(
+        "SELECT id, url, secret, target_types, countries, min_severity, events "
+        "FROM webhook_subscriptions WHERE active=1"
+    ).fetchall()
+    if not subs:
+        return
+    body = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    target_t = (payload.get("target_type") or "").strip()
+    country  = (payload.get("country")     or "").strip()
+    severity = int(payload.get("severity_score") or 0)
+    family   = event_type.split(".", 1)[0]  # 'cluster' / 'incident'
+    for s in subs:
+        events = (s["events"] or "").split(",")
+        if family not in [e.strip() for e in events if e.strip()]:
+            continue
+        tts = [x.strip() for x in (s["target_types"] or "").split(",") if x.strip()]
+        cos = [x.strip() for x in (s["countries"]    or "").split(",") if x.strip()]
+        if tts and target_t and target_t not in tts: continue
+        if cos and country  and country  not in cos: continue
+        if family == "incident" and severity < (s["min_severity"] or 0): continue
+        sig = _hmac_sign(s["secret"], body)
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent":   "LEX-EUROPE-webhook/1.0",
+            "X-LexEurope-Signature": sig,
+            "X-LexEurope-Event":     event_type,
+            "X-LexEurope-Event-Key": event_key,
+        }
+        now = datetime.now().isoformat(timespec="seconds")
+        err = None; code = 0
+        try:
+            r = requests.post(s["url"], data=body, headers=headers, timeout=8)
+            code = r.status_code
+            r.raise_for_status()
+            db.execute(
+                "UPDATE webhook_subscriptions SET last_delivery=?, "
+                "delivery_count = delivery_count + 1 WHERE id=?",
+                (now, s["id"])
+            )
+        except Exception as e:
+            err = str(e)[:280]
+            db.execute(
+                "UPDATE webhook_subscriptions SET failure_count = failure_count + 1 "
+                "WHERE id=?", (s["id"],)
+            )
+            log.info(f"webhook delivery FAIL sub={s['id']} url={s['url']}: {err}")
+        db.execute(
+            "INSERT INTO webhook_deliveries "
+            "(sub_id, event_type, event_key, status_code, body_len, delivered_at, error) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (s["id"], event_type, event_key, code, len(body), now, err)
+        )
+        db.commit()
 
 
 @app.get("/api/early-warning.json")
@@ -3760,6 +3912,107 @@ async def admin_revoke_token(token_id: int, _=Depends(require_admin)):
     db.execute("UPDATE api_tokens SET revoked=1 WHERE id=?", (token_id,))
     db.commit()
     return JSONResponse({"ok": True})
+
+
+# ── WEBHOOK ADMIN-CRUD (Säule 2) ──────────────────────────────────
+@app.post("/admin/api/webhooks")
+async def admin_create_webhook(request: Request, _=Depends(require_admin)):
+    """Create a new webhook subscription. Returns the secret EXACTLY once."""
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "message": "Ungültiges JSON"}, status_code=400)
+    url   = (data.get("url")   or "").strip()
+    label = (data.get("label") or "").strip()
+    # https:// in Production Pflicht; localhost/127.0.0.1 dürfen auch http://
+    # (für interne Operatoren-Empfänger und lokale Testflows).
+    _is_localhost = re.search(r"^https?://(127\.0\.0\.1|localhost)(:\d+)?(/|$)", url)
+    if not url.startswith("https://") and not _is_localhost:
+        return JSONResponse({"ok": False,
+            "message": "url muss https:// sein (Ausnahme: localhost/127.0.0.1)"},
+            status_code=400)
+    if not label:
+        return JSONResponse({"ok": False, "message": "label ist Pflicht"}, status_code=400)
+    def _norm(s, allowed=None):
+        items = [x.strip() for x in (s or "").split(",") if x.strip()]
+        if allowed:
+            items = [x for x in items if x in allowed]
+        return ",".join(items)
+    target_types = _norm(data.get("target_types", ""), _TARGET_TYPE_ALLOWED)
+    countries    = _norm(data.get("countries", ""))
+    events       = _norm(data.get("events", "cluster,incident"),
+                          {"cluster", "incident"})
+    if not events:
+        events = "cluster,incident"
+    min_sev      = int(data.get("min_severity") or 4)
+    secret       = secrets.token_urlsafe(32)
+    now          = datetime.now().isoformat(timespec="seconds")
+    db.execute(
+        "INSERT INTO webhook_subscriptions "
+        "(url,label,target_types,countries,min_severity,events,secret,active,created_at) "
+        "VALUES (?,?,?,?,?,?,?,1,?)",
+        (url, label, target_types, countries, min_sev, events, secret, now)
+    )
+    db.commit()
+    sub_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    return JSONResponse({
+        "ok": True, "id": sub_id, "label": label, "url": url,
+        "target_types": target_types, "countries": countries, "events": events,
+        "min_severity": min_sev,
+        "secret": secret,
+        "signature_help":
+            "X-LexEurope-Signature header = 'sha256=' + hmac_sha256(secret, raw_body). "
+            "Body is JSON UTF-8, keys sorted, no extra whitespace.",
+    })
+
+@app.delete("/admin/api/webhooks/{sub_id}")
+async def admin_delete_webhook(sub_id: int, _=Depends(require_admin)):
+    db.execute("UPDATE webhook_subscriptions SET active=0 WHERE id=?", (sub_id,))
+    db.commit()
+    return JSONResponse({"ok": True})
+
+@app.get("/admin/api/webhooks")
+async def admin_list_webhooks(_=Depends(require_admin)):
+    """Lists subscriptions WITHOUT the secret value."""
+    rows = db.execute(
+        "SELECT id, url, label, target_types, countries, min_severity, events, "
+        "active, created_at, last_delivery, delivery_count, failure_count "
+        "FROM webhook_subscriptions ORDER BY id DESC"
+    ).fetchall()
+    return JSONResponse([dict(r) for r in rows])
+
+@app.get("/admin/api/webhooks/{sub_id}/deliveries")
+async def admin_webhook_deliveries(sub_id: int, limit: int = 50,
+                                    _=Depends(require_admin)):
+    rows = db.execute(
+        "SELECT event_type, event_key, status_code, body_len, delivered_at, error "
+        "FROM webhook_deliveries WHERE sub_id=? ORDER BY id DESC LIMIT ?",
+        (sub_id, min(limit, 500))
+    ).fetchall()
+    return JSONResponse([dict(r) for r in rows])
+
+@app.post("/admin/api/webhooks/{sub_id}/test")
+async def admin_webhook_test(sub_id: int, _=Depends(require_admin)):
+    """Fires a synthetic 'test'-event at one subscription for verification."""
+    row = db.execute(
+        "SELECT id,url,secret,events FROM webhook_subscriptions "
+        "WHERE id=? AND active=1", (sub_id,)
+    ).fetchone()
+    if not row:
+        return JSONResponse({"ok": False, "message": "Subscription nicht aktiv"}, status_code=404)
+    payload = {"event": "test", "ts": datetime.now().isoformat(timespec="seconds"),
+               "message": "LEX EUROPE webhook test"}
+    body = json.dumps(payload, sort_keys=True).encode("utf-8")
+    sig  = _hmac_sign(row["secret"], body)
+    try:
+        r = requests.post(row["url"], data=body, timeout=8, headers={
+            "Content-Type": "application/json",
+            "X-LexEurope-Signature": sig,
+            "X-LexEurope-Event": "test",
+        })
+        return JSONResponse({"ok": True, "status_code": r.status_code})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)[:200]}, status_code=502)
 
 
 @app.get("/admin/api/tokens")
