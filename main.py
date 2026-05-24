@@ -4356,6 +4356,7 @@ async def sitemap_xml(request: Request):
     base = str(request.base_url).rstrip("/")
     urls = [
         f"{base}/", f"{base}/dashboard", f"{base}/lagebericht",
+        f"{base}/sources",
         f"{base}/api/incidents.rss", f"{base}/api/early-warning.rss",
         f"{base}/api/v1/docs",
     ]
@@ -4469,6 +4470,167 @@ h2{{font-size:11px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-trans
 
 
 @app.get("/lagebericht", response_class=HTMLResponse)
+@app.get("/api/public/sources")
+async def public_sources():
+    """Öffentliche Source-Health-Übersicht — Operator-Stakeholder können
+    sehen welche Quellen wir aktiv crawlen, welche zuletzt erfolgreich
+    waren und welche aktuell auf Auto-Disable stehen. Macht den
+    Crawler-Status nachprüfbar ohne Admin-Login."""
+    rows = db.execute(
+        "SELECT source, url, last_attempt, last_success, last_error, "
+        "consecutive_failures, total_attempts, total_successes, "
+        "items_last_run, items_total, active "
+        "FROM source_health "
+        "ORDER BY active DESC, total_successes DESC, source ASC"
+    ).fetchall()
+    sources = []
+    for r in rows:
+        d = dict(r)
+        cf = d["consecutive_failures"] or 0
+        if not d["active"]:           d["status"] = "disabled"
+        elif cf >= 5:                 d["status"] = "warning"
+        elif cf > 0:                  d["status"] = "degraded"
+        elif d["total_successes"] > 0: d["status"] = "healthy"
+        else:                          d["status"] = "untested"
+        # Sensitive-felder NICHT raushauen (last_error kann interne IPs enthalten).
+        d.pop("last_error", None)
+        sources.append(d)
+    return JSONResponse({
+        "sources":      sources,
+        "configured":   len(RSS_FEEDS),
+        "totals": {
+            "healthy":   sum(1 for s in sources if s["status"]=="healthy"),
+            "degraded":  sum(1 for s in sources if s["status"]=="degraded"),
+            "warning":   sum(1 for s in sources if s["status"]=="warning"),
+            "disabled":  sum(1 for s in sources if s["status"]=="disabled"),
+            "untested":  sum(1 for s in sources if s["status"]=="untested"),
+            "active_count": sum(1 for s in sources if s["active"]),
+        },
+        "items_today":  sum((s.get("items_last_run") or 0) for s in sources),
+        "asof":         datetime.now().isoformat(timespec="seconds"),
+    })
+
+
+@app.get("/sources", response_class=HTMLResponse)
+async def public_sources_page(request: Request):
+    """Öffentliche Crawler-Status-Übersicht: zeigt alle Quellen, ihren
+    Health-Status (healthy/degraded/warning/disabled/untested), letzte
+    erfolgreiche Crawl, Anzahl Items. Press-/Stakeholder-tauglich.
+    Macht insbesondere transparent dass barrikade.info gecrawlt wird
+    (auch wenn temporär blockiert)."""
+    s_resp = await public_sources()
+    import json as _j
+    data = _j.loads(s_resp.body)
+    sources = data["sources"]
+    totals  = data["totals"]
+    # Sortierung für visuelle Klarheit: healthy zuerst, dann degraded/warning, dann disabled.
+    order_map = {"healthy":0, "degraded":1, "warning":2, "untested":3, "disabled":4}
+    sources.sort(key=lambda s: (order_map.get(s["status"], 9), s["source"]))
+    def esc(s): return _xml_esc(s)
+    status_color = {
+        "healthy":  "#5fb583",
+        "degraded": "#d99a2b",
+        "warning":  "#d99a2b",
+        "untested": "#6c7986",
+        "disabled": "#d4495d",
+    }
+    status_label = {
+        "healthy":  "● aktiv",
+        "degraded": "● degraded",
+        "warning":  "● warnung",
+        "untested": "○ ungetestet",
+        "disabled": "● disabled",
+    }
+    rows_html = "".join(
+        f"<tr class='s-{esc(s['status'])}'>"
+        f"<td><span style='color:{status_color.get(s['status'], '#6c7986')}'>{status_label.get(s['status'], '?')}</span></td>"
+        f"<td class='src'>{esc(s['source'])}</td>"
+        f"<td class='url'>{esc(s.get('url') or '—')}</td>"
+        f"<td class='n'>{s.get('total_successes') or 0}</td>"
+        f"<td class='n'>{s.get('total_attempts') or 0}</td>"
+        f"<td class='n'>{s.get('items_total') or 0}</td>"
+        f"<td class='date'>{esc(s.get('last_success') or '—')}</td>"
+        f"<td class='n'>{s.get('consecutive_failures') or 0}</td>"
+        f"</tr>"
+        for s in sources
+    ) or "<tr><td colspan='8' style='color:#6c7986;text-align:center;padding:20px'>— keine Crawl-Statistiken vorhanden (Crawler läuft erst nach Boot+20s) —</td></tr>"
+    return HTMLResponse(f"""<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><title>Crawler-Quellen — LEX EUROPE</title>
+<meta name="description" content="Crawler-Status aller {data['configured']} konfigurierten Quellen: {totals['healthy']} healthy, {totals['degraded']+totals['warning']} mit Fehlern, {totals['disabled']} disabled.">
+<meta property="og:title"       content="LEX EUROPE — Crawler-Quellen-Status">
+<meta property="og:description" content="{data['configured']} Quellen · {totals['healthy']} healthy · {totals['disabled']} disabled · {data.get('items_today',0)} Items in letztem Run">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:ui-monospace,Menlo,Consolas,monospace;background:#080c12;color:#aab5c0;font-size:12px;line-height:1.5;}}
+.classbar{{background:#0a1219;border-bottom:1px solid rgba(255,255,255,0.06);padding:5px 18px;font-size:9px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;display:flex;justify-content:space-between;}}
+.classbar .l{{color:#6aa9c9;}}
+.page{{max-width:1100px;margin:0 auto;padding:30px 24px 60px;}}
+h1{{font-family:'Inter',system-ui,sans-serif;font-size:28px;font-weight:600;color:#e9eef3;letter-spacing:0.5px;margin-bottom:6px;}}
+.sub{{font-size:10px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;margin-bottom:24px;}}
+.kpi-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px;}}
+.kpi{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:16px 20px;}}
+.kpi .lbl{{font-size:8px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;margin-bottom:4px;}}
+.kpi .val{{font-size:24px;font-weight:600;color:#e9eef3;font-variant-numeric:tabular-nums;}}
+.kpi.green .val{{color:#5fb583;}}.kpi.amber .val{{color:#d99a2b;}}.kpi.red .val{{color:#d4495d;}}
+table{{width:100%;border-collapse:collapse;font-family:ui-monospace;font-size:11px;}}
+th,td{{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.04);text-align:left;vertical-align:top;}}
+th{{font-size:9px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;background:rgba(255,255,255,0.02);}}
+td.src{{color:#e9eef3;font-weight:600;}}
+td.url{{color:#6c7986;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}}
+td.n{{text-align:right;color:#aab5c0;font-variant-numeric:tabular-nums;}}
+td.date{{color:#6c7986;font-size:10px;}}
+tr:hover td{{background:rgba(106,169,201,0.04);}}
+.section{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:18px 22px;margin-bottom:14px;}}
+h2{{font-size:10px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid rgba(106,169,201,0.18);}}
+.footer{{font-size:9px;letter-spacing:1.5px;color:#3a4551;text-align:center;margin-top:30px;text-transform:uppercase;}}
+.cta{{display:inline-block;font-size:10px;letter-spacing:2px;color:#6aa9c9;border:1px solid #6aa9c9;padding:8px 14px;text-decoration:none;text-transform:uppercase;margin-right:6px;}}
+</style></head>
+<body>
+<div class="classbar"><span class="l">◆ OPEN SOURCE INTELLIGENCE · LEX EUROPE</span><span>CRAWLER-STATUS · STAND {esc(data['asof'][:10])}</span></div>
+<div class="page">
+  <h1>Crawler-Quellen-Status</h1>
+  <div class="sub">{data['configured']} konfigurierte Quellen · Auto-Disable nach {SOURCE_MAX_FAILURES} consecutive failures · Public-Visibility-Endpoint</div>
+
+  <div class="kpi-grid">
+    <div class="kpi"><div class="lbl">Konfiguriert</div><div class="val">{data['configured']}</div></div>
+    <div class="kpi green"><div class="lbl">Healthy</div><div class="val">{totals['healthy']}</div></div>
+    <div class="kpi amber"><div class="lbl">Degraded / Warning</div><div class="val">{totals['degraded']+totals['warning']}</div></div>
+    <div class="kpi red"><div class="lbl">Auto-Disabled</div><div class="val">{totals['disabled']}</div></div>
+    <div class="kpi"><div class="lbl">Untested</div><div class="val">{totals['untested']}</div></div>
+    <div class="kpi"><div class="lbl">Items letzte Crawls</div><div class="val">{data.get('items_today',0)}</div></div>
+  </div>
+
+  <div class="section">
+    <h2>Alle Quellen ({len(sources)} mit Crawl-Statistik)</h2>
+    <table>
+      <thead><tr>
+        <th>STATUS</th><th>QUELLE</th><th>URL</th>
+        <th>SUCC</th><th>VERSUCHE</th><th>ITEMS</th>
+        <th>LETZTER ERFOLG</th><th>F-CHAIN</th>
+      </tr></thead>
+      <tbody>{rows_html}</tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Methodik & Schnellzugriff</h2>
+    Diese Seite spiegelt die Tabelle <code>source_health</code> wieder, die der
+    Crawler nach jedem RSS-Fetch aktualisiert. Quellen mit ≥ {SOURCE_MAX_FAILURES}
+    aufeinanderfolgenden Fehlern werden automatisch deaktiviert; ein Admin
+    kann sie via <code>POST /admin/api/source-health/&lt;source&gt;/reset</code>
+    re-aktivieren. Spezial-Crawler wie der für barrikade.info nutzen
+    zusätzlich cloudscraper + web.archive.org als Fallback.<br><br>
+    <a class="cta" href="/api/public/sources">↗ JSON-Export</a>
+    <a class="cta" href="/dashboard">→ Dashboard</a>
+    <a class="cta" href="/">→ Karte</a>
+  </div>
+
+  <div class="footer">LEX EUROPE · transparente Crawler-Health · automatisch aktualisiert</div>
+</div>
+</body></html>""")
+
+
 async def public_lagebericht():
     """Standalone öffentliche Wochenbericht-Seite. Print-friendly, OG-getaggt.
     Holt /api/lagebericht/weekly direkt aus der DB ohne HTTP-Roundtrip."""

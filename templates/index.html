@@ -1429,6 +1429,10 @@ body.mod-funding #mod-funding-view{display:grid !important;}
     <span class="sv eff eff-evidence" id="eff-evidence">—</span>
   </div>
   <div class="si"><span class="sk">CRAWLER</span><span class="sv" id="s-cr">—</span></div>
+  <a class="si" href="/sources" title="Crawler-Quellen-Status (öffentlich)" style="text-decoration:none">
+    <span class="sk">QUELLEN</span>
+    <span class="sv eff" id="s-sources">—</span>
+  </a>
   <div id="thr-lvl"></div>
 </footer>
 
@@ -2558,19 +2562,28 @@ function setEff(id, value, pending){
 async function loadEffectiveness(){
   try{
     const d = await fetch('/api/effectiveness').then(r=>r.json());
-    // Strafverfolgungs-Lücke
     if(d.prosec_gap_base > 0){
       setEff('eff-gap', `${d.prosec_gap_pct}% (${d.prosec_gap_n}/${d.prosec_gap_base})`, false);
     }else{
       setEff('eff-gap', '—', true);
     }
-    // Cluster (MS-3 pending → -1)
     setEff('eff-cluster', d.cluster_active < 0 ? '—' : String(d.cluster_active), d.cluster_active < 0);
-    // Funding (current year)
     setEff('eff-funding', '€' + formatEur(d.funding_year_eur) + ' · ' + d.funding_year, false);
-    // Evidence (MS-5 pending → -1)
     setEff('eff-evidence', d.evidence_pct < 0 ? '—' : (d.evidence_pct + '%'), d.evidence_pct < 0);
   }catch(e){ /* keep last values */ }
+  // Crawler-Quellen-Counter (öffentliche Visibility): X aktiv / Y konfiguriert
+  try{
+    const s = await fetch('/api/public/sources').then(r=>r.json());
+    const t = s.totals || {};
+    const active = t.active_count || 0;
+    const conf = s.configured || 0;
+    const el = document.getElementById('s-sources');
+    if(el){
+      el.textContent = `${active}/${conf}`;
+      el.title = `${t.healthy||0} healthy · ${(t.degraded||0)+(t.warning||0)} degraded · ${t.disabled||0} disabled · ${t.untested||0} ungetestet · ${s.items_today||0} items im letzten Run`;
+      el.style.color = (t.disabled||0) > 0 ? 'var(--amber)' : 'var(--green)';
+    }
+  }catch(_){ /* keep last */ }
 }
 
 // ── ACCOUNTABILITY (Säule 1 — Strafverfolgungs-Druck) ─────────────
