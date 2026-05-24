@@ -4092,6 +4092,12 @@ async def sitemap_xml(request: Request):
         f"{base}/api/incidents.rss", f"{base}/api/early-warning.rss",
         f"{base}/api/v1/docs",
     ]
+    # Per-target-type + per-country pages dynamisch ergänzen.
+    for tt in ("Auto","Schiene","Energie","Telekom","Militär","Polizei",
+               "Politik","Justiz","Medien","Wirtschaft"):
+        urls.append(f"{base}/early-warning/{tt}")
+    for co in ("DE","AT","CH","FR","IT","ES","GR","UK","NL","DK","SE","NO","US"):
+        urls.append(f"{base}/c/{co}")
     items = "\n".join(f"<url><loc>{u}</loc></url>" for u in urls)
     xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
@@ -4280,6 +4286,149 @@ h2{{font-size:10px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-trans
   </div>
 
   <div class="footer">LEX EUROPE · Methodik & Schwellenwerte siehe Plattform-Disclaimer · {datetime.now().strftime('%Y-%m-%d %H:%M')} UTC</div>
+</div>
+</body></html>""")
+
+
+_COUNTRY_NAMES = {
+    "DE":"Deutschland", "AT":"Österreich", "CH":"Schweiz", "FR":"Frankreich",
+    "IT":"Italien", "ES":"Spanien", "GR":"Griechenland", "UK":"Vereinigtes Königreich",
+    "NL":"Niederlande", "BE":"Belgien", "DK":"Dänemark", "SE":"Schweden",
+    "NO":"Norwegen", "FI":"Finnland", "PL":"Polen", "CZ":"Tschechien",
+    "HU":"Ungarn", "RO":"Rumänien", "PT":"Portugal", "IE":"Irland",
+    "US":"USA",
+}
+
+@app.get("/c/{country}", response_class=HTMLResponse)
+async def public_country_profile(country: str):
+    """Land-spezifische öffentliche Lagebild-Seite. Analog zu /early-warning/
+    aber per Land geschnitten — gibt nationalen Sicherheits-Stakeholdern,
+    Journalist:innen und Forschung eine sofortige Lage-Übersicht für
+    'ihr' Territorium ohne Filter-Klickerei."""
+    co = (country or "").upper().strip()
+    if co not in _COUNTRY_NAMES:
+        return HTMLResponse("<h1>Unbekanntes Land</h1>", status_code=404)
+    co_name = _COUNTRY_NAMES[co]
+    today = datetime.now().date()
+    last30 = (today - timedelta(days=30)).isoformat()
+    last90 = (today - timedelta(days=90)).isoformat()
+    total_n = db.execute("SELECT COUNT(*) FROM incidents WHERE tier='act' AND country=?", (co,)).fetchone()[0]
+    last30_n = db.execute("SELECT COUNT(*) FROM incidents WHERE tier='act' AND country=? AND date>=?", (co, last30)).fetchone()[0]
+    last90_n = db.execute("SELECT COUNT(*) FROM incidents WHERE tier='act' AND country=? AND date>=?", (co, last90)).fetchone()[0]
+    hi_n     = db.execute("SELECT COUNT(*) FROM incidents WHERE tier='act' AND country=? AND severity_score>=4", (co,)).fetchone()[0]
+    clusters = [dict(r) for r in db.execute(
+        "SELECT cluster_key, target_type, count, first_seen, last_seen "
+        "FROM early_warning_clusters WHERE active=1 AND country=? "
+        "ORDER BY count DESC", (co,)
+    ).fetchall()]
+    by_cat = [dict(r) for r in db.execute(
+        "SELECT category, COUNT(*) n FROM incidents WHERE tier='act' AND country=? "
+        "GROUP BY category ORDER BY n DESC LIMIT 8", (co,)
+    ).fetchall()]
+    by_tt = [dict(r) for r in db.execute(
+        "SELECT target_type, COUNT(*) n FROM incidents WHERE tier='act' AND country=? "
+        "AND target_type != '' GROUP BY target_type ORDER BY n DESC LIMIT 8", (co,)
+    ).fetchall()]
+    recent = [dict(r) for r in db.execute(
+        "SELECT date, location, category, summary, severity_score, url, source "
+        "FROM incidents WHERE tier='act' AND country=? "
+        "ORDER BY date DESC LIMIT 25", (co,)
+    ).fetchall()]
+    # Aktoren mit Vorfällen in diesem Land
+    from collections import Counter
+    actors = Counter()
+    for r in db.execute("SELECT actors FROM incidents WHERE country=? AND actors != ''", (co,)).fetchall():
+        for a in (r[0] or "").split(","):
+            a = a.strip()
+            if a: actors[a] += 1
+    top_actors = actors.most_common(8)
+    def esc(s): return _xml_esc(s)
+    cluster_block = "".join(
+        f"<div class='ct'><b>{esc(c['target_type'])}</b> · {c['count']} Anschläge ({esc(c['first_seen'])}…{esc(c['last_seen'])})</div>"
+        for c in clusters
+    ) or "<div style='color:#6c7986'>— keine aktiven Cluster —</div>"
+    cat_block = "".join(f"<div class='row'><span>{esc(c['category'])}</span><span class='n'>{c['n']}</span></div>" for c in by_cat) or "—"
+    tt_block  = "".join(f"<div class='row'><a href='/early-warning/{esc(c['target_type'])}'>{esc(c['target_type'])}</a><span class='n'>{c['n']}</span></div>" for c in by_tt) or "—"
+    act_block = "".join(f"<div class='row'><span>{esc(a)}</span><span class='n'>{n}</span></div>" for a, n in top_actors) or "—"
+    recent_block = "".join(
+        f"<div class='inc'><span class='date'>{esc(r['date'])}</span>"
+        f"<span class='loc'>{esc(r['location'])}</span>"
+        f"<span class='cat'>{esc(r['category'])}</span>"
+        f"<span class='sev'>S{r['severity_score'] or '?'}</span>"
+        f"<div class='summ'>{esc((r.get('summary') or '')[:200])}</div>"
+        + (f"<a class='src' href='{esc(r['url'])}' rel='noopener'>↗ {esc(r['source'] or 'Quelle')}</a>" if r.get('url','').startswith('http') else "")
+        + "</div>"
+        for r in recent
+    ) or "<div style='color:#6c7986'>— keine T1-Vorfälle —</div>"
+    return HTMLResponse(f"""<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><title>Lagebild {co_name} — LEX EUROPE</title>
+<meta name="description" content="OSINT-Lagebild Linksextremismus {co_name}: {total_n} dokumentierte T1-Akte, {last30_n} in den letzten 30 Tagen, {len(clusters)} aktive Cluster.">
+<meta property="og:title"       content="LEX EUROPE — Lagebild {co_name}">
+<meta property="og:description" content="{total_n} T1-Akte · {last30_n} letzte 30T · {hi_n} hoch-Schwere · {len(clusters)} aktive Cluster">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:ui-monospace,Menlo,Consolas,monospace;background:#080c12;color:#aab5c0;font-size:13px;line-height:1.55;}}
+.classbar{{background:#0a1219;border-bottom:1px solid rgba(255,255,255,0.06);padding:5px 18px;font-size:9px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;display:flex;justify-content:space-between;}}
+.classbar .l{{color:#6aa9c9;}}
+.page{{max-width:1000px;margin:0 auto;padding:30px 24px 60px;}}
+h1{{font-family:'Inter',system-ui,sans-serif;font-size:32px;font-weight:600;color:#e9eef3;letter-spacing:0.5px;margin-bottom:6px;}}
+h1 .iso{{color:#6aa9c9;margin-right:14px;}}
+.sub{{font-size:10px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;margin-bottom:24px;}}
+.kpi-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;}}
+.kpi{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:16px 20px;}}
+.kpi .lbl{{font-size:8px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;margin-bottom:4px;}}
+.kpi .val{{font-size:26px;font-weight:600;color:#e9eef3;font-variant-numeric:tabular-nums;}}
+.kpi.red .val{{color:#d4495d;}}.kpi.amber .val{{color:#d99a2b;}}.kpi.green .val{{color:#5fb583;}}
+.grid2{{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}}
+@media(max-width:760px){{.grid2{{grid-template-columns:1fr;}}.kpi-grid{{grid-template-columns:repeat(2,1fr);}}}}
+.section{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:18px 22px;margin-bottom:14px;}}
+h2{{font-size:10px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid rgba(106,169,201,0.18);}}
+.row{{display:flex;justify-content:space-between;padding:4px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.03);}}
+.row .n{{color:#e9eef3;font-variant-numeric:tabular-nums;}}
+.row a{{color:#aab5c0;text-decoration:none;}}.row a:hover{{color:#6aa9c9;}}
+.ct{{padding:6px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.03);}}.ct b{{color:#d99a2b;}}
+.inc{{padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:11px;}}
+.inc .date{{color:#6c7986;margin-right:10px;}}.inc .loc{{color:#aab5c0;margin-right:10px;}}
+.inc .cat{{color:#e9eef3;margin-right:10px;}}.inc .sev{{color:#d99a2b;font-weight:600;}}
+.inc .summ{{margin-top:4px;color:#aab5c0;}}
+.inc .src{{font-size:9px;color:#6aa9c9;text-decoration:none;letter-spacing:1px;margin-top:3px;display:inline-block;}}
+.cta{{display:inline-block;font-size:10px;letter-spacing:2px;color:#6aa9c9;border:1px solid #6aa9c9;padding:8px 14px;text-decoration:none;margin-right:8px;text-transform:uppercase;}}
+.cta:hover{{background:rgba(106,169,201,0.10);}}
+.footer{{font-size:9px;letter-spacing:1.5px;color:#3a4551;text-align:center;margin-top:30px;text-transform:uppercase;}}
+</style></head>
+<body>
+<div class="classbar"><span class="l">◆ OPEN SOURCE INTELLIGENCE · LEX EUROPE</span><span>LANDESPROFIL · {esc(co)}</span></div>
+<div class="page">
+  <h1><span class="iso">{esc(co)}</span>{esc(co_name)}</h1>
+  <div class="sub">Lagebild Linksextremismus · automatisch aggregiert · Stand {today.isoformat()}</div>
+
+  <div class="kpi-grid">
+    <div class="kpi"><div class="lbl">T1-Akte gesamt</div><div class="val">{total_n}</div></div>
+    <div class="kpi"><div class="lbl">letzte 30 Tage</div><div class="val">{last30_n}</div></div>
+    <div class="kpi amber"><div class="lbl">letzte 90 Tage</div><div class="val">{last90_n}</div></div>
+    <div class="kpi red"><div class="lbl">Schwere ≥4</div><div class="val">{hi_n}</div></div>
+  </div>
+
+  <div class="section"><h2>Aktive Frühwarn-Cluster ({co_name})</h2>{cluster_block}</div>
+
+  <div class="grid2">
+    <div class="section"><h2>Kategorien</h2>{cat_block}</div>
+    <div class="section"><h2>Ziel-Klassen</h2>{tt_block}</div>
+  </div>
+
+  <div class="grid2">
+    <div class="section"><h2>Akteure (mit Vorfällen)</h2>{act_block}</div>
+    <div class="section"><h2>Methodik-Schnellzugriff</h2>
+      <a class="cta" href="/api/incidents.rss?country={esc(co)}">↗ RSS-Feed {esc(co)}</a><br><br>
+      <a class="cta" href="/lagebericht">→ Wochenbericht</a>
+      <a class="cta" href="/dashboard">→ Dashboard</a>
+    </div>
+  </div>
+
+  <div class="section"><h2>Jüngste T1-Vorfälle (max. 25)</h2>{recent_block}</div>
+
+  <div class="footer">LEX EUROPE · {esc(co_name)} · Land-spezifische Aggregation</div>
 </div>
 </body></html>""")
 
