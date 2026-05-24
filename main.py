@@ -4216,8 +4216,13 @@ async def sitemap_xml(request: Request):
     for tt in ("Auto","Schiene","Energie","Telekom","Militär","Polizei",
                "Politik","Justiz","Medien","Wirtschaft"):
         urls.append(f"{base}/early-warning/{tt}")
-    for co in ("DE","AT","CH","FR","IT","ES","GR","UK","NL","DK","SE","NO","US"):
+    for co in ("DE","AT","CH","FR","IT","ES","GR","UK","NL","DK","SE","NO","US",
+               "BE","IE","PT","CZ","HU"):
         urls.append(f"{base}/c/{co}")
+    # Akteurs-Profil-Seiten — alle KNOWN_ACTORS bekommen eine Sitemap-URL.
+    from urllib.parse import quote as _q
+    for name, _patterns, _tier in KNOWN_ACTORS:
+        urls.append(f"{base}/a/{_q(name)}")
     items = "\n".join(f"<url><loc>{u}</loc></url>" for u in urls)
     xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
@@ -4418,6 +4423,191 @@ _COUNTRY_NAMES = {
     "HU":"Ungarn", "RO":"Rumänien", "PT":"Portugal", "IE":"Irland",
     "US":"USA",
 }
+
+@app.get("/a/{actor_slug:path}", response_class=HTMLResponse)
+async def public_actor_profile(actor_slug: str):
+    """Public actor profile — alle Vorfälle + Funding-Cross-Reference für
+    einen Akteur. URL-Slug = url-encoded Akteurs-Name.
+    Analog zu /c/{country} und /early-warning/{target_type}."""
+    from urllib.parse import unquote
+    actor = unquote(actor_slug or "").strip()
+    if not actor or len(actor) < 3:
+        return HTMLResponse("<h1>Unbekannter Akteur</h1>", status_code=404)
+    # Tier-Klassifikation
+    actor_tier = ACTOR_TIER.get(actor, "endorse")
+    tier_label = {"act":"Verüben (T1)", "enable":"Fördern (T2)",
+                  "endorse":"Befürworten (T3)"}.get(actor_tier, actor_tier)
+    tier_color = {"act":"#d4495d", "enable":"#d99a2b",
+                  "endorse":"#7a8a99"}.get(actor_tier, "#7a8a99")
+    # Incidents pro Land + Severity
+    actor_l = actor.lower()
+    rows = [dict(r) for r in db.execute(
+        "SELECT id,date,location,country,category,summary,severity_score,tier,"
+        "target_type,url,source,actors FROM incidents WHERE actors LIKE ? "
+        "ORDER BY date DESC", (f"%{actor}%",)
+    ).fetchall()]
+    incs = [r for r in rows if any(
+        a.strip().lower() == actor_l for a in (r["actors"] or "").split(",")
+    )]
+    total_n = len(incs)
+    hi_n    = sum(1 for r in incs if (r.get("severity_score") or 0) >= 4)
+    from collections import Counter
+    by_co  = Counter(r["country"] for r in incs)
+    by_cat = Counter(r["category"] for r in incs)
+    by_tt  = Counter(r["target_type"] for r in incs if r.get("target_type"))
+    by_year = Counter((r["date"] or "")[:4] for r in incs if r.get("date"))
+    sev_hist = [0]*5
+    for r in incs:
+        s = max(1, min(5, r.get("severity_score") or 1))
+        sev_hist[s-1] += 1
+    last_seen = max((r["date"] for r in incs if r.get("date")), default="—")
+    first_seen = min((r["date"] for r in incs if r.get("date")), default="—")
+    # Funding cross-reference
+    needles = [actor.lower()]
+    for name, _patterns, _tier in KNOWN_ACTORS:
+        if name.lower() == actor_l:
+            for pat in _patterns:
+                cleaned = re.sub(r"[\\b\\s\\.\\?\\*\\+\\(\\)\\[\\]\\|]", " ", pat).strip()
+                first = cleaned.split()[0] if cleaned.split() else ""
+                if len(first) >= 4: needles.append(first.lower())
+    needles = list(set(needles))
+    fund_or = " OR ".join(["(LOWER(recipient_org) LIKE ? OR LOWER(donor_name) LIKE ? OR LOWER(notes) LIKE ?)"] * len(needles))
+    fund_params = []
+    for n in needles:
+        like = f"%{n}%"
+        fund_params.extend([like, like, like])
+    funds = [dict(r) for r in db.execute(
+        "SELECT recipient_org, project, amount, currency, year, donor_name, "
+        "source_url, COALESCE(verified, 0) AS verified "
+        "FROM funding_records WHERE " + (fund_or or "1=0") + " "
+        "ORDER BY year DESC, amount DESC LIMIT 50", fund_params
+    ).fetchall()] if fund_or else []
+    sum_eur = sum(f["amount"] for f in funds if (f.get("currency") or "EUR") == "EUR")
+    sum_chf = sum(f["amount"] for f in funds if (f.get("currency") or "EUR") == "CHF")
+    def esc(s): return _xml_esc(s)
+    sev_html = "".join(
+        f"<div class='sb-col' title='{n} Vorfälle Schwere {i+1}'>"
+        f"<div class='sb-bar' style='height:{max(2, n*30//max(sev_hist+[1]))}px;"
+        f"background:{['#3a4551','#5a6c7a','#d99a2b','#cf6044','#d4495d'][i]}'></div>"
+        f"<div class='sb-lbl'>{i+1}</div></div>"
+        for i, n in enumerate(sev_hist)
+    )
+    yr_html = "".join(
+        f"<div class='row'><span>{esc(y)}</span><span class='n'>{n}</span></div>"
+        for y, n in sorted(by_year.items())
+    ) or "—"
+    co_html = "".join(
+        f"<div class='row'><a href='/c/{esc(c)}'>{esc(c)}</a><span class='n'>{n}</span></div>"
+        for c, n in by_co.most_common(6)
+    ) or "—"
+    tt_html = "".join(
+        f"<div class='row'><a href='/early-warning/{esc(t)}'>{esc(t)}</a><span class='n'>{n}</span></div>"
+        for t, n in by_tt.most_common(6)
+    ) or "—"
+    inc_html = "".join(
+        f"<div class='inc'><span class='date'>{esc(r.get('date'))}</span>"
+        f"<span class='loc'>{esc(r.get('location'))}, {esc(r.get('country'))}</span>"
+        f"<span class='cat'>{esc(r.get('category'))}</span>"
+        f"<span class='sev'>S{r.get('severity_score','?')}</span>"
+        f"<div class='summ'>{esc((r.get('summary') or '')[:200])}</div>"
+        + (f"<a class='src' href='{esc(r.get('url'))}' rel='noopener'>↗ {esc(r.get('source') or '')}</a>" if r.get('url','').startswith('http') else "")
+        + "</div>"
+        for r in incs[:25]
+    ) or "<div style='color:#6c7986'>— keine Vorfälle —</div>"
+    fund_html = "".join(
+        f"<div class='inc'><span class='date'>{esc(str(f.get('year')))}</span>"
+        f"<span class='loc'>{esc((f.get('recipient_org') or '')[:42])}</span>"
+        f"<span class='cat'>{esc((f.get('donor_name') or '')[:40])}</span>"
+        f"<span class='sev'>{f.get('currency','EUR')} {int(f.get('amount') or 0):,}</span>"
+        + ("<span class='vrfd'>✓</span>" if f.get("verified") else "<span class='unvrfd'>⚠</span>")
+        + f"<div class='summ'>{esc((f.get('project') or '')[:200])}</div>"
+        + (f"<a class='src' href='{esc(f.get('source_url'))}' rel='noopener'>↗ Quelle</a>" if (f.get('source_url') or '').startswith('http') else "")
+        + "</div>"
+        for f in funds[:20]
+    ) or "<div style='color:#6c7986'>— keine Förderungen gefunden —</div>"
+    return HTMLResponse(f"""<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><title>Akteurs-Profil: {esc(actor)} — LEX EUROPE</title>
+<meta name="description" content="OSINT-Profil zum Akteur {esc(actor)}: {total_n} dokumentierte Vorfälle ({hi_n} hoch-Schwere), Fedpol-Tier: {tier_label}.">
+<meta property="og:title"       content="LEX EUROPE — Akteurs-Profil {esc(actor)}">
+<meta property="og:description" content="{total_n} Vorfälle · {hi_n} hoch-Schwere · {len(by_co)} Länder · {len(funds)} Funding-Records (€{sum_eur:,.0f})">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:ui-monospace,Menlo,Consolas,monospace;background:#080c12;color:#aab5c0;font-size:13px;line-height:1.55;}}
+.classbar{{background:#0a1219;border-bottom:1px solid rgba(255,255,255,0.06);padding:5px 18px;font-size:9px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;display:flex;justify-content:space-between;}}
+.classbar .l{{color:#6aa9c9;}}
+.page{{max-width:1000px;margin:0 auto;padding:30px 24px 60px;}}
+h1{{font-family:'Inter',system-ui,sans-serif;font-size:30px;font-weight:600;color:#e9eef3;letter-spacing:0.5px;margin-bottom:8px;}}
+.tier-badge{{display:inline-block;font-family:ui-monospace;font-size:9px;letter-spacing:2px;padding:3px 10px;border:1px solid currentColor;text-transform:uppercase;}}
+.sub{{font-size:10px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;margin:14px 0 24px;}}
+.kpi-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;}}
+.kpi{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:16px 20px;}}
+.kpi .lbl{{font-size:8px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;margin-bottom:4px;}}
+.kpi .val{{font-size:26px;font-weight:600;color:#e9eef3;font-variant-numeric:tabular-nums;}}
+.kpi.red .val{{color:#d4495d;}}.kpi.amber .val{{color:#d99a2b;}}
+.grid2{{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}}
+@media(max-width:760px){{.grid2{{grid-template-columns:1fr;}}.kpi-grid{{grid-template-columns:repeat(2,1fr);}}}}
+.section{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:18px 22px;margin-bottom:14px;}}
+h2{{font-size:10px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid rgba(106,169,201,0.18);}}
+.row{{display:flex;justify-content:space-between;padding:4px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.03);}}
+.row a{{color:#aab5c0;text-decoration:none;}}.row a:hover{{color:#6aa9c9;}}
+.row .n{{color:#e9eef3;font-variant-numeric:tabular-nums;}}
+.sb-hist{{display:flex;align-items:flex-end;gap:8px;height:60px;}}
+.sb-col{{flex:1;display:flex;flex-direction:column;align-items:center;}}
+.sb-bar{{width:100%;min-height:2px;}}
+.sb-lbl{{font-size:9px;color:#6c7986;margin-top:3px;}}
+.inc{{padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:11px;}}
+.inc .date{{color:#6c7986;margin-right:10px;font-variant-numeric:tabular-nums;}}
+.inc .loc{{color:#aab5c0;margin-right:10px;}}
+.inc .cat{{color:#e9eef3;margin-right:10px;}}.inc .sev{{color:#d99a2b;font-weight:600;}}
+.inc .vrfd{{color:#5fb583;margin-left:6px;}}.inc .unvrfd{{color:#d99a2b;margin-left:6px;}}
+.inc .summ{{margin-top:4px;color:#aab5c0;}}
+.inc .src{{font-size:9px;color:#6aa9c9;text-decoration:none;letter-spacing:1px;margin-top:3px;display:inline-block;}}
+.cta{{display:inline-block;font-size:10px;letter-spacing:2px;color:#6aa9c9;border:1px solid #6aa9c9;padding:8px 14px;text-decoration:none;margin-right:8px;text-transform:uppercase;}}
+.cta:hover{{background:rgba(106,169,201,0.10);}}
+.footer{{font-size:9px;letter-spacing:1.5px;color:#3a4551;text-align:center;margin-top:30px;text-transform:uppercase;}}
+</style></head>
+<body>
+<div class="classbar"><span class="l">◆ OPEN SOURCE INTELLIGENCE · LEX EUROPE</span><span>AKTEURS-PROFIL</span></div>
+<div class="page">
+  <h1>{esc(actor)}</h1>
+  <span class="tier-badge" style="color:{tier_color}">{esc(tier_label)}</span>
+  <div class="sub">OSINT-Akteursprofil · automatisch aggregiert · Stand {datetime.now().date().isoformat()}</div>
+
+  <div class="kpi-grid">
+    <div class="kpi"><div class="lbl">Vorfälle gesamt</div><div class="val">{total_n}</div></div>
+    <div class="kpi red"><div class="lbl">Schwere ≥4</div><div class="val">{hi_n}</div></div>
+    <div class="kpi"><div class="lbl">Länder</div><div class="val">{len(by_co)}</div></div>
+    <div class="kpi amber"><div class="lbl">Funding-Records</div><div class="val">{len(funds)}</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="section"><h2>Schwere-Verteilung</h2><div class="sb-hist">{sev_html}</div></div>
+    <div class="section"><h2>Aktivität pro Jahr</h2>{yr_html}</div>
+  </div>
+
+  <div class="grid2">
+    <div class="section"><h2>Länder (Top 6)</h2>{co_html}</div>
+    <div class="section"><h2>Ziel-Klassen (Top 6)</h2>{tt_html}</div>
+  </div>
+
+  <div class="section"><h2>Zeitraum & Schnellzugriff</h2>
+    <div class="row"><span>Erstmals dokumentiert</span><span class="n">{esc(first_seen)}</span></div>
+    <div class="row"><span>Zuletzt dokumentiert</span><span class="n">{esc(last_seen)}</span></div>
+    <div style="margin-top:14px">
+      <a class="cta" href="/api/incidents/by-actor?actor={esc(actor)}">↗ JSON-Export</a>
+      <a class="cta" href="/api/funding/by-actor?actor={esc(actor)}">↗ Funding-API</a>
+      <a class="cta" href="/dashboard">→ Dashboard</a>
+    </div>
+  </div>
+
+  <div class="section"><h2>Funding-Records ({len(funds)})</h2>{fund_html}</div>
+  <div class="section"><h2>Jüngste Vorfälle (max. 25)</h2>{inc_html}</div>
+
+  <div class="footer">LEX EUROPE · {esc(actor)} · Fedpol-Tier: {esc(actor_tier)}</div>
+</div>
+</body></html>""")
+
 
 @app.get("/c/{country}", response_class=HTMLResponse)
 async def public_country_profile(country: str):

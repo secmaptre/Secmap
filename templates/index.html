@@ -2786,10 +2786,39 @@ function openActorPanel(name){
       <div class="ad-inc-list">${topIncs}</div>
     </div>
     <div class="ad-section">
-      <button class="gbtn" style="width:100%" onclick="filterActor('${name.replace(/'/g,"\\'")}')">→ ALLE IM FEED FILTERN</button>
+      <div class="ad-section-lbl">FÖRDERFLUSS-CROSS-REFERENCE</div>
+      <div id="ad-funding-list" style="font-family:var(--mono);font-size:9px;color:var(--t2)">
+        <span style="color:var(--t3)">— wird geladen —</span>
+      </div>
+    </div>
+    <div class="ad-section" style="display:flex;gap:6px;flex-wrap:wrap">
+      <a class="gbtn" style="flex:1;text-align:center" href="/a/${encodeURIComponent(name)}" target="_blank" rel="noopener">↗ Voll-Profil öffnen</a>
+      <button class="gbtn" style="flex:1" onclick="filterActor('${name.replace(/'/g,"\\'")}')">→ Im Feed filtern</button>
     </div>
   `;
   drawer.classList.add('open');
+  // Funding-Cross-Reference asynchron nachladen.
+  fetch('/api/funding/by-actor?actor=' + encodeURIComponent(name))
+    .then(r => r.json())
+    .then(d => {
+      const el = document.getElementById('ad-funding-list');
+      if(!el) return;
+      if(!d.matches || !d.matches.length){
+        el.innerHTML = '<span style="color:var(--t3)">— keine Förderungen gefunden —</span>';
+        return;
+      }
+      const totalEur = d.sum_eur || 0;
+      const totalChf = d.sum_chf || 0;
+      const totalLine = `<div style="color:var(--accent);margin-bottom:6px">${d.count} Records · €${totalEur.toLocaleString('de-CH')}` + (totalChf ? ` · CHF ${totalChf.toLocaleString('de-CH')}` : '') + `</div>`;
+      const lines = d.matches.slice(0, 6).map(f => {
+        const cur = f.currency || 'EUR';
+        const amt = (f.amount||0).toLocaleString('de-CH');
+        const v   = f.verified ? '<span style="color:var(--green)">✓</span>' : '<span style="color:var(--amber)">⚠</span>';
+        return `<div style="padding:3px 0">${f.year} · ${(f.recipient_org||'').substring(0,28)} · ${cur} ${amt} ${v}</div>`;
+      }).join('');
+      el.innerHTML = totalLine + lines;
+    })
+    .catch(() => { /* ignore */ });
 }
 function closeActorPanel(){
   document.getElementById('actor-drawer').classList.remove('open');
