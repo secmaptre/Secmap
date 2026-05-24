@@ -4391,6 +4391,155 @@ def _rfc822(s):
 
 
 # ── PUBLIC RSS — Vorfälle-Feed für Presse / OSINT-Konsumenten ────
+@app.get("/api/actor.rss")
+async def actor_rss(request: Request, name: str = "", limit: int = 30):
+    """Per-Actor-RSS — abonnierbar für gezielte Akteurs-Beobachtung.
+    Liefert alle Vorfälle (T1/T2/T3) mit diesem Akteur im actors-Feld."""
+    if not name or len(name) < 3:
+        return StreamingResponse(iter(["<?xml version='1.0'?><rss/>"]),
+                                 media_type="application/rss+xml")
+    rows = db.execute(
+        "SELECT id,date,location,country,category,summary,severity_score,url,source "
+        "FROM incidents WHERE actors LIKE ? ORDER BY date DESC LIMIT ?",
+        (f"%{name}%", min(max(limit, 1), 100))
+    ).fetchall()
+    name_l = name.lower()
+    rows = [dict(r) for r in rows if any(
+        a.strip().lower() == name_l for a in
+        (db.execute("SELECT actors FROM incidents WHERE id=?", (r["id"],)).fetchone()["actors"] or "").split(",")
+    )]
+    base = str(request.base_url).rstrip("/")
+    items = []
+    for r in rows:
+        loc = _xml_esc(f"{r.get('location') or '—'}, {r.get('country') or '—'}")
+        cat = _xml_esc(r.get('category') or '—')
+        sev = r.get('severity_score') or 0
+        summ= _xml_esc((r.get('summary') or '')[:280])
+        url = _xml_esc(r.get('url') or f"{base}/")
+        items.append(
+            "<item>"
+            f"<title>[{cat} · S{sev}] {loc}</title>"
+            f"<link>{url}</link>"
+            f"<guid isPermaLink=\"false\">lex-act-{r.get('id')}</guid>"
+            f"<pubDate>{_rfc822(r.get('date'))}</pubDate>"
+            f"<category>{cat}</category>"
+            f"<description>{summ}</description>"
+            "</item>"
+        )
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+           '<rss version="2.0">\n<channel>\n'
+           f'<title>LEX EUROPE — Akteur: {_xml_esc(name)}</title>\n'
+           f'<link>{base}/a/{_xml_esc(name)}</link>\n'
+           f'<description>Vorfälle mit Akteur {_xml_esc(name)} im Lagebild.</description>\n'
+           '<language>de-DE</language>\n'
+           + "\n".join(items) +
+           '\n</channel>\n</rss>\n')
+    return StreamingResponse(iter([xml]), media_type="application/rss+xml; charset=utf-8")
+
+
+# ── SSE LIVE-FEED ──────────────────────────────────────────────────
+# Browser-Clients können sich via EventSource auf das Stream-Endpoint
+# einklinken und bekommen jede neue Vorfalls-Klassifikation als Server-
+# Sent-Event. Long-Poll-Implementierung: der Endpoint wartet auf neue
+# IDs, sendet bei jeder neuen Zeile ein "incident"-Event. Heartbeat
+# alle 30 s damit Proxies die Verbindung nicht killen.
+
+@app.get("/api/stream/incidents")
+async def stream_incidents(request: Request):
+    """SSE-Stream der neu gespeicherten Incidents. Frontend benutzt
+    EventSource('/api/stream/incidents'); jede neue Vorfalls-Zeile
+    wird als 'incident'-Event mit JSON-Payload gepusht."""
+    import asyncio, json as _j
+    async def event_gen():
+        # Cursor = höchste bekannte ID. Wir starten von "jetzt".
+        last_id = db.execute("SELECT COALESCE(MAX(id), 0) FROM incidents").fetchone()[0]
+        yield f"event: ready\ndata: {{\"cursor\": {last_id}}}\n\n"
+        last_heartbeat = time.time()
+        while True:
+            if await request.is_disconnected():
+                break
+            try:
+                rows = db.execute(
+                    "SELECT id,date,location,country,category,summary,"
+                    "severity_score,tier,target_type,url,source FROM incidents "
+                    "WHERE id > ? AND tier='act' ORDER BY id ASC LIMIT 20",
+                    (last_id,)
+                ).fetchall()
+                for r in rows:
+                    d = dict(r)
+                    last_id = d["id"]
+                    yield f"event: incident\ndata: {_j.dumps(d, ensure_ascii=False)}\n\n"
+            except Exception as e:
+                log.info(f"SSE error: {e}")
+            # Heartbeat alle 30 s damit Proxies (CloudFront, Nginx, etc.)
+            # die idle Verbindung nicht killen.
+            if time.time() - last_heartbeat > 30:
+                yield f": heartbeat {int(time.time())}\n\n"
+                last_heartbeat = time.time()
+            await asyncio.sleep(3)
+    return StreamingResponse(event_gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache, no-transform",
+                                      "X-Accel-Buffering": "no"})
+
+
+# ── EMBED WIDGETS ─────────────────────────────────────────────────
+# Externe Seiten können <iframe src="/embed/counter"> einbinden und
+# bekommen einen kompakten KPI-Counter ohne Filter-UI / ohne Karte.
+@app.get("/embed/counter", response_class=HTMLResponse)
+async def embed_counter():
+    """Mini-Widget für iframe-Embedding: zeigt die 3 wichtigsten KPIs
+    als kompakte Karte. Höhe ~160 px, sponsor-frei, transparent."""
+    s = await public_stats()
+    import json as _j
+    d = _j.loads(s.body)
+    return HTMLResponse(f"""<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box;}}
+body{{background:transparent;color:#aab5c0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;}}
+.box{{padding:12px 14px;background:#080c12;border:1px solid rgba(255,255,255,0.08);}}
+.head{{font-size:8px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between;}}
+.head a{{color:#6aa9c9;text-decoration:none;}}
+.grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}}
+.k{{padding:8px 10px;border:1px solid rgba(255,255,255,0.05);background:rgba(106,169,201,0.04);}}
+.k .v{{font-size:22px;color:#e9eef3;font-variant-numeric:tabular-nums;font-weight:600;}}
+.k .l{{font-size:8px;color:#6c7986;letter-spacing:1.5px;margin-top:2px;text-transform:uppercase;}}
+.k.red .v{{color:#d4495d;}}.k.amber .v{{color:#d99a2b;}}
+</style></head><body>
+<div class="box">
+  <div class="head"><span>◆ LEX EUROPE · LIVE LAGEBILD</span><a href="/" target="_top">→ dashboard</a></div>
+  <div class="grid">
+    <div class="k"><div class="v">{d['total_t1']}</div><div class="l">T1-Akte</div></div>
+    <div class="k red"><div class="v">{d['high_severity']}</div><div class="l">Schwere ≥4</div></div>
+    <div class="k amber"><div class="v">{d['active_clusters']}</div><div class="l">Aktive Cluster</div></div>
+  </div>
+</div>
+</body></html>""")
+
+
+@app.get("/embed/headline", response_class=HTMLResponse)
+async def embed_headline():
+    """Mini-Banner für hostende Sites: nur 1 zeile, severity-Farbe."""
+    rows = db.execute(
+        "SELECT date, location, country, category, summary, severity_score, url "
+        "FROM incidents WHERE tier='act' AND severity_score >= 4 "
+        "ORDER BY date DESC LIMIT 1"
+    ).fetchall()
+    if not rows:
+        body = '<div style="font:11px ui-monospace;color:#6c7986;padding:8px">Kein hochrangiger T1-Vorfall verfügbar.</div>'
+    else:
+        r = dict(rows[0])
+        loc = f"{r['location']}, {r['country']}"
+        summ = (r.get('summary') or '')[:120]
+        body = (f'<a href="{r.get("url","/")}" target="_top" style="text-decoration:none;display:block;'
+                f'padding:10px 14px;background:#080c12;border-left:3px solid #d4495d;'
+                f'font:11px ui-monospace,Menlo,monospace;color:#aab5c0">'
+                f'<span style="color:#d4495d;letter-spacing:2px;font-size:8px">◆ LEX EUROPE · LATEST T1 · S{r.get("severity_score","?")}/5</span><br>'
+                f'<span style="color:#e9eef3;font-size:12px">{r["date"]} · {loc}</span> · {r["category"]}<br>'
+                f'<span style="color:#aab5c0">{summ}</span></a>')
+    return HTMLResponse(f'<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0">{body}</body></html>')
+
+
 @app.get("/api/incidents.rss")
 async def incidents_rss(request: Request, country: str = "", tier: str = "act",
                         severity_min: int = 3, limit: int = 50):
