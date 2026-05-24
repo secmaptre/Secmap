@@ -242,8 +242,69 @@ def get_db():
     )''')
     c.execute("CREATE INDEX IF NOT EXISTS idx_wh_active ON webhook_subscriptions(active)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_wd_sub    ON webhook_deliveries(sub_id)")
+
+    # ── SOURCE HEALTH (Crawler-Observability) ─────────────────────
+    # Pro RSS-Feed/Crawler-Quelle wird der jüngste Fetch protokolliert:
+    # Erfolg, Items, Fehler-Stack. Nach `max_failures` aufeinanderfolgenden
+    # Fehlern wird die Quelle auf active=0 gesetzt (Auto-Disable) — verhindert
+    # endloses Retry-Pinging gegen tote Feeds.
+    c.execute('''CREATE TABLE IF NOT EXISTS source_health (
+        source TEXT PRIMARY KEY,
+        url TEXT,
+        last_attempt TEXT,
+        last_success TEXT,
+        last_error TEXT,
+        consecutive_failures INTEGER DEFAULT 0,
+        total_attempts INTEGER DEFAULT 0,
+        total_successes INTEGER DEFAULT 0,
+        items_last_run INTEGER DEFAULT 0,
+        items_total INTEGER DEFAULT 0,
+        active INTEGER DEFAULT 1
+    )''')
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sh_active ON source_health(active)")
+
+    # ── FTS5 FULL-TEXT SEARCH ──────────────────────────────────────
+    # Virtuelle Tabelle deckt Beschreibung + Summary + Ort + Aktoren ab.
+    # Triggers halten sie automatisch synchron — keine separate Indexing-
+    # Logik nötig. Suche via /api/incidents?q=…&fts=1.
+    try:
+        c.execute("CREATE VIRTUAL TABLE IF NOT EXISTS incidents_fts USING fts5("
+                  "  description, summary, location, actors, category,"
+                  "  content='incidents', content_rowid='id', "
+                  "  tokenize='unicode61 remove_diacritics 2')")
+        # Triggers: keep FTS in sync with incidents row mutations.
+        c.execute("CREATE TRIGGER IF NOT EXISTS incidents_ai AFTER INSERT ON incidents BEGIN "
+                  "  INSERT INTO incidents_fts(rowid, description, summary, location, actors, category) "
+                  "  VALUES (new.id, new.description, new.summary, new.location, new.actors, new.category); "
+                  "END;")
+        c.execute("CREATE TRIGGER IF NOT EXISTS incidents_ad AFTER DELETE ON incidents BEGIN "
+                  "  INSERT INTO incidents_fts(incidents_fts, rowid, description, summary, location, actors, category) "
+                  "  VALUES ('delete', old.id, old.description, old.summary, old.location, old.actors, old.category); "
+                  "END;")
+        c.execute("CREATE TRIGGER IF NOT EXISTS incidents_au AFTER UPDATE ON incidents BEGIN "
+                  "  INSERT INTO incidents_fts(incidents_fts, rowid, description, summary, location, actors, category) "
+                  "  VALUES ('delete', old.id, old.description, old.summary, old.location, old.actors, old.category); "
+                  "  INSERT INTO incidents_fts(rowid, description, summary, location, actors, category) "
+                  "  VALUES (new.id, new.description, new.summary, new.location, new.actors, new.category); "
+                  "END;")
+    except Exception as e:
+        log.warning(f"FTS5 setup skipped: {e}")
     c.commit()
     return c
+
+
+def backfill_fts_if_empty():
+    """Initial-Indexierung: wenn FTS leer ist aber incidents nicht, einmal
+    populieren. Wird beim Startup nach den Migrations gerufen."""
+    try:
+        fts_n = db.execute("SELECT COUNT(*) FROM incidents_fts").fetchone()[0]
+        inc_n = db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
+        if fts_n < inc_n:
+            db.execute("INSERT INTO incidents_fts(incidents_fts) VALUES ('rebuild')")
+            db.commit()
+            log.info(f"FTS5 backfill: indexed {inc_n} incidents")
+    except Exception as e:
+        log.info(f"FTS5 backfill skipped: {e}")
 
 db = get_db()
 
@@ -3159,8 +3220,56 @@ def parse_date(s):
         except: pass
     return None
 
+SOURCE_MAX_FAILURES = 10  # auto-disable nach N aufeinanderfolgenden Fails
+
+def should_skip_feed(source: str) -> bool:
+    """True wenn die Quelle aktuell wegen Health-Issues disabled ist."""
+    row = db.execute(
+        "SELECT active FROM source_health WHERE source=?", (source,)
+    ).fetchone()
+    return row is not None and (row["active"] or 0) == 0
+
+def record_crawl_result(source: str, url: str, ok: bool, items: int = 0,
+                         error: str = "") -> None:
+    """Schreibt das Ergebnis eines RSS-Fetches in source_health.
+    Auto-Disable nach SOURCE_MAX_FAILURES consecutive failures."""
+    now = datetime.now().isoformat(timespec="seconds")
+    row = db.execute(
+        "SELECT consecutive_failures, total_attempts, total_successes, items_total "
+        "FROM source_health WHERE source=?", (source,)
+    ).fetchone()
+    if not row:
+        db.execute(
+            "INSERT OR REPLACE INTO source_health "
+            "(source, url, last_attempt, last_success, last_error, "
+            " consecutive_failures, total_attempts, total_successes, "
+            " items_last_run, items_total, active) "
+            "VALUES (?,?,?,?,?,?,1,?,?,?,1)",
+            (source, url, now, now if ok else None, "" if ok else error[:280],
+             0 if ok else 1, 1 if ok else 0, items, items if ok else 0)
+        )
+    else:
+        cf = 0 if ok else (row["consecutive_failures"] or 0) + 1
+        active = 0 if cf >= SOURCE_MAX_FAILURES else 1
+        if active == 0 and (row["consecutive_failures"] or 0) < SOURCE_MAX_FAILURES:
+            log.warning(f"source_health AUTO-DISABLE: {source} after {cf} consecutive failures")
+        db.execute(
+            "UPDATE source_health SET "
+            "url=?, last_attempt=?, last_success=COALESCE(?, last_success), "
+            "last_error=?, consecutive_failures=?, total_attempts=total_attempts+1, "
+            "total_successes=total_successes+?, items_last_run=?, items_total=items_total+?, "
+            "active=? "
+            "WHERE source=?",
+            (url, now, now if ok else None, "" if ok else error[:280],
+             cf, 1 if ok else 0, items, items, active, source)
+        )
+    db.commit()
+
 def crawl_rss_feed(source, feed_url, max_items=15):
+    if should_skip_feed(source):
+        return 0
     inserted = 0
+    err_msg  = ""
     try:
         xml   = fetch(feed_url, timeout=18)
         items = parse_rss(xml)
@@ -3181,8 +3290,11 @@ def crawl_rss_feed(source, feed_url, max_items=15):
                 if save_incident(ai, text, source, link, d):
                     inserted += 1
             time.sleep(0.5)
+        record_crawl_result(source, feed_url, ok=True, items=inserted)
     except Exception as e:
-        log.warning(f"RSS {source}: {e}")
+        err_msg = str(e)[:280]
+        log.warning(f"RSS {source}: {err_msg}")
+        record_crawl_result(source, feed_url, ok=False, error=err_msg)
     return inserted
 
 def crawl_gnews():
@@ -3649,6 +3761,419 @@ def _rfc822(s):
         return d.strftime("%a, %d %b %Y %H:%M:%S +0000")
     except Exception:
         return ""
+
+
+# ── PUBLIC RSS — Vorfälle-Feed für Presse / OSINT-Konsumenten ────
+@app.get("/api/incidents.rss")
+async def incidents_rss(request: Request, country: str = "", tier: str = "act",
+                        severity_min: int = 3, limit: int = 50):
+    """Öffentlicher RSS-2.0-Feed der jüngsten T1-Vorfälle. Default-Filter:
+    tier=act + severity_min=3 — damit Konsumenten nur Substanz bekommen,
+    nicht das ganze Lagebild-Rauschen. Per-Country via ?country=DE."""
+    q = ("SELECT id,date,location,country,category,summary,description,"
+         "severity_score,url,source,timestamp "
+         "FROM incidents WHERE 1=1")
+    p = []
+    if tier:    q += " AND tier=?"; p.append(tier)
+    if country: q += " AND country=?"; p.append(country)
+    if severity_min:
+        q += " AND severity_score >= ?"; p.append(severity_min)
+    q += " ORDER BY date DESC, timestamp DESC LIMIT ?"
+    p.append(min(max(limit, 1), 200))
+    rows = db.execute(q, p).fetchall()
+    base = str(request.base_url).rstrip("/")
+    title_suffix = f" · {country.upper()}" if country else ""
+    items = []
+    for r in rows:
+        d = dict(r)
+        loc  = _xml_esc(f"{d.get('location') or '—'}, {d.get('country') or '—'}")
+        cat  = _xml_esc(d.get('category') or '—')
+        sev  = d.get('severity_score') or 0
+        summ = _xml_esc((d.get('summary') or d.get('description') or '')[:280])
+        url  = _xml_esc(d.get('url')   or f"{base}/")
+        src  = _xml_esc(d.get('source') or '—')
+        items.append(
+            "<item>"
+            f"<title>[{cat} · S{sev}] {loc} — {_xml_esc((d.get('summary') or '—')[:120])}</title>"
+            f"<link>{url}</link>"
+            f"<guid isPermaLink=\"false\">lex-inc-{d.get('id')}</guid>"
+            f"<pubDate>{_rfc822(d.get('date') or d.get('timestamp'))}</pubDate>"
+            f"<category>{cat}</category>"
+            f"<source url=\"{base}/\">{src}</source>"
+            f"<description>{summ}</description>"
+            "</item>"
+        )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<rss version="2.0">\n<channel>\n'
+        f'<title>LEX EUROPE — Vorfälle{title_suffix}</title>\n'
+        f'<link>{base}/</link>\n'
+        '<description>Politisch links motivierte Gewalttaten — OSINT-Dokumentation</description>\n'
+        '<language>de-DE</language>\n'
+        f'<lastBuildDate>{_rfc822(datetime.now().isoformat())}</lastBuildDate>\n'
+        + "\n".join(items) +
+        '\n</channel>\n</rss>\n'
+    )
+    return StreamingResponse(iter([xml]), media_type="application/rss+xml; charset=utf-8")
+
+
+@app.get("/api/public/stats")
+async def public_stats():
+    """Kompakte Aggregat-Stats für Embedding (Pressbox, Twitter-Cards, etc.)."""
+    today = datetime.now().date()
+    last30 = (today - timedelta(days=30)).isoformat()
+    last7  = (today - timedelta(days=7)).isoformat()
+    total   = db.execute("SELECT COUNT(*) FROM incidents WHERE tier='act'").fetchone()[0]
+    last30c = db.execute("SELECT COUNT(*) FROM incidents WHERE tier='act' AND date>=?", (last30,)).fetchone()[0]
+    last7c  = db.execute("SELECT COUNT(*) FROM incidents WHERE tier='act' AND date>=?", (last7,)).fetchone()[0]
+    hi      = db.execute("SELECT COUNT(*) FROM incidents WHERE tier='act' AND severity_score >= 4").fetchone()[0]
+    actors  = db.execute("SELECT COUNT(DISTINCT actors) FROM incidents WHERE actors!=''").fetchone()[0]
+    clusters= db.execute("SELECT COUNT(*) FROM early_warning_clusters WHERE active=1").fetchone()[0]
+    by_co   = [dict(r) for r in db.execute(
+        "SELECT country, COUNT(*) n FROM incidents WHERE tier='act' "
+        "GROUP BY country ORDER BY n DESC LIMIT 10"
+    ).fetchall()]
+    sources = db.execute("SELECT COUNT(DISTINCT source) FROM incidents").fetchone()[0]
+    return JSONResponse({
+        "total_t1":          total,
+        "last_7d":           last7c,
+        "last_30d":          last30c,
+        "high_severity":     hi,
+        "distinct_actors":   actors,
+        "active_clusters":   clusters,
+        "distinct_sources":  sources,
+        "by_country_top10":  by_co,
+        "asof":              today.isoformat(),
+    })
+
+
+@app.get("/robots.txt")
+async def robots_txt():
+    return StreamingResponse(iter([
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /admin\n"
+        "Disallow: /api/v1/\n"
+        "Sitemap: /sitemap.xml\n"
+    ]), media_type="text/plain")
+
+
+@app.get("/sitemap.xml")
+async def sitemap_xml(request: Request):
+    base = str(request.base_url).rstrip("/")
+    urls = [
+        f"{base}/", f"{base}/dashboard", f"{base}/lagebericht",
+        f"{base}/api/incidents.rss", f"{base}/api/early-warning.rss",
+        f"{base}/api/v1/docs",
+    ]
+    items = "\n".join(f"<url><loc>{u}</loc></url>" for u in urls)
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+           + items + "\n</urlset>\n")
+    return StreamingResponse(iter([xml]), media_type="application/xml; charset=utf-8")
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def public_dashboard():
+    """Standalone öffentliche Dashboard-Seite — KPI-Karten + Top-10-Länder +
+    Link zur Vollkarte. Press-ready, OG-getaggt, kein Login."""
+    s = await public_stats()
+    import json as _j
+    d = _j.loads(s.body)
+    today = d["asof"]
+    coBlocks = "\n".join(
+        f'<div class="kc-row"><span class="kc-co">{c["country"]}</span>'
+        f'<div class="kc-bar"><div class="kc-bar-fill" style="width:{round((c["n"]/max(d["by_country_top10"][0]["n"],1))*100)}%"></div></div>'
+        f'<span class="kc-n">{c["n"]}</span></div>'
+        for c in d["by_country_top10"]
+    )
+    return HTMLResponse(f"""<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><title>LEX EUROPE — Lage-Dashboard {today}</title>
+<meta name="description" content="OSINT-Lagebild politisch links motivierter Gewalttaten in Europa und USA. {d['total_t1']} dokumentierte T1-Akte, {d['active_clusters']} aktive Frühwarn-Cluster.">
+<meta property="og:title"       content="LEX EUROPE — Lagebild Linksextremismus">
+<meta property="og:description" content="{d['total_t1']} T1-Akte dokumentiert · {d['last_7d']} in den letzten 7 Tagen · {d['active_clusters']} aktive Frühwarn-Cluster.">
+<meta property="og:type"        content="website">
+<meta name="twitter:card"       content="summary_large_image">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:ui-monospace,Menlo,Consolas,monospace;background:#080c12;color:#aab5c0;
+  min-height:100vh;font-size:13px;line-height:1.5;}}
+.classbar{{background:#0a1219;border-bottom:1px solid rgba(255,255,255,0.06);padding:5px 18px;
+  font-size:9px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;display:flex;
+  justify-content:space-between;}}
+.classbar .l{{color:#6aa9c9;}}
+.page{{max-width:1100px;margin:0 auto;padding:30px 24px 60px;}}
+h1{{font-family:'Inter',system-ui,sans-serif;font-size:28px;font-weight:600;color:#e9eef3;letter-spacing:0.5px;margin-bottom:6px;}}
+.sub{{font-size:11px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;margin-bottom:32px;}}
+.kpi-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:32px;}}
+.kpi{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:18px 22px;}}
+.kpi .lbl{{font-size:9px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;margin-bottom:6px;}}
+.kpi .val{{font-size:30px;font-weight:600;color:#e9eef3;letter-spacing:-0.5px;font-variant-numeric:tabular-nums;}}
+.kpi.acc .val{{color:#6aa9c9;}}.kpi.red .val{{color:#d4495d;}}.kpi.amber .val{{color:#d99a2b;}}.kpi.green .val{{color:#5fb583;}}
+.kpi .delta{{font-size:10px;color:#6c7986;margin-top:4px;letter-spacing:1px;}}
+.section{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:24px;margin-bottom:18px;}}
+h2{{font-size:11px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-transform:uppercase;
+  margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid rgba(106,169,201,0.18);}}
+.kc-row{{display:flex;align-items:center;gap:14px;margin-bottom:8px;}}
+.kc-co{{font-size:11px;color:#aab5c0;min-width:35px;}}
+.kc-bar{{flex:1;height:6px;background:rgba(106,169,201,0.08);border-radius:1px;overflow:hidden;}}
+.kc-bar-fill{{height:100%;background:#6aa9c9;border-radius:1px;}}
+.kc-n{{font-size:11px;color:#e9eef3;min-width:30px;text-align:right;font-variant-numeric:tabular-nums;}}
+.cta{{display:inline-block;font-family:ui-monospace;font-size:10px;letter-spacing:2px;
+  text-transform:uppercase;color:#6aa9c9;border:1px solid #6aa9c9;padding:10px 16px;
+  text-decoration:none;margin-right:8px;margin-top:8px;}}
+.cta:hover{{background:rgba(106,169,201,0.10);}}
+.footer{{font-size:9px;letter-spacing:1.5px;color:#3a4551;text-align:center;margin-top:30px;
+  text-transform:uppercase;}}
+</style></head>
+<body>
+<div class="classbar"><span class="l">◆ OPEN SOURCE INTELLIGENCE · LEX EUROPE · UNCLASSIFIED // RELEASABLE</span><span>STAND {today}</span></div>
+<div class="page">
+  <h1>Lage-Dashboard Linksextremismus</h1>
+  <div class="sub">Europa + USA · OSINT-Aggregation · automatisch generiert</div>
+
+  <div class="kpi-grid">
+    <div class="kpi acc"><div class="lbl">T1-Vorfälle gesamt</div><div class="val">{d['total_t1']}</div><div class="delta">tier=act (Brand / Sabo / Gewalt / Militante Aktion)</div></div>
+    <div class="kpi"><div class="lbl">letzte 7 Tage</div><div class="val">{d['last_7d']}</div><div class="delta">neue T1-Akte</div></div>
+    <div class="kpi"><div class="lbl">letzte 30 Tage</div><div class="val">{d['last_30d']}</div><div class="delta">neue T1-Akte</div></div>
+    <div class="kpi red"><div class="lbl">hoch-Schwere ≥ 4</div><div class="val">{d['high_severity']}</div><div class="delta">Personenschaden / Brandwaffe / ≥ 100k €</div></div>
+    <div class="kpi amber"><div class="lbl">aktive Frühwarn-Cluster</div><div class="val">{d['active_clusters']}</div><div class="delta">≥ 3 gleichartige / 6 Wochen</div></div>
+    <div class="kpi"><div class="lbl">identifizierte Akteure</div><div class="val">{d['distinct_actors']}</div></div>
+    <div class="kpi"><div class="lbl">aktive Quellen</div><div class="val">{d['distinct_sources']}</div></div>
+  </div>
+
+  <div class="section">
+    <h2>Geografische Verteilung — Top 10 (T1)</h2>
+    {coBlocks}
+  </div>
+
+  <div class="section">
+    <h2>Schnittstellen</h2>
+    <a class="cta" href="/">→ Vollkarte + Filter</a>
+    <a class="cta" href="/lagebericht">→ Wochen-Lagebericht</a>
+    <a class="cta" href="/api/incidents.rss">→ RSS-Feed</a>
+    <a class="cta" href="/api/early-warning.rss">→ Frühwarn-Feed</a>
+    <a class="cta" href="/api/v1/docs">→ LEA / Research API</a>
+  </div>
+
+  <div class="footer">
+    LEX EUROPE · OSINT-Plattform · unabhängige Forschung · keine Werbung · kein Tracking
+  </div>
+</div>
+</body></html>""")
+
+
+@app.get("/lagebericht", response_class=HTMLResponse)
+async def public_lagebericht():
+    """Standalone öffentliche Wochenbericht-Seite. Print-friendly, OG-getaggt.
+    Holt /api/lagebericht/weekly direkt aus der DB ohne HTTP-Roundtrip."""
+    ws, we = _isoweek_bounds(None)
+    d = _build_lagebericht(ws, we)
+    iso = datetime.fromisoformat(ws).isocalendar()
+    label = f"{iso.year}-W{iso.week:02d}"
+    delta = d["delta"]
+    delta_str = (f"+{delta}" if delta > 0 else f"{delta}" if delta < 0 else "±0")
+    def esc(s): return _xml_esc(s)
+    co_block = "".join(f"<div class='row'><span>{esc(c)}</span><span class='n'>{n}</span></div>" for c, n in d["by_country"])
+    tt_block = "".join(f"<div class='row'><span>{esc(tt)}</span><span class='n'>{n}</span></div>" for tt, n in d["by_target_type"]) or "<div style='color:#6c7986'>— keine Zielklassen-Daten —</div>"
+    cl_block = "".join(f"<div class='cluster-row'><b>{esc(c['target_type'])} · {esc(c['country'])}</b> — {c['count']} Anschläge ({esc(c['first_seen'])} … {esc(c['last_seen'])})</div>" for c in d["clusters_active"]) or "<div style='color:#6c7986'>— keine aktiven Cluster —</div>"
+    gap_block = "".join(f"<div class='gap-row'>{esc(r.get('date'))} · {esc(r.get('location'))}, {esc(r.get('country'))} · {esc(r.get('category'))} (Schwere {r.get('severity_score','?')})</div>" for r in d["new_gap_cases"]) or "<div style='color:#6c7986'>— keine neuen Gap-Fälle in diesem Zeitraum —</div>"
+    top_block = "".join(
+        f"<div class='inc-row'><span class='date'>{esc(r.get('date'))}</span>"
+        f"<span class='cat'>{esc(r.get('category'))}</span>"
+        f"<span class='loc'>{esc(r.get('location'))}, {esc(r.get('country'))}</span>"
+        f"<span class='sev'>S{r.get('severity_score','?')}/5</span>"
+        f"<div class='summ'>{esc((r.get('summary') or r.get('description') or '')[:200])}</div>"
+        + (f"<a class='src' href='{esc(r.get('url'))}' rel='noopener'>↗ Quelle</a>" if r.get('url') and r['url'].startswith('http') else "")
+        + "</div>"
+        for r in d["top_incidents"]
+    ) or "<div style='color:#6c7986'>— keine T1-Vorfälle in dieser Woche —</div>"
+    return HTMLResponse(f"""<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><title>Wochenbericht KW {label} — LEX EUROPE</title>
+<meta name="description" content="Lagebericht Linksextremismus KW {label}: {d['total']} Vorfälle, {d['t1']} T1-Akte, {d['hi']} hoch-Schwere, {len(d['clusters_active'])} aktive Cluster.">
+<meta property="og:title"       content="LEX EUROPE Wochenbericht KW {label}">
+<meta property="og:description" content="{d['t1']} T1-Akte · {d['hi']} hoch-Schwere · {len(d['clusters_active'])} aktive Cluster · {len(d['new_gap_cases'])} neue Strafverfolgungs-Gap-Fälle.">
+<meta property="og:type"        content="article">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:ui-monospace,Menlo,Consolas,monospace;background:#080c12;color:#aab5c0;font-size:13px;line-height:1.55;}}
+.classbar{{background:#0a1219;border-bottom:1px solid rgba(255,255,255,0.06);padding:5px 18px;font-size:9px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;display:flex;justify-content:space-between;}}
+.classbar .l{{color:#6aa9c9;}}
+.page{{max-width:880px;margin:0 auto;padding:30px 24px 60px;}}
+h1{{font-family:'Inter',system-ui,sans-serif;font-size:26px;font-weight:600;color:#e9eef3;letter-spacing:0.5px;margin-bottom:4px;}}
+.sub{{font-size:10px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;margin-bottom:24px;}}
+.eckdaten{{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:1px;background:rgba(255,255,255,0.04);margin-bottom:24px;border:1px solid rgba(255,255,255,0.06);}}
+.ed{{background:#0d141c;padding:14px;}}
+.ed .lbl{{font-size:8px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;margin-bottom:4px;}}
+.ed .val{{font-size:22px;color:#e9eef3;font-variant-numeric:tabular-nums;font-weight:600;}}
+.ed.red .val{{color:#d4495d;}}.ed.amber .val{{color:#d99a2b;}}
+.section{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:18px 22px;margin-bottom:14px;}}
+h2{{font-size:10px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid rgba(106,169,201,0.18);}}
+.row{{display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px solid rgba(255,255,255,0.03);}}
+.row .n{{color:#e9eef3;font-variant-numeric:tabular-nums;}}
+.cluster-row,.gap-row{{padding:5px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.03);}}
+.cluster-row b{{color:#d99a2b;}}
+.gap-row{{color:#d4495d;}}
+.inc-row{{padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:11px;}}
+.inc-row .date{{color:#6c7986;margin-right:10px;}}
+.inc-row .cat{{color:#e9eef3;margin-right:10px;}}
+.inc-row .loc{{color:#aab5c0;margin-right:10px;}}
+.inc-row .sev{{color:#d99a2b;font-weight:600;}}
+.inc-row .summ{{margin-top:4px;color:#aab5c0;font-size:11px;line-height:1.55;}}
+.inc-row .src{{font-size:9px;color:#6aa9c9;text-decoration:none;letter-spacing:1px;margin-top:3px;display:inline-block;}}
+.footer{{font-size:9px;letter-spacing:1.5px;color:#3a4551;text-align:center;margin-top:30px;text-transform:uppercase;}}
+.cta{{display:inline-block;font-size:10px;letter-spacing:2px;color:#6aa9c9;border:1px solid #6aa9c9;padding:8px 12px;text-decoration:none;margin-right:6px;}}
+@media print{{body{{background:#fff;color:#000}}.section{{background:#fff;border-color:#ddd}}.ed{{background:#fafafa}}h1,.ed .val{{color:#000}}.cluster-row b{{color:#cc7a00}}}}
+</style></head>
+<body>
+<div class="classbar"><span class="l">◆ OPEN SOURCE INTELLIGENCE · LEX EUROPE</span><span>KW {label}</span></div>
+<div class="page">
+  <h1>Wochenbericht KW {label}</h1>
+  <div class="sub">Berichtszeitraum {ws} – {we} · automatisch generiert</div>
+
+  <div class="eckdaten">
+    <div class="ed"><div class="lbl">Vorfälle</div><div class="val">{d['total']}</div></div>
+    <div class="ed"><div class="lbl">Delta</div><div class="val">{delta_str}</div></div>
+    <div class="ed"><div class="lbl">T1 Akte</div><div class="val">{d['t1']}</div></div>
+    <div class="ed red"><div class="lbl">Hoch ≥4</div><div class="val">{d['hi']}</div></div>
+    <div class="ed amber"><div class="lbl">Cluster</div><div class="val">{len(d['clusters_active'])}</div></div>
+  </div>
+
+  <div class="section"><h2>Geografische Verteilung (T1)</h2>{co_block}</div>
+  <div class="section"><h2>Ziel-Klassen (Säule 2)</h2>{tt_block}</div>
+  <div class="section"><h2>Aktive Frühwarn-Cluster</h2>{cl_block}</div>
+  <div class="section"><h2>Neue Strafverfolgungs-Gap-Fälle</h2>{gap_block}</div>
+  <div class="section"><h2>Top-Vorfälle der Woche</h2>{top_block}</div>
+
+  <div class="section" style="text-align:center">
+    <a class="cta" href="/api/lagebericht/weekly.md">↓ Markdown-Export</a>
+    <a class="cta" href="/dashboard">→ Dashboard</a>
+    <a class="cta" href="/">→ Karte</a>
+  </div>
+
+  <div class="footer">LEX EUROPE · Methodik & Schwellenwerte siehe Plattform-Disclaimer · {datetime.now().strftime('%Y-%m-%d %H:%M')} UTC</div>
+</div>
+</body></html>""")
+
+
+@app.get("/early-warning/{target_type}", response_class=HTMLResponse)
+async def public_target_profile(target_type: str):
+    """Dedicated public page per Ziel-Klasse (Säule 2) — gibt Betreibern
+    eine fokussierte Lagebild-Sicht: aktive Cluster + jüngste Vorfälle
+    für ihren Ziel-Typ (Energie, Schiene, Auto, Polizei, …)."""
+    tt = (target_type or "").strip()
+    if tt not in _TARGET_TYPE_ALLOWED or not tt:
+        return HTMLResponse("<h1>Unbekannter Ziel-Typ</h1>", status_code=404)
+    # Cluster pulled für diesen Typ
+    clusters = [dict(r) for r in db.execute(
+        "SELECT cluster_key, country, count, first_seen, last_seen, sample_titles "
+        "FROM early_warning_clusters WHERE active=1 AND target_type=? "
+        "ORDER BY count DESC, last_seen DESC", (tt,)
+    ).fetchall()]
+    for c in clusters:
+        try: c["sample_titles"] = json.loads(c["sample_titles"] or "[]")
+        except: c["sample_titles"] = []
+    # Recent incidents für diesen Typ
+    recent = [dict(r) for r in db.execute(
+        "SELECT date,country,location,category,summary,severity_score,url,source "
+        "FROM incidents WHERE tier='act' AND target_type=? "
+        "ORDER BY date DESC LIMIT 30", (tt,)
+    ).fetchall()]
+    today = datetime.now().date()
+    last90 = (today - timedelta(days=90)).isoformat()
+    last90_n = db.execute(
+        "SELECT COUNT(*) FROM incidents WHERE tier='act' AND target_type=? AND date>=?",
+        (tt, last90)
+    ).fetchone()[0]
+    total_n = db.execute(
+        "SELECT COUNT(*) FROM incidents WHERE tier='act' AND target_type=?", (tt,)
+    ).fetchone()[0]
+    by_co = [dict(r) for r in db.execute(
+        "SELECT country, COUNT(*) n FROM incidents WHERE tier='act' AND target_type=? "
+        "GROUP BY country ORDER BY n DESC LIMIT 10", (tt,)
+    ).fetchall()]
+    def esc(s): return _xml_esc(s)
+    cluster_block = "".join(
+        f"<div class='cluster'><div class='ck'><b>{esc(c['country'])}</b> · {c['count']} Anschläge</div>"
+        f"<div class='cm'>{esc(c['first_seen'])} → {esc(c['last_seen'])}</div>"
+        + "".join(f"<div class='st'>• {esc(t)}</div>" for t in c['sample_titles'])
+        + "</div>"
+        for c in clusters
+    ) or "<div style='color:#6c7986'>— keine aktiven Cluster für diesen Ziel-Typ —</div>"
+    recent_block = "".join(
+        f"<div class='inc'><span class='date'>{esc(r['date'])}</span>"
+        f"<span class='loc'>{esc(r['location'])}, {esc(r['country'])}</span>"
+        f"<span class='cat'>{esc(r['category'])}</span>"
+        f"<span class='sev'>S{r['severity_score'] or '?'}</span>"
+        f"<div class='summ'>{esc((r.get('summary') or '')[:200])}</div>"
+        + (f"<a class='src' href='{esc(r['url'])}' rel='noopener'>↗ Quelle ({esc(r['source'] or '')})</a>" if r.get('url','').startswith('http') else "")
+        + "</div>" for r in recent
+    ) or "<div style='color:#6c7986'>— keine Vorfälle für diesen Ziel-Typ —</div>"
+    co_block = "".join(f"<div class='co-row'><span>{esc(c['country'])}</span><span class='n'>{c['n']}</span></div>" for c in by_co) or "<div style='color:#6c7986'>—</div>"
+    return HTMLResponse(f"""<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><title>Frühwarn-Profil: {esc(tt)} — LEX EUROPE</title>
+<meta name="description" content="Lagebild-Profil für Ziel-Klasse {esc(tt)}: {total_n} dokumentierte T1-Akte, {last90_n} in den letzten 90 Tagen, {len(clusters)} aktive Cluster.">
+<meta property="og:title"       content="LEX EUROPE — Frühwarn-Profil {esc(tt)}">
+<meta property="og:description" content="{total_n} T1-Akte gegen {esc(tt)} · {len(clusters)} aktive Cluster">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:ui-monospace,Menlo,Consolas,monospace;background:#080c12;color:#aab5c0;font-size:13px;line-height:1.55;}}
+.classbar{{background:#0a1219;border-bottom:1px solid rgba(255,255,255,0.06);padding:5px 18px;font-size:9px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;display:flex;justify-content:space-between;}}
+.classbar .l{{color:#6aa9c9;}}
+.page{{max-width:1000px;margin:0 auto;padding:30px 24px 60px;}}
+h1{{font-family:'Inter',system-ui,sans-serif;font-size:30px;font-weight:600;color:#e9eef3;letter-spacing:0.5px;margin-bottom:6px;}}
+h1 .label{{color:#6aa9c9;}}
+.sub{{font-size:10px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;margin-bottom:24px;}}
+.kpi-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px;}}
+.kpi{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:16px 20px;}}
+.kpi .lbl{{font-size:9px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;margin-bottom:4px;}}
+.kpi .val{{font-size:28px;font-weight:600;color:#e9eef3;font-variant-numeric:tabular-nums;}}
+.kpi.red .val{{color:#d4495d;}}.kpi.amber .val{{color:#d99a2b;}}
+.section{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:18px 22px;margin-bottom:14px;}}
+h2{{font-size:10px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid rgba(106,169,201,0.18);}}
+.cluster{{padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04);}}
+.cluster .ck{{font-size:13px;color:#e9eef3;}}.cluster .ck b{{color:#d99a2b;}}
+.cluster .cm{{font-size:9px;color:#6c7986;letter-spacing:1px;margin:2px 0 6px;}}
+.cluster .st{{font-size:11px;color:#aab5c0;padding-left:8px;}}
+.inc{{padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:11px;}}
+.inc .date{{color:#6c7986;margin-right:10px;}}.inc .loc{{color:#aab5c0;margin-right:10px;}}
+.inc .cat{{color:#e9eef3;margin-right:10px;}}.inc .sev{{color:#d99a2b;font-weight:600;}}
+.inc .summ{{margin-top:4px;color:#aab5c0;}}
+.inc .src{{font-size:9px;color:#6aa9c9;text-decoration:none;letter-spacing:1px;margin-top:3px;display:inline-block;}}
+.co-row{{display:flex;justify-content:space-between;padding:3px 0;font-size:11px;}}
+.co-row .n{{color:#e9eef3;font-variant-numeric:tabular-nums;}}
+.cta{{display:inline-block;font-size:10px;letter-spacing:2px;color:#6aa9c9;border:1px solid #6aa9c9;padding:8px 14px;text-decoration:none;margin-right:8px;text-transform:uppercase;}}
+.cta:hover{{background:rgba(106,169,201,0.10);}}
+.footer{{font-size:9px;letter-spacing:1.5px;color:#3a4551;text-align:center;margin-top:30px;text-transform:uppercase;}}
+</style></head>
+<body>
+<div class="classbar"><span class="l">◆ OPEN SOURCE INTELLIGENCE · LEX EUROPE</span><span>FRÜHWARN-PROFIL · {esc(tt).upper()}</span></div>
+<div class="page">
+  <h1>Ziel-Profil: <span class="label">{esc(tt)}</span></h1>
+  <div class="sub">Säule 2 — Frühwarnung · automatisch aggregiert · Stand {today.isoformat()}</div>
+
+  <div class="kpi-grid">
+    <div class="kpi"><div class="lbl">T1-Akte gesamt</div><div class="val">{total_n}</div></div>
+    <div class="kpi amber"><div class="lbl">letzte 90 Tage</div><div class="val">{last90_n}</div></div>
+    <div class="kpi red"><div class="lbl">aktive Cluster</div><div class="val">{len(clusters)}</div></div>
+  </div>
+
+  <div class="section"><h2>Aktive Frühwarn-Cluster ({esc(tt)})</h2>{cluster_block}</div>
+  <div class="section"><h2>Geografische Verteilung (T1, alle Jahre)</h2>{co_block}</div>
+  <div class="section"><h2>Jüngste T1-Vorfälle (max. 30)</h2>{recent_block}</div>
+
+  <div class="section" style="text-align:center">
+    <a class="cta" href="/api/early-warning.rss">↗ RSS-Frühwarn-Feed</a>
+    <a class="cta" href="/dashboard">→ Dashboard</a>
+    <a class="cta" href="/">→ Karte</a>
+  </div>
+
+  <div class="footer">LEX EUROPE · {esc(tt)} · Methodik: Cluster = ≥3 gleichartige Anschläge / 6 Wochen pro Land</div>
+</div>
+</body></html>""")
 
 
 @app.post("/admin/api/detect-clusters")
@@ -4192,12 +4717,16 @@ async def get_incidents(
     country: str = "", category: str = "", date_from: str = "",
     date_to: str = "", search: str = "", severity_min: int = 0,
     primary_only: int = 0, tier: str = "", target_type: str = "",
+    fts: int = 0,
 ):
     """
     primary_only=1 → only is_primary=1 rows (default UI behaviour for the
     incidents feed; the "INKL. KONTEXT" toggle clears the flag).
     tier=act|enable|context → filter on the Fedpol 3-tier taxonomy.
     target_type=Energie|Schiene|… → filter on Säule-2 target routing.
+    fts=1 + search="…" → SQLite FTS5 match query (schneller + relevanter
+      als LIKE). Beispiele: 'Brandanschlag AND Polizei', 'Tesla OR Hyperloop',
+      'antifa NEAR/5 demo'. Bei syntaxfehlern fällt es auf LIKE zurück.
     """
     q = ("SELECT id,date,location,country,category,description,summary,url,"
          "lat,lon,manual,source,severity_score,actors,confidence,"
@@ -4210,9 +4739,27 @@ async def get_incidents(
     if date_from: q += " AND date>=?";     p.append(date_from)
     if date_to:   q += " AND date<=?";     p.append(date_to)
     if search:
-        q += " AND (description LIKE ? OR summary LIKE ? OR location LIKE ? OR category LIKE ?)"
-        s = f"%{search}%"
-        p.extend([s, s, s, s])
+        # FTS5-Pfad: erst Match-Query versuchen, fallback auf LIKE.
+        used_fts = False
+        if fts:
+            try:
+                rids = [r["rowid"] for r in db.execute(
+                    "SELECT rowid FROM incidents_fts WHERE incidents_fts MATCH ? "
+                    "ORDER BY rank LIMIT 2000", (search,)
+                ).fetchall()]
+                if rids:
+                    q += " AND id IN (" + ",".join("?" * len(rids)) + ")"
+                    p.extend(rids)
+                else:
+                    # FTS matched nothing; return empty without falling back.
+                    return JSONResponse([])
+                used_fts = True
+            except Exception as e:
+                log.info(f"FTS5 query failed, falling back to LIKE: {e}")
+        if not used_fts:
+            q += " AND (description LIKE ? OR summary LIKE ? OR location LIKE ? OR category LIKE ?)"
+            s = f"%{search}%"
+            p.extend([s, s, s, s])
     if severity_min > 0:
         q += " AND severity_score >= ?"
         p.append(severity_min)
@@ -5168,6 +5715,55 @@ async def admin_regeocode_fix(_=Depends(require_admin)):
     n = regeocode_all_inconsistent()
     return JSONResponse({"ok": True, "fixed": n})
 
+# ── SOURCE HEALTH ADMIN ──────────────────────────────────────────
+@app.get("/admin/api/source-health")
+async def admin_source_health(_=Depends(require_admin)):
+    """Liefert alle Crawl-Quellen mit Health-Status. Sortiert: zuerst
+    disabled, dann hoch-Fehler-Quellen, dann gesunde."""
+    rows = db.execute(
+        "SELECT source, url, last_attempt, last_success, last_error, "
+        "consecutive_failures, total_attempts, total_successes, "
+        "items_last_run, items_total, active "
+        "FROM source_health "
+        "ORDER BY active ASC, consecutive_failures DESC, source ASC"
+    ).fetchall()
+    # Augment with status label for the UI.
+    out = []
+    for r in rows:
+        d = dict(r)
+        cf = d["consecutive_failures"] or 0
+        if not d["active"]:
+            d["status"] = "disabled"
+        elif cf >= 5:
+            d["status"] = "warning"
+        elif cf > 0:
+            d["status"] = "degraded"
+        else:
+            d["status"] = "healthy"
+        out.append(d)
+    return JSONResponse({
+        "sources":   out,
+        "max_failures": SOURCE_MAX_FAILURES,
+        "totals": {
+            "healthy":  sum(1 for s in out if s["status"]=="healthy"),
+            "degraded": sum(1 for s in out if s["status"]=="degraded"),
+            "warning":  sum(1 for s in out if s["status"]=="warning"),
+            "disabled": sum(1 for s in out if s["status"]=="disabled"),
+            "active_count": sum(1 for s in out if s["active"]),
+            "total":     len(out),
+        },
+    })
+
+@app.post("/admin/api/source-health/{source}/reset")
+async def admin_source_health_reset(source: str, _=Depends(require_admin)):
+    """Re-aktiviert eine Quelle und nullt den Failure-Zähler."""
+    db.execute(
+        "UPDATE source_health SET consecutive_failures=0, active=1, "
+        "last_error='' WHERE source=?", (source,)
+    )
+    db.commit()
+    return JSONResponse({"ok": True, "source": source})
+
 @app.post("/admin/api/grok-test")
 async def admin_grok(_=Depends(require_admin)):
     res = classify("In Berlin-Kreuzberg wurden drei Polizeifahrzeuge in Brand gesetzt. Bekennerschreiben einer militanten autonomen Gruppe.")
@@ -5308,6 +5904,8 @@ async def startup():
     # the flag/summary backfill so is_high_risk sees the real severity.
     backfill_enrichment()
     backfill_summaries_and_flags()
+    # FTS5-Backfill: ein leerer Index wird einmal aus incidents repopuliert.
+    backfill_fts_if_empty()
     # Geocoding-Fix (Userhinweis): alte Substring-Match-Bugs in den vor-
     # handenen Koordinaten korrigieren. Wipe-and-rebuild des geocache läuft
     # einmal, sobald die DB-Meta nicht den aktuellen geocode-Fix-Marker
