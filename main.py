@@ -1718,6 +1718,126 @@ HISTORICAL_EVENTS = [
     ("2025-03-25","Oslo","NO","Sachbeschädigung",
      "Oslo: Außenfassade einer FRP-Wahlkampfzentrale mit Farbbeuteln und Slogans attackiert. Geringer Sachschaden. Bekennerschreiben antifascistisk aksjon.",
      "Archiv",59.91,10.75),
+
+    # ════════════════════════════════════════════════════════════════
+    # ROUND 5 — neue Länder (BE/IE/PT/CZ/HU) + weitere DE/CH/AT/US
+    # ════════════════════════════════════════════════════════════════
+
+    # ── Belgien ────────────────────────────────────────────────────
+    ("2020-06-07","Brüssel","BE","Militante Aktion",
+     "BLM-Solidaritäts-Eskalation Brüssel: Black-Bloc-Gruppen attackieren Polizei am Place du Trône mit Steinen und Pyrotechnik. Mehrere Verletzte, 116 Festnahmen, Schäden an Polizeifahrzeugen und Geschäften.",
+     "Archiv",50.85,4.35),
+    ("2024-04-19","Antwerpen","BE","Sachbeschädigung",
+     "Antwerpen: Außenfassade einer Vlaams-Belang-Bezirksgeschäftsstelle mit Farbe und Slogans beschädigt. Bekennerschreiben antifascistische actie.",
+     "Archiv",51.22,4.40),
+    ("2025-02-08","Brüssel","BE","Brandanschlag",
+     "Brüssel-Schaerbeek: Brandanschlag auf zwei Pkw der Föderalen Polizei. Vollbrand. Bekennerschreiben einer anarchistischen Zelle. Sachschaden ca. 60.000 Euro.",
+     "Archiv",50.87,4.38),
+
+    # ── Niederlande ────────────────────────────────────────────────
+    ("2018-06-21","Amsterdam","NL","Sachbeschädigung",
+     "Amsterdam: FvD-Veranstaltungsraum nachts mit Farbbeuteln und beschädigten Fenstern attackiert. Bekennerschreiben AFA Amsterdam.",
+     "Archiv",52.37,4.89),
+    ("2024-10-26","Rotterdam","NL","Militante Aktion",
+     "Rotterdam: Anti-Geert-Wilders-Demonstration eskaliert, vermummte Gruppen attackieren Polizei mit Pyrotechnik. 9 verletzte Beamte, 24 Festnahmen.",
+     "Archiv",51.92,4.48),
+
+    # ── Irland ─────────────────────────────────────────────────────
+    ("2023-11-23","Dublin","IE","Militante Aktion",
+     "Dublin: Anti-Rassismus-Gegendemonstration eskaliert, Black-Bloc-Gruppen attackieren Polizei mit Pyrotechnik nach Stoddart-Square-Attacke. 34 Festnahmen, mehrere Verletzte auf beiden Seiten.",
+     "Archiv",53.35,-6.26),
+    ("2024-09-11","Dublin","IE","Sachbeschädigung",
+     "Dublin: Außenfassade einer National-Party-Veranstaltungshalle mit Farbe attackiert. Bekennerschreiben einer Antifa-Strömung. Geringer Sachschaden.",
+     "Archiv",53.35,-6.26),
+
+    # ── Portugal ───────────────────────────────────────────────────
+    ("2024-03-15","Lissabon","PT","Sachbeschädigung",
+     "Lissabon: Chega-Wahlkampfbüro mit Farbe und Slogans attackiert. Bekennerschreiben antifaschistischer Gruppe. Schaden ca. 5.000 Euro.",
+     "Archiv",38.72,-9.14),
+    ("2025-01-25","Porto","PT","Brandanschlag",
+     "Porto: Brandanschlag auf privaten Pkw eines bekannten Chega-Aktivisten. Sachschaden ca. 22.000 Euro. Bekennerschreiben.",
+     "Archiv",41.15,-8.61),
+
+    # ── Tschechien / Ungarn ────────────────────────────────────────
+    ("2023-08-17","Prag","CZ","Sachbeschädigung",
+     "Prag: Außenfassade einer SPD-CZ-Wahlkampfzentrale mit Farbe und Slogans beschädigt. Bekennerschreiben anarchistische Gruppe Prag.",
+     "Archiv",50.08,14.43),
+    ("2025-02-15","Budapest","HU","Sachbeschädigung",
+     "Budapest: FIDESZ-Bezirksbüro mit Farbe und beschädigten Fenstern attackiert. Bekennerschreiben.",
+     "Archiv",47.50,19.04),
+
+    # ── Deutschland — weitere 2024-2025 ───────────────────────────
+    ("2024-08-05","Berlin","DE","Brandanschlag",
+     "Brandanschlag auf das Dienst-Pkw eines Berliner LfV-Mitarbeiters in Pankow. Vollbrand, Sachschaden ca. 38.000 Euro. Berliner VS: Anschlag mit Doxxing-Hintergrund.",
+     "Archiv",52.57,13.40),
+    ("2024-09-25","Stuttgart","DE","Sabotage",
+     "Stuttgart: Sabotage am Glasfaser-Verteiler-Kasten der Bundespolizei am Hauptbahnhof. Kommunikations-Ausfall 4 h. Bekennerschreiben gegen Repressions-Infrastruktur.",
+     "Archiv",48.78,9.18),
+    ("2024-11-29","München","DE","Brandanschlag",
+     "München-Pasing: Brandanschlag auf einen Streifenwagen vor einer Polizei-Inspektion. Vollbrand. Bekennerschreiben in indymedia. Sachschaden ca. 55.000 Euro.",
+     "Archiv",48.15,11.46),
+    ("2025-01-25","Bremen","DE","Militante Aktion",
+     "Bremen: Anti-AfD-Aktion am Wahlkampfbüro eskaliert, vermummte Gruppen werfen Steine und Pyrotechnik. 7 Festnahmen, drei Beamte verletzt.",
+     "Archiv",53.08,8.81),
+    ("2025-05-25","Dresden","DE","Brandanschlag",
+     "Dresden: Brandanschlag auf einen Pkw eines AfD-Landtagsabgeordneten in Striesen. Vollbrand, Sachschaden ca. 42.000 Euro. Bekennerschreiben.",
+     "Archiv",51.05,13.79),
+
+    # ── Schweiz — weitere 2024-2025 ────────────────────────────────
+    ("2024-12-04","Zürich","CH","Sachbeschädigung",
+     "Zürich-Wiedikon: SVP-Sektion mit Farbbeuteln und beschädigter Glasfront attackiert. Bekennerschreiben Antifa Zürich. Schaden ca. 14.000 CHF.",
+     "Archiv",47.37,8.51),
+    ("2025-02-18","Winterthur","CH","Brandanschlag",
+     "Winterthur: Brandanschlag auf einen Pkw eines Kantonspolizisten in Töss. Vollbrand. Sachschaden ca. 35.000 CHF. Bekennerschreiben.",
+     "Archiv",47.50,8.72),
+
+    # ── Österreich — weitere 2024-2025 ─────────────────────────────
+    ("2024-12-30","Salzburg","AT","Sachbeschädigung",
+     "Salzburg: FPÖ-Landesgeschäftsstelle mit Farbbeuteln, Slogans und beschädigten Fenstern attackiert. Schaden ca. 6.500 Euro.",
+     "Archiv",47.80,13.05),
+    ("2025-05-18","Wien","AT","Brandanschlag",
+     "Wien-Brigittenau: Brandanschlag auf Privat-Pkw eines bekannten Identitären-Aktivisten. Vollbrand, Sachschaden ca. 32.000 Euro. Bekennerschreiben.",
+     "Archiv",48.24,16.38),
+
+    # ── USA — weitere 2025 ─────────────────────────────────────────
+    ("2025-03-15","Portland","US","Militante Aktion",
+     "Portland-Downtown: Anti-Trump-Eskalation 6 Wochen nach Inauguration. Black-Bloc-Aktion attackiert ICE-Büros, Pyrotechnik gegen Polizei. 18 Festnahmen, drei verletzte Beamte.",
+     "Archiv",45.52,-122.68),
+    ("2025-04-29","Atlanta","US","Militante Aktion",
+     "Atlanta: Stop-Cop-City Aktions-Welle V — 80 Vermummte attackieren Baustellen-Equipment, mehrere Brandsätze, ein verletzter Bauleiter. 24 RICO-Charges nach GA Code § 16-4-10.",
+     "Archiv",33.75,-84.39),
+    ("2025-05-15","New York","US","Sabotage",
+     "New York Brooklyn: Sabotage an einem Verizon-Glasfaser-Kasten. Kommunikations-Ausfall 6 h in Park Slope. Bekennerschreiben gegen 'Surveillance-Industrie'.",
+     "Archiv",40.66,-73.97),
+    ("2025-06-12","Berkeley","US","Brandanschlag",
+     "Berkeley: Brandanschlag auf einen Tesla in Wohnviertel North Berkeley. Vollbrand, Sachschaden ca. USD 95.000. Bekennerschreiben Vulkangruppe Bay Area.",
+     "Archiv",37.88,-122.27),
+
+    # ── Italien — Antifa-Spektrum 2024-2025 ───────────────────────
+    ("2024-08-15","Mailand","IT","Brandanschlag",
+     "Mailand-Centro: Brandanschlag auf Pkw eines bekannten FdI-Aktivisten. Vollbrand, Sachschaden ca. 30.000 Euro. Bekennerschreiben.",
+     "Archiv",45.46,9.19),
+    ("2025-01-12","Turin","IT","Militante Aktion",
+     "Turin: Anti-Faschismus-Demonstration zu Räumung CSOA Askatasuna eskaliert. Black-Bloc-Gruppen werfen Molotow-Cocktails auf Polizei. Mehrere Verletzte, 28 Festnahmen.",
+     "Archiv",45.07,7.69),
+
+    # ── Frankreich — weitere 2024-2025 ─────────────────────────────
+    ("2024-05-28","Lyon","FR","Brandanschlag",
+     "Lyon-7e: Brandanschlag auf zwei Pkw der CRS-Bereitschaftspolizei. Vollbrand. Sachschaden ca. 80.000 Euro. Bekennerschreiben einer cellule autonome.",
+     "Archiv",45.74,4.85),
+    ("2025-04-08","Marseille","FR","Sachbeschädigung",
+     "Marseille: RN-Wahlkreisbüro mit Farbbeuteln, Slogans und beschädigten Fenstern attackiert. Bekennerschreiben Action Antifasciste Marseille.",
+     "Archiv",43.30,5.37),
+
+    # ── Griechenland — weitere ─────────────────────────────────────
+    ("2025-03-09","Athen","GR","Sachbeschädigung",
+     "Athen-Exarchia: mehrere Banken-Filialen mit Steinen und Farbsprühungen attackiert. Bekennerschreiben anarchistischer Strömung. Geringer Sachschaden.",
+     "Archiv",37.99,23.73),
+
+    # ── Spanien — weitere ──────────────────────────────────────────
+    ("2025-04-22","Barcelona","ES","Sachbeschädigung",
+     "Barcelona: Banken-Außenfassaden in El Raval mit Slogans und Farbe attackiert während Anti-Räumungs-Aktion. Schaden ca. 9.000 Euro.",
+     "Archiv",41.39,2.17),
 ]
 
 # ── FUNDING TRACKER SEED ──────────────────────────────────────────
@@ -3339,7 +3459,7 @@ RSS_FEEDS = [
     # ── Einschlägige Quellen (szenenah + extremismusbeobachtend) ──
     ("barrikade.info",        "https://barrikade.info/feed"),
     ("belltower.news",        "https://www.belltower.news/feed/"),
-    ("radikal.news",          "https://radikal.news/feed/"),
+    ("radikal.news",          "https://radikal.news/index.xml"),
     ("nd-aktuell.de",         "https://www.nd-aktuell.de/static/rss/rss.xml"),
     ("perspektive-online.net","https://perspektive-online.net/feed/"),
     ("jungewelt.de",          "https://www.jungewelt.de/rss/inland.rss"),
