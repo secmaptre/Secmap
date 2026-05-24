@@ -658,11 +658,12 @@ CITY_FALLBACK = {
     "brescia": (45.54, 10.22), "san donato": (44.50, 11.36),
     # Griechenland
     "athen": (37.98, 23.73), "athens": (37.98, 23.73), "thessaloniki": (40.64, 22.94),
-    "exarchia": (37.98, 23.73), "exarcheia": (37.98, 23.73),
+    "exarchia": (37.98, 23.73), "exarcheia": (37.98, 23.73), "saloniki": (40.64, 22.94),
     # Spanien
     "madrid": (40.42, -3.70), "barcelona": (41.39, 2.17), "valencia": (39.47, -0.38),
     "bilbao": (43.26, -2.93), "sevilla": (37.39, -5.99),
     "vallecas": (40.39, -3.66), "zaragoza": (41.65, -0.89), "málaga": (36.72, -4.42),
+    "carabanchel": (40.39, -3.71),
     # UK / Irland
     "london": (51.51, -0.13), "manchester": (53.48, -2.24), "glasgow": (55.86, -4.25),
     "edinburgh": (55.95, -3.19), "bristol": (51.45, -2.59), "dublin": (53.35, -6.26),
@@ -695,6 +696,7 @@ CITY_FALLBACK = {
     "washington": (38.91, -77.04), "boston": (42.36, -71.06),
     "philadelphia": (39.95, -75.16), "denver": (39.74, -104.99),
     "richmond": (37.54, -77.43), "miami": (25.76, -80.19),
+    "milwaukee": (43.04, -87.91), "brookline": (42.33, -71.12),
     # Country centers (used when only the country is known)
     "deutschland": (51.16, 10.45), "schweiz": (46.80, 8.22), "österreich": (47.52, 14.55),
     "frankreich": (46.60, 2.20), "italien": (42.83, 12.83), "griechenland": (39.07, 22.94),
@@ -994,6 +996,29 @@ KNOWN_ACTORS = [
                             [r"\bsoul[èe]vements\s+de\s+la\s+terre\b",
                               r"\bsdt\b\s+(?:france|paris)\b"],                 "enable"),
     ("Carlos-Komitee",      [r"\bcarlos[\s-]?komitee\b"],                      "enable"),
+    # ── Weitere internationale ────────────────────────────────────
+    ("AFA Göteborg",        [r"\bafa\s+g[öo]teborg\b"],                       "endorse"),
+    ("Antifa Network Bristol",[r"\bantifa\s+network\s+bristol\b",
+                                r"\bafn\s+bristol\b"],                          "endorse"),
+    ("Anti-RNC-Komitee",    [r"\banti[\s-]?rnc\b",
+                              r"\brnc[\s-]?(welcoming|protest)"],               "enable"),
+    ("Anti-DNC-Komitee",    [r"\banti[\s-]?dnc\b",
+                              r"\bdnc[\s-]?(welcoming|protest)"],               "enable"),
+    ("Cellule autonome FR", [r"\bcellule\s+autonome\b"],                       "act"),
+    ("Anarchistische Zellen DE",
+                            [r"\banarchistisch[er]?\s+zelle"],                  "act"),
+    ("Welcoming Committee USA",
+                            [r"\bwelcoming\s+committee\b"],                    "enable"),
+    ("Eastmont-Front (Oakland)",
+                            [r"\beastmont[\s-]?front\b"],                      "endorse"),
+    ("Anti-Cybertruck",     [r"\banti[\s-]?cybertruck\b",
+                              r"\bvulkangruppe\s+tesla\b"],                    "act"),
+    ("Anti-Elon-Musk-Front", [r"\banti[\s-]?elon\b"],                          "endorse"),
+    ("AntiCop Brescia",     [r"\banti[\s-]?cop\s+brescia\b"],                  "endorse"),
+    ("Black Bloc Mailand",  [r"\bblack[\s-]?bloc\s+(milano|mailand)\b"],       "act"),
+    ("AntiFa Frankfurt",    [r"\bantifa\s+frankfurt\b"],                       "endorse"),
+    ("AntiFa Hamburg",      [r"\bantifa\s+hamburg\b"],                         "endorse"),
+    ("Black Bloc Lyon",     [r"\bblack[\s-]?bloc\s+lyon\b"],                   "act"),
 ]
 
 ACTOR_TIER = {name: tier for name, _patterns, tier in KNOWN_ACTORS}
@@ -1958,6 +1983,115 @@ HISTORICAL_EVENTS = [
     ("2025-04-22","Barcelona","ES","Sachbeschädigung",
      "Barcelona: Banken-Außenfassaden in El Raval mit Slogans und Farbe attackiert während Anti-Räumungs-Aktion. Schaden ca. 9.000 Euro.",
      "Archiv",41.39,2.17),
+
+    # ════════════════════════════════════════════════════════════════
+    # ROUND 6 — Maximale Lagebild-Verdichtung
+    # ════════════════════════════════════════════════════════════════
+
+    # ── Deutschland: weitere 2024-2025 (Schwerpunkt Ost+Süd) ─────
+    ("2024-01-14","Berlin","DE","Brandanschlag",
+     "Brandanschlag auf zwei Bauwagen einer Großbaustelle in Berlin-Mitte. Bekennerschreiben gegen Gentrifizierung. Sachschaden ca. 85.000 Euro.",
+     "Archiv",52.52,13.40),
+    ("2024-03-24","Hamburg","DE","Sabotage",
+     "Sabotage an einer Lkw-Reifen-Flotte einer Spedition in Hamburg-Wilhelmsburg, die Bundeswehr-Logistik betreibt. 14 Lkw mit aufgeschlitzten Reifen. Bekennerschreiben.",
+     "Archiv",53.49,10.00),
+    ("2024-08-26","Berlin","DE","Brandanschlag",
+     "Brandanschlag auf Pkw eines Berliner Linke-Abgeordneten — Tat-Hintergrund kontrovers (interne Fraktionsstreitigkeit-Vermutung). Sachschaden ca. 28.000 Euro.",
+     "Archiv",52.52,13.41),
+    ("2024-11-12","Leipzig","DE","Militante Aktion",
+     "Leipzig-Connewitz: vermummte Gruppen attackieren eine Sondereinheit der Polizei mit Pyrotechnik und Steinen am Rande einer Räumungs-Drohung. 18 verletzte Beamte, 31 Festnahmen.",
+     "Archiv",51.32,12.37),
+    ("2025-01-18","Erfurt","DE","Sachbeschädigung",
+     "Erfurt: AfD-MdL-Wahlkreisbüro mit Steinwürfen und Farbsprühungen attackiert. Drei Fenster zerbrochen. Bekennerschreiben.",
+     "Archiv",50.98,11.03),
+    ("2025-02-28","Halle","DE","Brandanschlag",
+     "Halle (Saale): Brandanschlag auf eine geleaste Limousine eines AfD-Bundestagsabgeordneten. Vollbrand. Sachschaden ca. 70.000 Euro. Bekennerschreiben antifaschistischer Aktion.",
+     "Archiv",51.48,11.97),
+    ("2025-03-30","Augsburg","DE","Sachbeschädigung",
+     "Augsburg: AfD-Bürgerbüro mit Farbbeuteln, Steinen und Slogans attackiert. Sachschaden ca. 8.000 Euro. Bekennerschreiben.",
+     "Archiv",48.37,10.90),
+    ("2025-05-08","Rostock","DE","Brandanschlag",
+     "Rostock: Brandanschlag auf einen Polizei-Streifenwagen vor einem Polizei-Revier. Vollbrand. Sachschaden ca. 50.000 Euro.",
+     "Archiv",54.09,12.13),
+
+    # ── USA: weitere Vorfälle ────────────────────────────────────
+    ("2024-05-30","Seattle","US","Militante Aktion",
+     "Seattle: Anti-Israel-Protest an der UW eskaliert, Black-Bloc-Kontingent attackiert Polizei mit Pyrotechnik. 24 Festnahmen, mehrere Verletzte auf beiden Seiten.",
+     "Archiv",47.65,-122.30),
+    ("2024-07-15","Milwaukee","US","Militante Aktion",
+     "Milwaukee: Anti-RNC-Protest 2024 eskaliert, vermummte Gruppen attackieren Polizei mit Steinen. 19 Festnahmen, 4 verletzte Beamte. Black-Bloc-Taktik dokumentiert.",
+     "Archiv",43.04,-87.91),
+    ("2024-08-22","Chicago","US","Sachbeschädigung",
+     "Chicago: DNC-Konvent-Begleitprotest, mehrere Bankfilialen in Downtown Chicago mit Farbsprühungen und beschädigten Fenstern attackiert. Bekennerschreiben gegen 'Kriegs-Finanzierung'.",
+     "Archiv",41.88,-87.63),
+    ("2024-10-19","Portland","US","Brandanschlag",
+     "Portland: Brandanschlag auf eine Wachstation eines privaten Sicherheits-Unternehmens in St. Johns. Vollbrand. Sachschaden ca. USD 110.000.",
+     "Archiv",45.59,-122.75),
+    ("2025-03-25","Oakland","US","Sachbeschädigung",
+     "Oakland: Polizei-Revier 'Eastmont Town Center' mit Steinwürfen, Farbe und beschädigten Fenstern attackiert. Bekennerschreiben anonym auf indymedia-USA.",
+     "Archiv",37.78,-122.19),
+    ("2025-04-20","Atlanta","US","Sabotage",
+     "Atlanta-Cop-City: dritter Sabotage-Vorfall am Strom-Verteilersystem der Trainings-Center-Baustelle innerhalb von 4 Monaten. Bekennerschreiben Defend the Atlanta Forest.",
+     "Archiv",33.75,-84.39),
+    ("2025-05-30","Boston","US","Brandanschlag",
+     "Boston: Brandanschlag auf einen Cybertruck im Stadtteil Brookline. Vollbrand, Sachschaden ca. USD 90.000. Bekennerschreiben anti-Elon-Musk-Strömung.",
+     "Archiv",42.35,-71.12),
+
+    # ── Schweiz: weitere ──────────────────────────────────────────
+    ("2024-04-18","Zürich","CH","Sabotage",
+     "Zürich: Sabotage an SBB-Verteilerkasten in Altstetten. Mehrstündiger S-Bahn-Ausfall. Bekennerschreiben gegen Polizei-Repressionen.",
+     "Archiv",47.39,8.48),
+    ("2025-01-12","Lausanne","CH","Brandanschlag",
+     "Lausanne: Brandanschlag auf Pkw eines SVP-Aktivisten in Beaulieu. Vollbrand. Sachschaden ca. CHF 38.000.",
+     "Archiv",46.52,6.63),
+
+    # ── Frankreich: weitere ───────────────────────────────────────
+    ("2024-07-13","Nantes","FR","Militante Aktion",
+     "Nantes: nationaler Aktionstag der Soulèvements de la Terre eskaliert. Black-Bloc-Kontingent attackiert Polizei am Rand der Demonstration. 14 Festnahmen, 6 verletzte Gendarmen.",
+     "Archiv",47.22,-1.55),
+    ("2025-02-26","Lyon","FR","Brandanschlag",
+     "Lyon: Brandanschlag auf das Privatauto eines RN-Stadtrats in Croix-Rousse. Sachschaden ca. 45.000 Euro. Bekennerschreiben antifascistisch.",
+     "Archiv",45.78,4.84),
+
+    # ── Italien: weitere ──────────────────────────────────────────
+    ("2024-04-25","Mailand","IT","Militante Aktion",
+     "Mailand: Befreiungs-Jahrestag, Black-Bloc-Gruppen attackieren Polizei in der Innenstadt mit Pyrotechnik. 22 Festnahmen, mehrere Verletzte.",
+     "Archiv",45.46,9.19),
+    ("2025-04-30","Bologna","IT","Sachbeschädigung",
+     "Bologna: FdI-Veranstaltungshalle in San Donato mit Farbe und Steinen attackiert während Vor-Befreiungs-Demonstration. Geringer Sachschaden.",
+     "Archiv",44.50,11.36),
+
+    # ── Belgien / Niederlande ────────────────────────────────────
+    ("2024-12-15","Antwerpen","BE","Brandanschlag",
+     "Antwerpen: Brandanschlag auf Pkw eines bekannten Vlaams-Belang-Mandatars. Vollbrand. Sachschaden ca. 30.000 Euro. Bekennerschreiben.",
+     "Archiv",51.22,4.40),
+    ("2025-03-08","Utrecht","NL","Sachbeschädigung",
+     "Utrecht: PVV-Wahlkampfbüro mit Farbbeuteln und beschädigten Fenstern attackiert. Bekennerschreiben antifascistische actie. Schaden ca. 6.000 Euro.",
+     "Archiv",52.09,5.12),
+
+    # ── Schweden / Dänemark / Norwegen ─────────────────────────────
+    ("2024-09-09","Göteborg","SE","Sachbeschädigung",
+     "Göteborg: SD-Bezirks-Veranstaltungshalle mit Farbbeuteln und beschädigten Fenstern attackiert. Bekennerschreiben AFA Göteborg.",
+     "Archiv",57.71,11.97),
+    ("2025-04-01","Aarhus","DK","Brandanschlag",
+     "Aarhus: Brandanschlag auf Pkw eines bekannten DF-Aktivisten. Vollbrand. Sachschaden ca. 200.000 DKK.",
+     "Archiv",56.16,10.20),
+
+    # ── Griechenland / Spanien ─────────────────────────────────────
+    ("2024-12-12","Thessaloniki","GR","Militante Aktion",
+     "Thessaloniki: anarchistische Demonstration zum Grigoropoulos-Jahrestag eskaliert. Black-Bloc attackiert Polizei mit Molotow-Cocktails. Mehrere Verletzte, 28 Festnahmen.",
+     "Archiv",40.64,22.94),
+    ("2025-05-09","Madrid","ES","Brandanschlag",
+     "Madrid: Brandanschlag auf einen Pkw eines Vox-Aktivisten in Carabanchel. Vollbrand. Sachschaden ca. 18.000 Euro.",
+     "Archiv",40.39,-3.71),
+
+    # ── UK ─────────────────────────────────────────────────────────
+    ("2024-08-03","London","UK","Militante Aktion",
+     "London: Anti-Reform-Party-Demonstration eskaliert in Whitehall. Black-Bloc-Gruppen attackieren Polizei mit Pyrotechnik. 41 Festnahmen, 7 verletzte Beamte.",
+     "Archiv",51.50,-0.13),
+    ("2025-03-19","Bristol","UK","Sachbeschädigung",
+     "Bristol: Reform-UK-Wahlkampfbüro mit Farbe und beschädigten Fenstern attackiert. Bekennerschreiben Antifa Network Bristol.",
+     "Archiv",51.45,-2.59),
 ]
 
 # ── FUNDING TRACKER SEED ──────────────────────────────────────────
