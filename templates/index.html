@@ -383,12 +383,61 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;bac
 .tab-btn.on{color:var(--accent);border-bottom-color:var(--accent);}
 
 /* ── ACTOR TABLE ── */
-.actor-entry{padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);}
+.actor-entry{padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;
+  transition:background .12s;}
+.actor-entry:hover{background:rgba(106,169,201,0.04);}
 .actor-hd{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
 .actor-name{font-family:var(--mono);font-size:10px;color:var(--t0);flex:1;}
-.actor-cnt{font-family:var(--mono);font-size:10px;color:var(--accent);}
-.actor-bar{height:2px;background:rgba(0,200,255,0.1);border-radius:1px;overflow:hidden;}
+.actor-cnt{font-family:var(--mono);font-size:10px;color:var(--accent);font-variant-numeric:tabular-nums;}
+.actor-go{font-family:var(--mono);font-size:9px;color:var(--t3);background:transparent;
+  border:1px solid var(--pb);padding:1px 5px;border-radius:1px;cursor:pointer;
+  transition:color .12s,border-color .12s;}
+.actor-go:hover{color:var(--accent);border-color:var(--accent);}
+.actor-bar{height:2px;background:rgba(106,169,201,0.10);border-radius:1px;overflow:hidden;}
 .actor-bar-fill{height:100%;background:var(--accent);border-radius:1px;}
+
+/* ── ACTOR DRILL-DOWN DRAWER ──────────────────────────────────── */
+#actor-drawer{
+  position:fixed;top:calc(var(--tbh) + var(--clsh));right:0;bottom:var(--sbh);
+  width:380px;max-width:90vw;background:var(--bg2);border-left:1px solid var(--pb);
+  z-index:18;transform:translateX(110%);transition:transform .25s ease;
+  overflow-y:auto;padding:14px 18px;box-shadow:-12px 0 32px rgba(0,0,0,0.45);
+}
+#actor-drawer.open{transform:translateX(0);}
+.ad-hdr{position:sticky;top:-14px;background:var(--bg2);margin:-14px -18px 12px;padding:14px 18px;
+  border-bottom:1px solid var(--pb);}
+.ad-close{position:absolute;top:12px;right:14px;background:transparent;border:1px solid var(--pb);
+  color:var(--t2);padding:2px 8px;cursor:pointer;font-family:var(--mono);font-size:11px;}
+.ad-close:hover{color:var(--t0);border-color:var(--pbs);}
+.ad-title{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--t0);letter-spacing:0.5px;
+  margin-right:30px;margin-bottom:4px;}
+.ad-meta{font-family:var(--mono);font-size:9px;color:var(--t2);letter-spacing:1px;}
+.ad-section{margin-bottom:18px;}
+.ad-section-lbl{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:2px;
+  color:var(--t3);text-transform:uppercase;margin-bottom:8px;}
+.ad-sev-hist{display:flex;align-items:flex-end;gap:6px;height:50px;}
+.ad-sev-col{flex:1;display:flex;flex-direction:column;align-items:center;}
+.ad-sev-bar{width:100%;min-height:1px;border-radius:1px 1px 0 0;}
+.ad-sev-lbl{font-family:var(--mono);font-size:8px;color:var(--t3);margin-top:3px;}
+.ad-yr-row{display:flex;align-items:center;gap:6px;margin-bottom:4px;}
+.ad-yr-lbl{font-family:var(--mono);font-size:9px;color:var(--t2);min-width:40px;}
+.ad-yr-track{flex:1;height:5px;background:rgba(106,169,201,0.08);border-radius:1px;overflow:hidden;}
+.ad-yr-fill{height:100%;background:var(--accent);border-radius:1px;}
+.ad-yr-n{font-family:var(--mono);font-size:9px;color:var(--t1);min-width:24px;text-align:right;
+  font-variant-numeric:tabular-nums;}
+.ad-co-chip{display:inline-block;font-family:var(--mono);font-size:9px;color:var(--t1);
+  background:rgba(106,169,201,0.06);border:1px solid var(--pb);padding:2px 7px;
+  border-radius:1px;margin:0 4px 4px 0;}
+.ad-co-chip b{color:var(--t0);margin-left:3px;}
+.ad-inc-list{display:flex;flex-direction:column;gap:1px;}
+.ad-inc{display:flex;align-items:center;gap:8px;padding:6px 8px;background:rgba(0,0,0,0.20);
+  border-left:2px solid var(--pb);font-family:var(--mono);font-size:9px;cursor:pointer;
+  transition:background .1s,border-left-color .1s;}
+.ad-inc:hover{background:rgba(106,169,201,0.06);border-left-color:var(--accent);}
+.ad-inc-date{color:var(--t3);min-width:75px;}
+.ad-inc-cat{color:var(--t1);min-width:90px;}
+.ad-inc-loc{flex:1;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ad-inc-sev{font-weight:700;}
 .actor-chip{display:inline-block;font-family:var(--mono);font-size:8px;padding:2px 6px;border:1px solid rgba(0,200,255,0.25);border-radius:10px;color:var(--accent);background:rgba(0,200,255,0.07);margin:2px 2px 2px 0;}
 .ifempty-actors{font-family:var(--mono);font-size:10px;color:var(--t2);opacity:.5;text-align:center;padding:40px 14px;}
 
@@ -646,6 +695,20 @@ body.mod-funding #mod-funding-view{display:grid !important;}
   .fnd-aside{position:fixed;top:var(--tbh);left:0;right:0;bottom:var(--mobnavh);
     width:100%;z-index:11;transform:translateY(102%);transition:transform .25s ease;}
   .fnd-aside.mob-open{transform:translateY(0);}
+  /* Mobile: Klassifikations-Bar einklappen — nur Zeitstempel sichtbar. */
+  #classbar .cls-l{display:none;}
+  #classbar{justify-content:flex-end;}
+  /* Actor-Drawer auf Mobile: Vollbreite, von rechts schiebend. */
+  #actor-drawer{width:100%;max-width:100%;padding:12px 14px;}
+  .ad-title{font-size:13px;}
+}
+/* Print-Stylesheet — Lagebericht-Export ist druckfreundlich auch direkt
+   aus dem Browser möglich. */
+@media print{
+  #classbar,#topbar,#left,#right,#statusbar,#mobnav,
+  #actor-drawer,#charts-modal,#support-modal,#methodology-modal{display:none !important;}
+  #map{position:static !important;height:auto !important;}
+  body{background:#fff !important;color:#000 !important;}
 }
 
 /* ── SUPPORT MODAL ── */
@@ -968,6 +1031,9 @@ body.mod-funding #mod-funding-view{display:grid !important;}
 </aside>
 
 <!-- DETAIL PANEL -->
+<!-- ACTOR DRILL-DOWN DRAWER (slides in over the right panel) -->
+<aside id="actor-drawer"></aside>
+
 <aside id="detail">
   <div class="panel-handle"></div>
   <div class="detail-hdr">
@@ -2623,13 +2689,9 @@ async function loadActors(){
 function renderActors(data,el){
   if(!data||!data.length){el.innerHTML='<div class="ifempty-actors">'+t('feed.actors_empty','KEINE AKTEURSDATEN')+'</div>';return;}
   const max=Math.max(...data.map(a=>a.count),1);
-  // Fedpol Akteurs-Tier (MS-7) — short label per tier, rendered as a pill
-  // in front of the actor name. Defaults to "endorse" if absent.
   const pillFor = (tg) => {
     const tier = (tg || 'endorse').toLowerCase();
-    const cls  = tier === 'act' ? 't1'
-               : tier === 'enable' ? 't2'
-               : 't3-actor';
+    const cls  = tier === 'act' ? 't1' : tier === 'enable' ? 't2' : 't3-actor';
     const lbl  = tier === 'act'    ? t('actor.tier_act','TAT')
               : tier === 'enable' ? t('actor.tier_enable','FÖRDER')
               :                     t('actor.tier_endorse','BEFÜRW');
@@ -2639,16 +2701,96 @@ function renderActors(data,el){
     const w=Math.round(a.count/max*100);
     const nm=a.name||a.actor||'?';
     const lastLbl = t('feed.actor_last_seen','ZULETZT');
-    return `<div class="actor-entry" onclick="filterActor('${nm.replace(/'/g,"\\'")}')">
+    const hiPct = a.count ? Math.round((a.high||0)/a.count*100) : 0;
+    // Doppelklick-Verhalten: Single → Drilldown öffnen; "→"-Button → Feed-Filter.
+    return `<div class="actor-entry" onclick="openActorPanel('${nm.replace(/'/g,"\\'")}')">
       <div class="actor-hd">
         ${pillFor(a.tier)}
         <span class="actor-name">${nm}</span>
-        <span class="actor-cnt">${a.count}</span>
+        <span class="actor-cnt" title="${a.count} Vorfälle / ${a.high||0} hoch-Schwere (${hiPct}%)">${a.count}</span>
+        <button class="actor-go" title="Im Feed filtern" onclick="event.stopPropagation();filterActor('${nm.replace(/'/g,"\\'")}')">→</button>
       </div>
       <div class="actor-bar"><div class="actor-bar-fill" style="width:${w}%"></div></div>
       ${a.last_seen?`<div style="font-family:var(--mono);font-size:8px;color:var(--t3);margin-top:3px">${lastLbl}: ${a.last_seen}</div>`:''}
     </div>`;
   }).join('');
+}
+
+// ── ACTOR DRILL-DOWN PANEL ─────────────────────────────────────────
+// Click on an actor row → side panel with all their incidents +
+// severity histogram + per-year breakdown.
+function openActorPanel(name){
+  const incs = (all||[]).filter(i =>
+    (i.actors||'').split(',').map(x=>x.trim()).includes(name)
+  ).sort((a,b)=>(b.date||'')>(a.date||'')?1:-1);
+  // Severity histogram (1..5)
+  const sevHist = [0,0,0,0,0];
+  incs.forEach(i => { const s = Math.max(1,Math.min(5, i.severity_score||1)); sevHist[s-1]++; });
+  // Per-year breakdown
+  const byYear = {};
+  incs.forEach(i => { const y = (i.date||'').slice(0,4) || '—'; byYear[y] = (byYear[y]||0) + 1; });
+  // Country breakdown
+  const byCo = {};
+  incs.forEach(i => { const c = i.country || '—'; byCo[c] = (byCo[c]||0) + 1; });
+  // Map markers focus on this actor
+  const ringHTML = sevHist.map((n,i)=>{
+    const max = Math.max(...sevHist,1);
+    const h = Math.round(n/max*40)+1;
+    const sevClr = SEV_COL[i+1] || 'var(--t3)';
+    return `<div class="ad-sev-col" title="${n} Vorfälle Schwere ${i+1}"><div class="ad-sev-bar" style="height:${h}px;background:${sevClr}"></div><div class="ad-sev-lbl">${i+1}</div></div>`;
+  }).join('');
+  const yearHTML = Object.entries(byYear).sort().map(([y,n])=>{
+    const max = Math.max(...Object.values(byYear),1);
+    const w = Math.round(n/max*100);
+    return `<div class="ad-yr-row"><span class="ad-yr-lbl">${y}</span><div class="ad-yr-track"><div class="ad-yr-fill" style="width:${w}%"></div></div><span class="ad-yr-n">${n}</span></div>`;
+  }).join('');
+  const coHTML = Object.entries(byCo).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([c,n])=>{
+    return `<span class="ad-co-chip">${c} <b>${n}</b></span>`;
+  }).join('');
+  const topIncs = incs.slice(0, 15).map(i => {
+    const date = i.date || '—';
+    const cat  = i.category || '—';
+    const loc  = i.location || '—';
+    const co   = i.country || '—';
+    const sev  = i.severity_score || 0;
+    return `<div class="ad-inc" onclick="openDetail(all.find(x=>x.id===${i.id}))">
+      <span class="ad-inc-date">${date}</span>
+      <span class="ad-inc-cat">${cat}</span>
+      <span class="ad-inc-loc">${loc}, ${co}</span>
+      ${sev?`<span class="ad-inc-sev" style="color:${SEV_COL[sev]||'var(--t2)'}">S${sev}</span>`:''}
+    </div>`;
+  }).join('');
+  const drawer = document.getElementById('actor-drawer');
+  drawer.innerHTML = `
+    <div class="ad-hdr">
+      <button class="ad-close" onclick="closeActorPanel()" title="Schließen">✕</button>
+      <div class="ad-title">${name}</div>
+      <div class="ad-meta">${incs.length} Vorfälle · ${incs.filter(i=>(i.severity_score||0)>=4).length} hoch · ${Object.keys(byCo).length} Länder</div>
+    </div>
+    <div class="ad-section">
+      <div class="ad-section-lbl">SCHWERE-VERTEILUNG</div>
+      <div class="ad-sev-hist">${ringHTML}</div>
+    </div>
+    <div class="ad-section">
+      <div class="ad-section-lbl">JAHRE</div>
+      ${yearHTML || '<div style="color:var(--t3);font-size:10px">—</div>'}
+    </div>
+    <div class="ad-section">
+      <div class="ad-section-lbl">LÄNDER</div>
+      ${coHTML || '<div style="color:var(--t3);font-size:10px">—</div>'}
+    </div>
+    <div class="ad-section">
+      <div class="ad-section-lbl">JÜNGSTE VORFÄLLE (${Math.min(15, incs.length)})</div>
+      <div class="ad-inc-list">${topIncs}</div>
+    </div>
+    <div class="ad-section">
+      <button class="gbtn" style="width:100%" onclick="filterActor('${name.replace(/'/g,"\\'")}')">→ ALLE IM FEED FILTERN</button>
+    </div>
+  `;
+  drawer.classList.add('open');
+}
+function closeActorPanel(){
+  document.getElementById('actor-drawer').classList.remove('open');
 }
 
 function filterActor(name){
