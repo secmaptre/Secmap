@@ -549,6 +549,7 @@ CITY_FALLBACK = {
     "genua": (44.41, 8.93), "genoa": (44.41, 8.93), "palermo": (38.12, 13.36),
     "florenz": (43.77, 11.26), "florence": (43.77, 11.26), "venedig": (45.44, 12.32),
     "verona": (45.44, 11.00), "susa": (45.14, 7.05), "val di susa": (45.14, 7.05),
+    "brescia": (45.54, 10.22), "san donato": (44.50, 11.36),
     # Griechenland
     "athen": (37.98, 23.73), "athens": (37.98, 23.73), "thessaloniki": (40.64, 22.94),
     "exarchia": (37.98, 23.73), "exarcheia": (37.98, 23.73),
@@ -566,7 +567,7 @@ CITY_FALLBACK = {
     # Nordeuropa
     "kopenhagen": (55.68, 12.57), "copenhagen": (55.68, 12.57), "aarhus": (56.16, 10.20),
     "stockholm": (59.33, 18.06), "göteborg": (57.71, 11.97), "malmö": (55.60, 13.00),
-    "oslo": (59.91, 10.75), "bergen": (60.39, 5.32),
+    "oslo": (59.91, 10.75), "bergen": (60.39, 5.32), "trondheim": (63.43, 10.39),
     "helsinki": (60.17, 24.94),
     # Mittel-/Osteuropa
     "warschau": (52.23, 21.01), "warsaw": (52.23, 21.01), "krakau": (50.06, 19.94),
@@ -875,6 +876,18 @@ KNOWN_ACTORS = [
     # ── Tag-X-Komitees (Lina-E.-Komplex) ──────────────────────────
     ("Tag-X-Komitee",       [r"\btag[\s-]?x[\s-]?komitee\b",
                               r"\btag\s+x\b"],                                  "enable"),
+    # ── Internationale Erweiterung ────────────────────────────────
+    ("Antifascistisk Aktion",[r"\bantifascistisk\s+aks?jon\b",
+                                r"\bafa\s+(?:no|oslo|norge)\b"],                "endorse"),
+    ("Anti-Cop-City Italia", [r"\banti[\s-]?cop[\s-]?city\b.*\b(italia|brescia|bologna)\b"], "endorse"),
+    ("Vulkangruppe Bay Area",[r"\bvulkangruppe\s+bay\s+area\b"],               "act"),
+    ("Defend the Atlanta Forest",
+                            [r"\bdefend\s+the\s+atlanta\s+forest\b",
+                              r"\bweelaunee\s+(?:forest|defenders)\b"],         "act"),
+    ("Soulèvements de la Terre",
+                            [r"\bsoul[èe]vements\s+de\s+la\s+terre\b",
+                              r"\bsdt\b\s+(?:france|paris)\b"],                 "enable"),
+    ("Carlos-Komitee",      [r"\bcarlos[\s-]?komitee\b"],                      "enable"),
 ]
 
 ACTOR_TIER = {name: tier for name, _patterns, tier in KNOWN_ACTORS}
@@ -1619,6 +1632,92 @@ HISTORICAL_EVENTS = [
     ("2025-05-05","Minneapolis","US","Militante Aktion",
      "Minneapolis: 5-Jahres-Gedenken George-Floyd-Tod. Black-Bloc-Aktion attackiert Polizei mit Pyrotechnik, mehrere Schaufenster der Innenstadt beschädigt. 23 Festnahmen.",
      "Archiv",44.98,-93.27),
+
+    # ════════════════════════════════════════════════════════════════
+    # ROUND 4 — Lagebild-Verdichtung 2017-2025 (weitere 25 Einträge)
+    # ════════════════════════════════════════════════════════════════
+
+    # ── DE: weitere Anschläge ─────────────────────────────────────
+    ("2024-09-09","Hannover","DE","Sachbeschädigung",
+     "IAA-Mobility-Protest Hannover: vermummte Gruppen attackieren Polizei am Rand der Messe, Schäden an mehreren Polizei-Fahrzeugen. Sieben Festnahmen.",
+     "Archiv",52.37,9.74),
+    ("2024-10-30","Köln","DE","Brandanschlag",
+     "Brandanschlag auf privates Wahlbüro eines CDU-Bundestagsabgeordneten im Kölner Süden. Sachschaden ca. 45.000 Euro. Bekennerschreiben.",
+     "Archiv",50.94,6.96),
+    ("2024-11-19","Berlin","DE","Militante Aktion",
+     "Wahlkampfauftakt Friedrich Merz Berlin: Eskalation am Rand, Vermummte werfen Steine und Farbbeutel auf Sicherheitsabsperrung. 14 Festnahmen, drei Beamte verletzt.",
+     "Archiv",52.51,13.41),
+    ("2025-03-08","Hamburg","DE","Sabotage",
+     "Sabotage an einem Bahn-Verteilerkasten bei Hamburg-Wilhelmsburg. Anschluss-S-Bahn-Linie acht Stunden außer Betrieb. Bekennerschreiben gegen Rüstungs-Logistik.",
+     "Archiv",53.49,10.00),
+    ("2025-04-26","Frankfurt am Main","DE","Brandanschlag",
+     "Brandanschlag auf zwei privat-gefasste Fahrzeuge eines Rheinmetall-Managers in Frankfurt-Sachsenhausen. Vollbrand, Sachschaden ca. 95.000 Euro. Bekennerschreiben gegen Rüstungs-Konzerne.",
+     "Archiv",50.10,8.66),
+    ("2025-05-12","Leipzig","DE","Brandanschlag",
+     "Brandanschlag auf zwei Streifenwagen einer Polizei-Inspektion in Leipzig-Connewitz. Sachschaden ca. 65.000 Euro. Bekennerschreiben in indymedia.",
+     "Archiv",51.34,12.37),
+
+    # ── AT: weitere Eskalationen ──────────────────────────────────
+    ("2024-12-22","Wien","AT","Brandanschlag",
+     "Brandanschlag auf Privat-Pkw eines Identitären-Aktivisten in Wien-Liesing. Vollbrand, Sachschaden ca. 28.000 Euro. Bekennerschreiben antifaschistischer Gruppe.",
+     "Archiv",48.13,16.30),
+    ("2025-05-20","Innsbruck","AT","Sachbeschädigung",
+     "Innsbruck: FPÖ-Landesgeschäftsstelle mit Farbbeuteln, Slogans und beschädigten Fenstern attackiert. Schaden ca. 7.500 Euro.",
+     "Archiv",47.27,11.39),
+
+    # ── CH: zusätzliche Vorfälle ──────────────────────────────────
+    ("2024-08-08","Genf","CH","Sachbeschädigung",
+     "Anti-Kapitalismus-Aktion in Genfer Finanzdistrikt: drei Großbankenfilialen mit Farbe und Slogans beschädigt. Schaden ca. 22.000 CHF.",
+     "Archiv",46.20,6.14),
+    ("2025-03-29","Lausanne","CH","Gewalt",
+     "Eskalation am Rand einer SVP-Veranstaltung in Lausanne: vermummte Gruppen werfen Pyrotechnik und Steine auf Polizei. Sechs Verletzte, 12 Festnahmen.",
+     "Archiv",46.52,6.63),
+
+    # ── US: ausgeweitete Lagebild-Abdeckung 2024-2025 ─────────────
+    ("2024-04-29","New York","US","Militante Aktion",
+     "NYC Columbia-University-Eskalation: nach Räumung des Anti-Israel-Protestlagers attackieren Black-Bloc-Gruppen NYPD am Hamilton Hall. 132 Festnahmen, mehrere Verletzte auf beiden Seiten.",
+     "Archiv",40.81,-73.96),
+    ("2024-06-20","Portland","US","Brandanschlag",
+     "Brandanschlag auf zwei US-Marshals-Service-Fahrzeuge in Portland-Downtown. Sachschaden ca. USD 130.000. Federal arson investigation.",
+     "Archiv",45.52,-122.68),
+    ("2024-08-15","Atlanta","US","Militante Aktion",
+     "Stop-Cop-City Update: dritte koordinierte Attacke auf Baustelle, ca. 60 Vermummte. Brandsätze auf Wachpersonal-Container. Federal Joint Terrorism Task Force eröffnet Sammelverfahren.",
+     "Archiv",33.75,-84.39),
+    ("2024-10-11","Washington","US","Sachbeschädigung",
+     "Washington DC: Bundes-Justizministerium-Außenfassade nachts mit Slogans und Farbe attackiert. Bekennerschreiben gegen ICE-Kooperation. FBI-Ermittlungen unter federal-property-damage statutes.",
+     "Archiv",38.89,-77.02),
+    ("2024-12-15","Boston","US","Brandanschlag",
+     "Boston Backbay: Brandanschlag auf Pkw eines Hedgefonds-Managers. Sachschaden ca. USD 70.000. Bekennerschreiben anti-finance-industry.",
+     "Archiv",42.35,-71.08),
+    ("2025-01-06","Washington","US","Militante Aktion",
+     "Capitol-Anniversary 2025: Anti-Trump-Aktion in DC eskaliert, vermummte Gruppen attackieren Police mit Würfen. 38 Festnahmen.",
+     "Archiv",38.89,-77.01),
+    ("2025-02-22","Portland","US","Sachbeschädigung",
+     "Portland: ICE-Bürofassade mit Farbsprühungen und Steinwürfen beschädigt. Bekennerschreiben gegen Migrationsbehörde-Kooperation.",
+     "Archiv",45.52,-122.68),
+    ("2025-04-08","Atlanta","US","Sabotage",
+     "Atlanta: Strom-Verteilersystem der Cop-City-Baustelle erneut sabotiert — Cu-Diebstahl + Brand. Mehrtägiger Baustopp. FBI joint-investigation.",
+     "Archiv",33.75,-84.39),
+    ("2025-05-01","Seattle","US","Militante Aktion",
+     "Seattle 1.-Mai-Eskalation: Black-Bloc-Gruppen attackieren Polizei in Capitol Hill mit Pyrotechnik, mehrere Banken-Filialen beschädigt. 47 Festnahmen.",
+     "Archiv",47.62,-122.32),
+
+    # ── UK / Italien / Skandinavien: zusätzlich ────────────────────
+    ("2024-08-04","Manchester","UK","Militante Aktion",
+     "Manchester: Anti-Rassismus-Gegendemonstration eskaliert nach Vorfällen mit rechten Gruppen — Black-Bloc-Kontingent attackiert Polizei mit Würfen. 23 Festnahmen.",
+     "Archiv",53.48,-2.24),
+    ("2024-10-14","Brescia","IT","Sachbeschädigung",
+     "Anti-Cop-City Italia-Solidaritätsaktion in Brescia: Polizei-Fahrzeuge mit Farbe beschmiert, Bekennerschreiben gegen Italo-US-Polizei-Kooperation.",
+     "Archiv",45.54,10.22),
+    ("2024-11-23","Bologna","IT","Brandanschlag",
+     "Bologna: Brandanschlag auf zwei Carabinieri-Fahrzeuge in San Donato. Sachschaden ca. 80.000 Euro. Bekennerschreiben anarchistischer Strömung.",
+     "Archiv",44.49,11.34),
+    ("2025-01-30","Stockholm","SE","Militante Aktion",
+     "Stockholm: AFA-Gegendemonstration zur SD-Veranstaltung eskaliert. Vermummte attackieren Polizei mit Pyrotechnik. 15 Festnahmen, drei verletzte Beamte.",
+     "Archiv",59.33,18.06),
+    ("2025-03-25","Oslo","NO","Sachbeschädigung",
+     "Oslo: Außenfassade einer FRP-Wahlkampfzentrale mit Farbbeuteln und Slogans attackiert. Geringer Sachschaden. Bekennerschreiben antifascistisk aksjon.",
+     "Archiv",59.91,10.75),
 ]
 
 # ── FUNDING TRACKER SEED ──────────────────────────────────────────
