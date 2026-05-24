@@ -5685,6 +5685,97 @@ async def list_funding_edges(limit: int = 200):
     return JSONResponse([dict(r) for r in rows])
 
 
+@app.get("/api/funding/by-actor")
+async def funding_by_actor(actor: str = "", min_amount: float = 0):
+    """
+    Cross-Reference: alle Funding-Records, deren recipient_org ODER
+    donor_name den gegebenen Akteur (oder ein Synonym aus KNOWN_ACTORS)
+    enthält. Sucht case-insensitive Substring-Match. Ermöglicht
+    "klick-Akteur → siehe Finanzfluss" UX.
+    """
+    if not actor or len(actor) < 3:
+        return JSONResponse({"actor": actor, "matches": [], "count": 0})
+    # Klein-/Groß-Variante + bekannte Synonyme expandieren.
+    needles = [actor.lower()]
+    for name, _patterns, _tier in KNOWN_ACTORS:
+        if name.lower() == actor.lower():
+            for pat in _patterns:
+                # Erste Wort-Stamm-Variante des Pattern als Such-Needle.
+                cleaned = re.sub(r"[\\b\\s\\.\\?\\*\\+\\(\\)\\[\\]\\|]", " ", pat).strip()
+                first = cleaned.split()[0] if cleaned.split() else ""
+                if len(first) >= 4:
+                    needles.append(first.lower())
+            break
+    needles = list(set(needles))
+    q = ("SELECT id, recipient_org, project, amount, currency, year, country, "
+         "donor_type, donor_name, source_url, notes, confidence, "
+         "COALESCE(verified, 0) AS verified "
+         "FROM funding_records WHERE 1=1")
+    p = []
+    if min_amount > 0:
+        q += " AND amount >= ?"
+        p.append(min_amount)
+    # OR-Filter über recipient_org + donor_name + notes
+    or_clauses = []
+    for n in needles:
+        like = f"%{n}%"
+        or_clauses.append("(LOWER(recipient_org) LIKE ? OR LOWER(donor_name) LIKE ? OR LOWER(notes) LIKE ?)")
+        p.extend([like, like, like])
+    if or_clauses:
+        q += " AND (" + " OR ".join(or_clauses) + ")"
+    q += " ORDER BY year DESC, amount DESC"
+    rows = [dict(r) for r in db.execute(q, p).fetchall()]
+    total_eur = sum(r["amount"] for r in rows if (r.get("currency") or "EUR") == "EUR")
+    total_chf = sum(r["amount"] for r in rows if (r.get("currency") or "EUR") == "CHF")
+    return JSONResponse({
+        "actor":     actor,
+        "needles":   needles,
+        "matches":   rows,
+        "count":     len(rows),
+        "sum_eur":   total_eur,
+        "sum_chf":   total_chf,
+    })
+
+
+@app.get("/api/incidents/by-actor")
+async def incidents_by_actor(actor: str = "", limit: int = 200):
+    """
+    Cross-Reference: alle Incidents, in deren actors-Feld der genannte
+    Akteur vorkommt. Für die Actor-Drill-Down-Panel sehr nützlich
+    (heute filtert das Frontend client-side; dieser Endpoint erlaubt
+    auch externen API-Konsumenten dieselbe Sicht).
+    """
+    if not actor or len(actor) < 3:
+        return JSONResponse({"actor": actor, "matches": [], "count": 0})
+    rows = [dict(r) for r in db.execute(
+        "SELECT id, date, location, country, category, summary, "
+        "severity_score, tier, target_type, url, source, actors "
+        "FROM incidents WHERE actors LIKE ? "
+        "ORDER BY date DESC LIMIT ?",
+        (f"%{actor}%", min(max(limit, 1), 500))
+    ).fetchall()]
+    # Filter genauer: actor name muss exact in komma-separierter Liste sein
+    actor_l = actor.lower()
+    filtered = [r for r in rows if any(
+        a.strip().lower() == actor_l for a in (r["actors"] or "").split(",")
+    )]
+    sev_hist = [0,0,0,0,0]
+    for r in filtered:
+        s = max(1, min(5, r.get("severity_score") or 1))
+        sev_hist[s-1] += 1
+    by_co = {}
+    for r in filtered:
+        c = r.get("country") or "—"
+        by_co[c] = by_co.get(c, 0) + 1
+    return JSONResponse({
+        "actor": actor,
+        "count": len(filtered),
+        "by_severity": sev_hist,
+        "by_country":  sorted(by_co.items(), key=lambda x: -x[1]),
+        "matches": filtered[:limit],
+    })
+
+
 @app.get("/api/funding/export-csv")
 async def funding_export_csv():
     """CSV export of the full funding table."""

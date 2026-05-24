@@ -822,11 +822,12 @@ body.mod-funding #mod-funding-view{display:grid !important;}
   <div class="chip hide-mob"><span data-i18n="chip.sync">SYNC</span> <b id="ts">—</b></div>
   <div class="tb-sp"></div>
   <span class="tb-version hide-mob" data-i18n="brand.version">v2025.5 — Open Research</span>
-  <!-- LANGUAGE SWITCHER (DE / EN / FR) -->
+  <!-- LANGUAGE SWITCHER (DE / EN / FR / IT) -->
   <div class="tb-lang" id="tb-lang" role="group" aria-label="Sprache">
     <button id="lang-de" data-lang="de" onclick="setLang('de')" title="Deutsch">DE</button>
     <button id="lang-en" data-lang="en" onclick="setLang('en')" title="English">EN</button>
     <button id="lang-fr" data-lang="fr" onclick="setLang('fr')" title="Français">FR</button>
+    <button id="lang-it" data-lang="it" onclick="setLang('it')" title="Italiano">IT</button>
   </div>
   <div class="tb-acts">
     <button class="gbtn hide-mob mod-inc-only" onclick="cmdOpen()" title="Suche (Strg+K)" data-i18n="topbar.search">Suche</button>
@@ -1528,7 +1529,7 @@ const SEV_BG={1:'rgba(58,85,112,0.18)',2:'rgba(90,122,146,0.18)',3:'rgba(240,165
 // Strings live in /i18n/<lang>.json (served as static assets). On first
 // visit we honour the browser's preferred language; the user can override
 // via the topbar switcher and the choice is persisted in localStorage.
-const I18N_LANGS = ['de','en','fr'];
+const I18N_LANGS = ['de','en','fr','it'];
 let I18N = {};                 // current language dict (key → string)
 let I18N_LANG = 'de';
 function detectLang(){
