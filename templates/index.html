@@ -18,34 +18,53 @@
    serious investigative journalism. NOT cyberpunk, NOT hacker movie.
    ════════════════════════════════════════════════════════════════ */
 :root{
-  /* surfaces */
-  --bg:#0b1117;                  /* near-black, very slightly desaturated */
-  --bg2:#10171f;                 /* card/secondary surface */
-  --panel:rgba(11,17,23,0.96);
-  --pb:rgba(255,255,255,0.07);   /* hairline borders, neutral not blue */
-  --pb2:rgba(255,255,255,0.12);
-  --pbs:rgba(255,255,255,0.18);  /* stronger border on hover/focus */
-  /* one restrained accent — steel-blue, not neon */
+  /* ── SURFACES ─ intelligence-room dark: nearly black, mineral cast ── */
+  --bg:#080c12;                  /* page background */
+  --bg2:#0d141c;                 /* panel surface */
+  --bg3:#11181f;                 /* nested surface (table rows, modals) */
+  --panel:rgba(8,12,18,0.985);   /* topbar / statusbar */
+  --pb:rgba(255,255,255,0.06);   /* hairlines */
+  --pb2:rgba(255,255,255,0.11);
+  --pbs:rgba(255,255,255,0.16);
+  /* ── ACCENT — restrained steel, not neon ────────────────────────── */
   --accent:#6aa9c9;
-  --accent2:#4a8cae;
-  --ag:rgba(106,169,201,0.10);
-  /* signal colours, slightly desaturated vs. the old neon set */
-  --amber:#d99a2b;--amg:rgba(217,154,43,0.12);
-  --red:#d4495d;  --rdg:rgba(212,73,93,0.12);
+  --accent2:#3d7e9f;
+  --ag:rgba(106,169,201,0.08);
+  --ag2:rgba(106,169,201,0.18);
+  /* ── SIGNALS — desaturated, briefing-style ──────────────────────── */
+  --amber:#d99a2b;--amg:rgba(217,154,43,0.10);
+  --red:#d4495d;  --rdg:rgba(212,73,93,0.10);
   --green:#5fb583;
-  /* text scale — high-contrast on dark background */
-  --t0:#e8edf2;                  /* headings, key data */
-  --t1:#b6c1cc;                  /* body */
-  --t2:#7a8a99;                  /* meta */
-  --t3:#3d4a57;                  /* placeholders, dividers */
-  /* type */
-  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  /* ── TEXT — wider contrast range, more deliberate hierarchy ─────── */
+  --t0:#e9eef3;                  /* primary data (numbers, headers) */
+  --t1:#aab5c0;                  /* body */
+  --t2:#6c7986;                  /* meta */
+  --t3:#3a4551;                  /* placeholders, dividers */
+  /* ── TYPE ───────────────────────────────────────────────────────── */
+  --mono:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
   --sans:'Inter',-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;
-  /* dimensions */
-  --lw:288px;--rw:308px;--tbh:50px;--sbh:28px;--mobnavh:56px;
+  /* ── DIMENSIONS ── slightly tighter to feel like an analyst console */
+  --lw:296px;--rw:316px;--tbh:54px;--sbh:30px;--mobnavh:56px;
+  /* Classification bar above the topbar */
+  --clsh:18px;
 }
-html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--t1);font-family:var(--sans);-webkit-font-smoothing:antialiased;}
-/* no scanline overlay — that was movie-prop styling, not professional */
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--t1);
+  font-family:var(--sans);-webkit-font-smoothing:antialiased;font-feature-settings:"tnum","ss01";}
+
+/* ── CLASSIFICATION BAR ── briefing-style strip above the topbar ─── */
+#classbar{
+  position:fixed;top:0;left:0;right:0;height:var(--clsh);z-index:25;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 14px;background:#0a1219;border-bottom:1px solid var(--pb);
+  font-family:var(--mono);font-size:8.5px;font-weight:600;letter-spacing:2.5px;
+  color:var(--t3);text-transform:uppercase;pointer-events:none;
+}
+#classbar .cls-l{color:var(--accent);}
+#classbar .cls-r{color:var(--t3);font-variant-numeric:tabular-nums;}
+/* Push the rest of the layout below the classification strip. */
+#topbar{top:var(--clsh) !important;}
+#left,#right,#detail{top:calc(var(--tbh) + var(--clsh)) !important;}
+#mod-funding-view{top:calc(var(--tbh) + var(--clsh)) !important;}
 
 /* ── MAP ── */
 #map{position:fixed;inset:0;z-index:0;}
@@ -59,9 +78,13 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
   backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
 }
 .brand{display:flex;align-items:center;gap:10px;flex-shrink:0;text-decoration:none;}
-.brand-icon{font-size:18px;color:var(--accent);}
-.brand-name{font-family:var(--sans);font-size:14px;font-weight:600;letter-spacing:0.5px;color:var(--t0);}
-.brand-sub{font-family:var(--sans);font-size:9px;font-weight:400;letter-spacing:0.4px;color:var(--t2);text-transform:none;}
+.brand-icon{font-size:17px;color:var(--accent);text-shadow:0 0 8px rgba(106,169,201,0.30);}
+.brand-name{font-family:var(--sans);font-size:14.5px;font-weight:600;letter-spacing:0.8px;
+  color:var(--t0);display:flex;align-items:baseline;gap:7px;line-height:1;}
+.brand-version{font-family:var(--mono);font-size:8px;font-weight:500;color:var(--t3);
+  letter-spacing:2px;border:1px solid var(--pb);padding:1px 4px;border-radius:1px;}
+.brand-sub{font-family:var(--mono);font-size:8.5px;font-weight:400;letter-spacing:1.2px;
+  color:var(--t2);text-transform:uppercase;margin-top:3px;}
 .tb-div{width:1px;height:20px;background:var(--pb);flex-shrink:0;}
 .chip{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;color:var(--t2);white-space:nowrap;flex-shrink:0;}
 .chip b{color:var(--t0);font-weight:500;}
@@ -709,12 +732,18 @@ body.mod-funding #mod-funding-view{display:grid !important;}
 
 <div id="map"></div>
 
+<!-- CLASSIFICATION BAR — briefing strip with provenance + build stamp -->
+<div id="classbar" role="banner" aria-label="Classification">
+  <span class="cls-l">◆ OPEN SOURCE INTELLIGENCE · LEX EUROPE · UNCLASSIFIED // RELEASABLE</span>
+  <span class="cls-r" id="cls-stamp">—</span>
+</div>
+
 <!-- TOPBAR -->
 <header id="topbar">
   <a class="brand" href="/">
-    <span class="brand-icon">◈</span>
+    <span class="brand-icon">◆</span>
     <div>
-      <div class="brand-name">LEX EUROPE</div>
+      <div class="brand-name">LEX EUROPE <span class="brand-version">v3.2</span></div>
       <div class="brand-sub" data-i18n="brand.sub">Politische Gewalt &amp; Förderfluss — OSINT-Recherche</div>
     </div>
   </a>
@@ -1484,12 +1513,22 @@ function runBoot(){
   setLang(detectLang());     // load i18n before first render
   loadData(); loadTrends(); loadTimeline();
   loadEffectiveness();        // Wirkungs-Counter im Status-Footer (§C5)
-  // Refresh every 5 min — counters change slowly (status edits, new
-  // funding entries, new incidents) and a polling interval avoids racey
-  // stale numbers when the operator leaves the tab open.
+  // Classification stamp tickt mit lokaler Zeit — gibt dem Header die
+  // typische Lagezentrum-Anmutung („LAGE 2026-05-24 09:42 UTC+1").
+  updateClassStamp();
+  setInterval(updateClassStamp, 60 * 1000);
   setInterval(loadEffectiveness, 5 * 60 * 1000);
-  // Admin-Status einmal abfragen; das Cookie ist httpOnly, daher Server-Roundtrip.
   checkAdmin().then(()=>{ if(detailItem) showDetAdminButtons(); });
+}
+
+function updateClassStamp(){
+  const el = document.getElementById('cls-stamp');
+  if(!el) return;
+  const d = new Date();
+  const p = n => String(n).padStart(2,'0');
+  const tz = -d.getTimezoneOffset() / 60;
+  const tzs = (tz >= 0 ? '+' : '') + tz;
+  el.textContent = `LAGE · ${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())} UTC${tzs}`;
 }
 
 // ── TEXT CLEANER ───────────────────────────────────────────────────
