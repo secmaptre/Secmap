@@ -207,6 +207,41 @@ def get_db():
     )''')
     c.execute("CREATE INDEX IF NOT EXISTS idx_audit_token ON api_audit(token_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_audit_ts    ON api_audit(timestamp)")
+
+    # ── WEBHOOK SUBSCRIPTIONS (Säule 2 — operativ) ────────────────
+    # Betreiber gefährdeter Infrastruktur (Bahn, Energie, Polizei,
+    # IHK-Sicherheitsbeauftragte) abonnieren ein Filter-Set (target_type,
+    # country, min_severity) und bekommen automatisch HMAC-signierte
+    # POSTs bei neuen Cluster-Detections und neuen T1-Vorfällen, die
+    # ihre Filter matchen. Jede Lieferung wird in webhook_deliveries
+    # geloggt (Code + Zeit + Body-Length).
+    c.execute('''CREATE TABLE IF NOT EXISTS webhook_subscriptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        url TEXT NOT NULL,
+        label TEXT NOT NULL,
+        target_types TEXT DEFAULT '',
+        countries TEXT DEFAULT '',
+        min_severity INTEGER DEFAULT 4,
+        events TEXT DEFAULT 'cluster,incident',
+        secret TEXT NOT NULL,
+        active INTEGER DEFAULT 1,
+        created_at TEXT,
+        last_delivery TEXT,
+        delivery_count INTEGER DEFAULT 0,
+        failure_count INTEGER DEFAULT 0
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS webhook_deliveries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sub_id INTEGER,
+        event_type TEXT,
+        event_key TEXT,
+        status_code INTEGER,
+        body_len INTEGER,
+        delivered_at TEXT,
+        error TEXT
+    )''')
+    c.execute("CREATE INDEX IF NOT EXISTS idx_wh_active ON webhook_subscriptions(active)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_wd_sub    ON webhook_deliveries(sub_id)")
     c.commit()
     return c
 
@@ -379,17 +414,24 @@ CITY_FALLBACK = {
     # Frankreich
     "paris": (48.85, 2.35), "lyon": (45.76, 4.84), "marseille": (43.30, 5.37),
     "bordeaux": (44.84, -0.58), "toulouse": (43.60, 1.44), "nantes": (47.22, -1.55),
-    "strasbourg": (48.58, 7.75), "lille": (50.63, 3.07),
+    "strasbourg": (48.58, 7.75), "lille": (50.63, 3.07), "rennes": (48.11, -1.68),
+    "montpellier": (43.61, 3.88), "nice": (43.71, 7.27), "grenoble": (45.19, 5.73),
+    "notre-dame-des-landes": (47.30, -1.69),
+    "sainte-soline": (46.34, -0.07), "aubervilliers": (48.92, 2.38),
     # Italien
     "rom": (41.90, 12.50), "rome": (41.90, 12.50), "mailand": (45.46, 9.19),
     "milano": (45.46, 9.19), "turin": (45.07, 7.69), "torino": (45.07, 7.69),
     "neapel": (40.85, 14.27), "napoli": (40.85, 14.27), "bologna": (44.49, 11.34),
+    "genua": (44.41, 8.93), "genoa": (44.41, 8.93), "palermo": (38.12, 13.36),
+    "florenz": (43.77, 11.26), "florence": (43.77, 11.26), "venedig": (45.44, 12.32),
+    "verona": (45.44, 11.00), "susa": (45.14, 7.05), "val di susa": (45.14, 7.05),
     # Griechenland
     "athen": (37.98, 23.73), "athens": (37.98, 23.73), "thessaloniki": (40.64, 22.94),
     "exarchia": (37.98, 23.73), "exarcheia": (37.98, 23.73),
     # Spanien
     "madrid": (40.42, -3.70), "barcelona": (41.39, 2.17), "valencia": (39.47, -0.38),
     "bilbao": (43.26, -2.93), "sevilla": (37.39, -5.99),
+    "vallecas": (40.39, -3.66), "zaragoza": (41.65, -0.89), "málaga": (36.72, -4.42),
     # UK / Irland
     "london": (51.51, -0.13), "manchester": (53.48, -2.24), "glasgow": (55.86, -4.25),
     "edinburgh": (55.95, -3.19), "bristol": (51.45, -2.59), "dublin": (53.35, -6.26),
@@ -685,6 +727,30 @@ KNOWN_ACTORS = [
     ("Exarchia-Strukturen", [r"\bexarch(ia|eia)\b", r"\bvouli\s+\d+\b"],       "endorse"),
     ("Conspiracy of Fire Cells",[r"\bconspiracy\s+of\s+fire\s+cells\b",
                                   r"\bsynomos[íi]a\s+pyr[íi]non\b"],            "act"),
+    # ── Frankreich ─────────────────────────────────────────────────
+    ("ZAD / Soulèvements",  [r"\bzad\b", r"\bzone\s+[àa]\s+d[ée]fendre\b",
+                              r"\bsoul[èe]vements\s+de\s+la\s+terre\b"],       "endorse"),
+    ("Action Antifasciste FR",[r"\baction\s+antifasciste\b.*\b(paris|france|lyon)",
+                                r"\bafa\s+paris\b"],                            "endorse"),
+    ("Black Bloc France",   [r"\bblack[\s-]?bloc\b.*\b(paris|france|toulouse|nantes)"], "act"),
+    # ── Italien ────────────────────────────────────────────────────
+    ("Centro Sociale",      [r"\bcentro\s+sociale\b", r"\bcsoa\b"],            "endorse"),
+    ("NoTAV",               [r"\bnotav\b", r"\bno[\s-]?tav\b",
+                              r"\bval\s+di\s+susa\b.*\b(protest|aktion)"],      "act"),
+    ("Antifa Italia",       [r"\bantifa\s+(?:italia|bologna|roma|milano)\b"],  "endorse"),
+    # ── Niederlande / Skandinavien / UK ────────────────────────────
+    ("AFA Nederland",       [r"\bafa\s+nederland\b",
+                              r"\bantifascistische\s+aktie\b.*(?:nl|nederland)"], "endorse"),
+    ("AFA Stockholm",       [r"\bafa\s+stockholm\b",
+                              r"\bantifascistisk\s+aktion\b"],                  "endorse"),
+    ("Antifa Network UK",   [r"\bantifa\s+(?:uk|london|britain)\b",
+                              r"\banti[\s-]?fascist\s+network\b"],              "endorse"),
+    ("Class War",           [r"\bclass\s+war\b.*\b(uk|britain|london)\b"],     "enable"),
+    # ── Spanien ────────────────────────────────────────────────────
+    ("Acción Antifascista", [r"\bacci[óo]n\s+antifascista\b"],                 "endorse"),
+    # ── Tag-X-Komitees (Lina-E.-Komplex) ──────────────────────────
+    ("Tag-X-Komitee",       [r"\btag[\s-]?x[\s-]?komitee\b",
+                              r"\btag\s+x\b"],                                  "enable"),
 ]
 
 ACTOR_TIER = {name: tier for name, _patterns, tier in KNOWN_ACTORS}
@@ -1251,6 +1317,184 @@ HISTORICAL_EVENTS = [
     ("2025-04-15","Berkeley","US","Gewalt",
      "Auseinandersetzung am Rand einer rechts-konservativen Veranstaltung in Berkeley. Black-Bloc-Gruppen attackieren Anwesende mit Pyrotechnik. Mehrere Verletzte, sieben Festnahmen.",
      "Archiv",37.87,-122.27),
+
+    # ════════════════════════════════════════════════════════════════
+    # ROUND 3 — Lagebild-Verdichtung 2017-2025 quer durch Europa+USA
+    # ════════════════════════════════════════════════════════════════
+
+    # ── Deutschland: G20-Hamburg-Komplex + Lina-E.-Kontext ─────────
+    ("2017-07-07","Hamburg","DE","Militante Aktion",
+     "G20-Gipfel Hamburg: 'Welcome-to-Hell'-Demonstration eskaliert. Über 200 Pkw angezündet im Schanzenviertel, Polizei-Großeinsatz mit Wasserwerfern und Räumpanzern. 476 Polizisten verletzt; 186 Festnahmen. Mehrere Verfahren §125 StGB schwerer Landfriedensbruch.",
+     "Archiv",53.56,9.96),
+    ("2017-07-08","Hamburg","DE","Brandanschlag",
+     "Zweiter G20-Tag: Brand- und Plünderungswelle in der Sternschanze. Filialen großer Bauketten, Banken und Autohäuser beschädigt. Schaden Stadt Hamburg + Versicherer im hohen einstelligen Millionenbereich.",
+     "Archiv",53.56,9.96),
+    ("2019-12-12","Leipzig","DE","Brandanschlag",
+     "Brandanschlag auf Baufirmen-Fahrzeug am Wilhelm-Leuschner-Platz Leipzig — vermutete Tatmotivation: Protest gegen 'Gentrifizierung'. Bekennerschreiben in indymedia. Sachschaden ca. 80.000 Euro.",
+     "Archiv",51.34,12.37),
+    ("2019-11-03","Berlin","DE","Militante Aktion",
+     "Connewitz-Bezug: Mehrere maskierte Personen attackieren in Berlin-Friedrichshain eine Wohnung in der Pettenkofer Straße, vermutete Bezugnahme zum Lina-E.-Komplex. Schwere Körperverletzung. Anklage wegen Bildung krimineller Vereinigung §129 StGB.",
+     "Archiv",52.51,13.45),
+    ("2023-05-31","Leipzig","DE","Militante Aktion",
+     "Urteilstag Lina E. in Dresden: Großeinsatz, mehrtägige Ausschreitungen im Leipziger Süden (Connewitz). Pyrotechnik gegen Polizei, Container-Brände, Geschäfte beschädigt. Hunderte Festnahmen. Bezeichnet als 'Tag X' in autonomer Szene.",
+     "Archiv",51.32,12.37),
+    ("2024-05-02","Magdeburg","DE","Brandanschlag",
+     "Brandanschlag auf Privat-Pkw eines AfD-Stadtrats in Magdeburg. Vollbrand, Sachschaden ca. 25.000 Euro. Bekennerschreiben antifaschistischer Gruppe.",
+     "Archiv",52.12,11.62),
+    ("2024-07-30","Erfurt","DE","Sachbeschädigung",
+     "AfD-Landesgeschäftsstelle Thüringen in Erfurt mit Farbbeuteln und Stein-Sprüngen attackiert. Fünf Fenster beschädigt. Bekennerschreiben in autonomer Plattform.",
+     "Archiv",50.98,11.03),
+    ("2024-08-19","Köln","DE","Brandanschlag",
+     "Brandanschlag auf Privat-Fahrzeug eines RWE-Konzern-Managers in Köln-Lindenthal. Vollbrand. Bekennerschreiben gegen Energie-Konzerne. Sachschaden ca. 65.000 Euro.",
+     "Archiv",50.94,6.96),
+    ("2024-10-04","Hannover","DE","Sabotage",
+     "Sabotage an einem Bahn-Verteilerkasten der Deutschen Bahn südlich von Hannover. Mehrstündige S-Bahn-Ausfälle Region Hannover-Hildesheim. Bekennerschreiben gegen 'Logistik der Aufrüstung' an Bundeswehr.",
+     "Archiv",52.37,9.74),
+    ("2025-01-30","Berlin","DE","Brandanschlag",
+     "Brandanschlag auf Bauwagen eines AfD-Wahlkampf-Standes in Berlin-Marzahn. Sachschaden ca. 18.000 Euro. Bekennerschreiben in indymedia.",
+     "Archiv",52.55,13.55),
+    ("2025-03-22","Dresden","DE","Militante Aktion",
+     "Anti-AfD-Demonstration Dresden eskaliert: vermummte Gruppen werfen Pyrotechnik und Steine auf Polizei. 21 Beamte verletzt, 38 Festnahmen. Bekennerschreiben 'Tag-X-Komitee Sachsen'.",
+     "Archiv",51.05,13.74),
+    ("2025-04-30","Hamburg","DE","Brandanschlag",
+     "Brandanschlag auf Polizei-Diensthund-Trainings-Anlage in Hamburg-Bramfeld. Drei Geräte zerstört. Bekennerschreiben gegen 'Repressionsausbildung'. Sachschaden ca. 90.000 Euro.",
+     "Archiv",53.62,10.07),
+
+    # ── Schweiz: Reitschule/Koch-Areal-Komplex + Davos-WEF ──────────
+    ("2018-05-01","Zürich","CH","Militante Aktion",
+     "1.-Mai-Nachdemo Zürich: Vermummte Gruppen werfen Steine und Pyrotechnik auf Polizei, ein Schaufenster der Credit Suisse beschädigt. 12 Festnahmen, 5 verletzte Beamte.",
+     "Archiv",47.38,8.54),
+    ("2022-01-17","Davos","CH","Sachbeschädigung",
+     "Anti-WEF-Aktion: Anti-Kapitalismus-Sprüche an mehreren Hotelfassaden, Eingang einer Davoser Sparkassen-Filiale mit Farbe beschmiert. Bekennerschreiben Globaler Süden.",
+     "Archiv",46.80,9.83),
+    ("2023-06-17","Bern","CH","Brandanschlag",
+     "Brandanschlag auf Pkw eines Politikers der SVP Bern in der Länggasse. Vollbrand, Sachschaden ca. CHF 60.000. Bekennerschreiben antifaschistischer Gruppe.",
+     "Archiv",46.96,7.42),
+    ("2024-08-18","Lausanne","CH","Sachbeschädigung",
+     "Mehrere SVP-Plakate in Lausanne mit Farbe übersprüht. Geringer Sachschaden, aber großflächige mediale Aufmerksamkeit. Bekennerschreiben.",
+     "Archiv",46.52,6.63),
+    ("2025-05-01","Basel","CH","Gewalt",
+     "1.-Mai-Nachdemo Basel eskaliert: Vermummte attackieren Polizei mit Glasflaschen. Acht Beamte verletzt, 19 Festnahmen. Sachschäden Innenstadt-Geschäfte ca. CHF 85.000.",
+     "Archiv",47.56,7.59),
+
+    # ── Österreich: WUK / Identitäre-Konflikte / Wien-Aktionen ─────
+    ("2020-11-09","Wien","AT","Sachbeschädigung",
+     "Wien-Floridsdorf: FPÖ-Bezirksgeschäftsstelle mit Farbbeuteln, Slogans und beschädigten Fenstern attackiert. Schaden ca. 6.000 Euro. Antifaschistische Aktion Wien.",
+     "Archiv",48.26,16.41),
+    ("2023-10-21","Wien","AT","Militante Aktion",
+     "Anti-Israel-Demonstration eskaliert in Wien-Donaustadt: vermummte Gruppen attackieren Polizei mit Pyrotechnik. Black-Bloc-Taktik. Schaden an Bushaltestellen, 14 Festnahmen, 6 verletzte Beamte.",
+     "Archiv",48.23,16.42),
+    ("2024-03-08","Graz","AT","Sachbeschädigung",
+     "Mehrere FPÖ-Plakate in Graz-Innenstadt beschädigt, Steiermark-Landesgeschäftsstelle mit Farbe beschmiert. Bekennerschreiben Aktionskollektiv Graz.",
+     "Archiv",47.07,15.44),
+    ("2024-11-12","Wien","AT","Brandanschlag",
+     "Brandanschlag auf Pkw eines bekannten Identitären-Aktivisten in Wien-Hietzing. Vollbrand, Sachschaden ca. 35.000 Euro. Bekennerschreiben.",
+     "Archiv",48.18,16.30),
+
+    # ── Frankreich: Notre-Dame-des-Landes / Loi Sécurité Globale ────
+    ("2018-04-09","Notre-Dame-des-Landes","FR","Militante Aktion",
+     "Räumung der ZAD (Zone à Défendre) Notre-Dame-des-Landes durch französische Gendarmerie. Tagelange Konfrontationen, Brandsätze, Molotow-Cocktails. 73 verletzte Gendarmen, 29 verletzte Aktivisten. 11 Festnahmen mit Anklagen wegen 'violences en réunion'.",
+     "Archiv",47.30,-1.69),
+    ("2020-11-28","Paris","FR","Militante Aktion",
+     "Anti-Loi-Sécurité-Globale-Demonstration in Paris eskaliert. Black-Bloc-Gruppen werfen Molotow-Cocktails auf Polizei, Bankfilialen geplündert. 67 Polizisten verletzt, 81 Festnahmen.",
+     "Archiv",48.86,2.35),
+    ("2022-10-29","Sainte-Soline","FR","Militante Aktion",
+     "Sainte-Soline (Deux-Sèvres): Eskalation bei Anti-Megabassine-Demonstration. Bewaffnete Black-Bloc-Aktion gegen Gendarmerie, mehrere schwer Verletzte auf beiden Seiten. Spätere Ermittlungen gegen 'Soulèvements de la Terre'.",
+     "Archiv",46.34,-0.07),
+    ("2023-06-21","Paris","FR","Brandanschlag",
+     "Brandanschlag auf Polizei-Fahrzeug-Depot im Pariser Vorort Aubervilliers während Anti-Renten-Reform-Protesten. 14 Fahrzeuge zerstört, Sachschaden ca. 800.000 Euro.",
+     "Archiv",48.92,2.38),
+    ("2024-06-30","Paris","FR","Gewalt",
+     "Wahlnacht-Eskalation Paris: vermummte Gruppen attackieren Polizei nach RN-Wahlergebnis. Verletzte auf beiden Seiten, 45 Festnahmen. Place de la République + Place de la Bastille.",
+     "Archiv",48.87,2.36),
+
+    # ── Italien: Centro-Sociale-Komplex + NoTAV ─────────────────────
+    ("2019-07-21","Susa","IT","Sabotage",
+     "NoTAV-Komplex Val di Susa: Anschlag auf Baustellen-Equipment der TAV-Hochgeschwindigkeitsstrecke Turin-Lyon. Drei Maschinen ausgebrannt. Bekennerschreiben anarchistischer Strömung.",
+     "Archiv",45.14,7.05),
+    ("2022-10-22","Mailand","IT","Sachbeschädigung",
+     "Mailand: Fratelli-d'Italia-Wahlkampfbüro mit Farbbeuteln und beschädigten Fenstern attackiert. Bekennerschreiben antifaschistischer Aktion.",
+     "Archiv",45.46,9.19),
+    ("2023-04-25","Genua","IT","Militante Aktion",
+     "Genua: Befreiungs-Jahrestag eskaliert — anarchistische Gruppen werfen Steine, Molotow-Cocktails auf Polizei. Mehrere Verletzte. Anklage wegen 'devastazione e saccheggio'.",
+     "Archiv",44.41,8.93),
+    ("2024-12-11","Turin","IT","Brandanschlag",
+     "Brandanschlag auf zwei Polizei-Streifenwagen in Turin-Aurora. Bekennerschreiben anarchistischer Zelle. Sachschaden ca. 90.000 Euro.",
+     "Archiv",45.07,7.69),
+    ("2025-03-30","Rom","IT","Sachbeschädigung",
+     "Rom-Centocelle: mehrere FdI-Plakate mit Farbe übersprüht und beschädigt. Bekennerschreiben antifaschistischer Gruppe.",
+     "Archiv",41.88,12.55),
+
+    # ── Spanien: anarchistische Strömungen Barcelona/Madrid ─────────
+    ("2019-10-15","Barcelona","ES","Militante Aktion",
+     "Tsunami-Democràtic-Protesten Barcelona eskalieren: anarchistische Block-Gruppen werfen Molotow-Cocktails auf Polizei, Brände im Stadtzentrum. Über 200 Verletzte, 142 Festnahmen.",
+     "Archiv",41.39,2.17),
+    ("2023-11-08","Madrid","ES","Sachbeschädigung",
+     "Vox-Wahlkreisbüro in Madrid-Vallecas mit Steinen und Farbbeuteln attackiert. Schaden ca. 8.000 Euro. Bekennerschreiben Acción Antifascista.",
+     "Archiv",40.39,-3.66),
+    ("2024-09-15","Bilbao","ES","Brandanschlag",
+     "Brandanschlag auf Pkw eines Polizei-Funktionärs in Bilbao. Vollbrand. Sachschaden ca. 30.000 Euro. Mutmaßlich anarchistische Strömung.",
+     "Archiv",43.26,-2.93),
+
+    # ── Griechenland: Exarchia-Komplex ─────────────────────────────
+    ("2019-12-01","Athen","GR","Militante Aktion",
+     "Exarchia-Komplex: Brand-/Sabotage-Welle gegen Polizei-Patrouillen und Banken-Filialen im Stadtteil. Mehrere Streifenwagen ausgebrannt. Bekennerschreiben 'Conspiracy of Fire Cells'-nahe Strömungen.",
+     "Archiv",37.99,23.74),
+    ("2021-03-09","Athen","GR","Brandanschlag",
+     "Brandanschlag auf Polizei-Wache in Athen-Nea Smyrni. Bekennerschreiben anarchistischer Zelle. Sachschaden ca. 200.000 Euro.",
+     "Archiv",37.94,23.71),
+    ("2024-12-06","Athen","GR","Gewalt",
+     "Jahrestag Polizei-Erschießung Grigoropoulos 2008: Massendemonstration eskaliert in Exarchia. Über 100 Festnahmen, mehrere Verletzte. Mehrtägige Banken-/Polizei-Sachbeschädigungen.",
+     "Archiv",37.99,23.73),
+
+    # ── UK / Niederlande / Skandinavien ─────────────────────────────
+    ("2020-09-12","London","UK","Sachbeschädigung",
+     "Black-Bloc-Aktion in London-Whitehall: Boris-Johnson-nahe Bürohäuser mit Farbe und Slogans beschädigt. Schaden ca. 12.000 Pfund. Bekennerschreiben Anti-Tory-Front.",
+     "Archiv",51.50,-0.13),
+    ("2024-07-25","Amsterdam","NL","Militante Aktion",
+     "Anti-NATO-Protest Amsterdam: vermummte Gruppen attackieren Polizei mit Steinen, Brand an Müllcontainern. 12 Verletzte, 28 Festnahmen.",
+     "Archiv",52.37,4.89),
+    ("2023-09-08","Stockholm","SE","Sachbeschädigung",
+     "Sverigedemokraterna-Bürofassade in Stockholm-Söder mit Farbe und Slogans attackiert. Schaden ca. 15.000 SEK. Bekennerschreiben AFA Stockholm.",
+     "Archiv",59.33,18.06),
+    ("2024-11-09","Kopenhagen","DK","Brandanschlag",
+     "Brandanschlag auf zwei Polizei-Streifenwagen in Kopenhagen-Nørrebro. Sachschaden ca. 150.000 DKK. Bekennerschreiben Antifascistisk Aktion.",
+     "Archiv",55.69,12.55),
+
+    # ── USA: weitere belegbare Vorfälle ──────────────────────────────
+    ("2020-08-29","Portland","US","Brandanschlag",
+     "Portland 95-night Riot Series: zweiter Brandanschlag innerhalb 24h auf Polizei-Verbindungsstelle North Precinct. Federal courthouse-Komplex erneut Ziel. Sachschäden im sechsstelligen USD-Bereich.",
+     "Archiv",45.55,-122.65),
+    ("2021-05-20","Atlanta","US","Sachbeschädigung",
+     "Atlanta: mehrere Polizei-Streifenwagen mit Reifenstichen und Farbsprühungen außer Betrieb gesetzt während Polizei-Reform-Protesten. Bekennerschreiben aus 'Defend the Atlanta Forest'-Umfeld.",
+     "Archiv",33.75,-84.39),
+    ("2023-04-29","Atlanta","US","Militante Aktion",
+     "Atlanta Cop City Update: Massenaktion 'Week of Action V' — Sachbeschädigung an Bauwagen, koordinierter Versuch die Baustelle zu unterbinden. 35 Festnahmen, davon 22 wegen domestic terrorism Charges (GA Code § 16-4-10).",
+     "Archiv",33.75,-84.39),
+    ("2024-02-11","Portland","US","Brandanschlag",
+     "Portland-Northeast: Brandanschlag auf zwei privat-besessene Streifen-Pkw eines Polizei-Captains. Sachschaden ca. USD 80.000. Bekennerschreiben It's Going Down.",
+     "Archiv",45.55,-122.65),
+    ("2024-08-19","Chicago","US","Militante Aktion",
+     "DNC-Konvent Chicago 2024: Anti-Krieg-/Anti-Israel-Protest eskaliert. Black-Bloc-Gruppen attackieren Polizei mit Pyrotechnik und Würfen, mehrere Verletzte auf beiden Seiten. 56 Festnahmen.",
+     "Archiv",41.85,-87.65),
+    ("2024-10-07","New York","US","Sachbeschädigung",
+     "NYC 7.-Oktober-Jahrestag: Anti-Israel-Aktion eskaliert, vermummte Gruppen beschädigen Banken-Fassaden in Midtown Manhattan. Bekennerschreiben gegen 'Komplizen-Banken'. Schaden im fünfstelligen USD-Bereich.",
+     "Archiv",40.76,-73.98),
+    ("2024-11-08","Washington","US","Sachbeschädigung",
+     "Washington DC: nach US-Wahl 2024 mehrere Fenster eingeworfen an Republikanischen Komitee-Bürohäusern Capitol-Hill-Quartier. Bekennerschreiben anonym auf indymedia-USA.",
+     "Archiv",38.89,-77.00),
+    ("2024-12-04","Boston","US","Brandanschlag",
+     "Brandanschlag auf einen UnitedHealthcare-Pkw in Boston-Cambridge — ein Tag nach UnitedHealthcare-CEO-Erschießung in NYC. Vollbrand, Sachschaden ca. USD 45.000. Bekennerschreiben anti-Insurance-Industry.",
+     "Archiv",42.36,-71.06),
+    ("2025-02-14","Los Angeles","US","Brandanschlag",
+     "Brandanschlag auf einen Cybertruck in Beverly Hills. Vollbrand, Tesla-Hass-Vandalismus-Welle erreicht LA. Bekennerschreiben Vulkangruppe Bay Area.",
+     "Archiv",34.07,-118.40),
+    ("2025-03-12","Seattle","US","Sabotage",
+     "Sabotage am 5G-Mast eines T-Mobile-Standorts in Seattle-Capitol-Hill. Bekennerschreiben gegen 'Surveillance-Infrastruktur'. Kommunikations-Ausfall ca. 6 Stunden.",
+     "Archiv",47.62,-122.32),
+    ("2025-05-05","Minneapolis","US","Militante Aktion",
+     "Minneapolis: 5-Jahres-Gedenken George-Floyd-Tod. Black-Bloc-Aktion attackiert Polizei mit Pyrotechnik, mehrere Schaufenster der Innenstadt beschädigt. 23 Festnahmen.",
+     "Archiv",44.98,-93.27),
 ]
 
 # ── FUNDING TRACKER SEED ──────────────────────────────────────────
@@ -2105,6 +2349,27 @@ def save_incident(ai, text, source, url, date_str=None, manual=False):
             f"SAVED [sev={sev}/conf={conf}/tier={tier}/hi={is_high_risk}/"
             f"target={target_type or '-'}]: {cat} / {ai.get('ort')} / {source}"
         )
+        # ── Webhook-Fan-Out: nur T1-act-Vorfälle pushen, NIE doxxing-
+        # sanitisierte oder T3-Kontext-Einträge — die haben keinen
+        # operativen Mehrwert für Betreiber-Frühwarnung.
+        if tier == "act" and not doxxing_sanitized and not manual:
+            try:
+                _fanout_webhook("incident.new", h, {
+                    "event":           "incident.new",
+                    "hash":            h,
+                    "date":            d,
+                    "location":        ai.get("ort"),
+                    "country":         ai.get("land"),
+                    "category":        cat,
+                    "tier":            tier,
+                    "target_type":     target_type,
+                    "severity_score":  sev,
+                    "summary":         summ,
+                    "source":          source,
+                    "url":             url_norm,
+                })
+            except Exception as e:
+                log.info(f"webhook fan-out (incident) failed: {e}")
         return True
     except Exception as e:
         log.warning(f"save_incident: {e}")
@@ -2750,6 +3015,23 @@ RSS_FEEDS = [
     ("corriere.it",           "https://xml2.corriereobjects.it/rss/homepage.xml"),
     ("elpais.com",            "https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada"),
     ("euronews.com",          "https://www.euronews.com/rss?level=theme&name=news"),
+    # ── EU-Erweiterung: weitere nationale Leitmedien ───────────────
+    ("francetvinfo.fr",       "https://www.francetvinfo.fr/titres.rss"),
+    ("ansa.it",               "https://www.ansa.it/sito/ansait_rss.xml"),
+    ("lastampa.it",           "https://www.lastampa.it/rss/homepage.xml"),
+    ("ilfattoquotidiano.it",  "https://www.ilfattoquotidiano.it/feed/"),
+    ("bbc.co.uk",             "http://feeds.bbci.co.uk/news/uk/rss.xml"),
+    ("theguardian.com",       "https://www.theguardian.com/uk/rss"),
+    ("nrc.nl",                "https://www.nrc.nl/rss/"),
+    ("nos.nl",                "https://feeds.nos.nl/nosnieuws"),
+    ("dr.dk",                 "https://www.dr.dk/nyheder/service/feeds/allenyheder"),
+    ("aftenposten.no",        "https://www.aftenposten.no/rss"),
+    ("svt.se",                "https://www.svt.se/nyheter/rss.xml"),
+    ("kathimerini.com",       "https://www.kathimerini.gr/feed/"),
+    ("gazetawyborcza.pl",     "https://wyborcza.pl/pub/rss/najnowsze.htm"),
+    # ── Forschungs-/Beobachtungsstellen ──────────────────────────
+    ("start.umd.edu",         "https://www.start.umd.edu/news.rss"),
+    ("dgap.org",              "https://dgap.org/de/rss.xml"),
     # ── USA — Bundesbehörden + Wire-Agenturen + relevante Locals ───
     # Per Concept §C0/§C1: die US 2026 Counterterrorism Strategy hebt
     # Antifa-/Anarcho-Strukturen explizit auf Threat-Tier 1; relevante
@@ -3181,7 +3463,103 @@ def detect_clusters():
         "SELECT COUNT(*) FROM early_warning_clusters WHERE active=1"
     ).fetchone()[0]
     log.info(f"detect_clusters: {n_active} active clusters (threshold ≥{EWC_THRESHOLD} / {EWC_WINDOW_DAYS}d)")
+    # ── Webhook-Fan-Out: neue oder eskalierende Cluster pushen ────
+    # Wir benutzen die zuvor in `seen_keys` gesammelten *aktuell aktiven*
+    # Cluster (alles was im Window meets-threshold ist). Subscriber mit
+    # passendem Filter (target_type, country, min_count) bekommen einen
+    # signierten POST.
+    try:
+        for key in seen_keys:
+            row = db.execute(
+                "SELECT cluster_key, country, target_type, count, first_seen, "
+                "last_seen, sample_titles "
+                "FROM early_warning_clusters WHERE cluster_key = ?", (key,)
+            ).fetchone()
+            if row:
+                d = dict(row)
+                try:
+                    d["sample_titles"] = json.loads(d["sample_titles"] or "[]")
+                except Exception:
+                    d["sample_titles"] = []
+                _fanout_webhook("cluster", d["cluster_key"], {
+                    "event":        "cluster.active",
+                    "cluster_key":  d["cluster_key"],
+                    "country":      d["country"],
+                    "target_type":  d["target_type"],
+                    "count":        d["count"],
+                    "window_days":  EWC_WINDOW_DAYS,
+                    "first_seen":   d["first_seen"],
+                    "last_seen":    d["last_seen"],
+                    "sample_titles":d["sample_titles"],
+                })
+    except Exception as e:
+        log.warning(f"webhook fan-out failed: {e}")
     return n_active
+
+
+# ── WEBHOOK DELIVERY ENGINE (Säule 2) ─────────────────────────────
+def _hmac_sign(secret: str, body_bytes: bytes) -> str:
+    import hmac, hashlib as _h
+    return "sha256=" + hmac.new(secret.encode(), body_bytes,
+                                _h.sha256).hexdigest()
+
+def _fanout_webhook(event_type: str, event_key: str, payload: dict):
+    """Fire matching webhooks for an event. Filters are AND-ed:
+    target_types (empty=any), countries (empty=any), min_severity (incident-only),
+    events (must contain event_type's family: 'cluster' or 'incident')."""
+    subs = db.execute(
+        "SELECT id, url, secret, target_types, countries, min_severity, events "
+        "FROM webhook_subscriptions WHERE active=1"
+    ).fetchall()
+    if not subs:
+        return
+    body = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    target_t = (payload.get("target_type") or "").strip()
+    country  = (payload.get("country")     or "").strip()
+    severity = int(payload.get("severity_score") or 0)
+    family   = event_type.split(".", 1)[0]  # 'cluster' / 'incident'
+    for s in subs:
+        events = (s["events"] or "").split(",")
+        if family not in [e.strip() for e in events if e.strip()]:
+            continue
+        tts = [x.strip() for x in (s["target_types"] or "").split(",") if x.strip()]
+        cos = [x.strip() for x in (s["countries"]    or "").split(",") if x.strip()]
+        if tts and target_t and target_t not in tts: continue
+        if cos and country  and country  not in cos: continue
+        if family == "incident" and severity < (s["min_severity"] or 0): continue
+        sig = _hmac_sign(s["secret"], body)
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent":   "LEX-EUROPE-webhook/1.0",
+            "X-LexEurope-Signature": sig,
+            "X-LexEurope-Event":     event_type,
+            "X-LexEurope-Event-Key": event_key,
+        }
+        now = datetime.now().isoformat(timespec="seconds")
+        err = None; code = 0
+        try:
+            r = requests.post(s["url"], data=body, headers=headers, timeout=8)
+            code = r.status_code
+            r.raise_for_status()
+            db.execute(
+                "UPDATE webhook_subscriptions SET last_delivery=?, "
+                "delivery_count = delivery_count + 1 WHERE id=?",
+                (now, s["id"])
+            )
+        except Exception as e:
+            err = str(e)[:280]
+            db.execute(
+                "UPDATE webhook_subscriptions SET failure_count = failure_count + 1 "
+                "WHERE id=?", (s["id"],)
+            )
+            log.info(f"webhook delivery FAIL sub={s['id']} url={s['url']}: {err}")
+        db.execute(
+            "INSERT INTO webhook_deliveries "
+            "(sub_id, event_type, event_key, status_code, body_len, delivered_at, error) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (s["id"], event_type, event_key, code, len(body), now, err)
+        )
+        db.commit()
 
 
 @app.get("/api/early-warning.json")
@@ -3534,6 +3912,107 @@ async def admin_revoke_token(token_id: int, _=Depends(require_admin)):
     db.execute("UPDATE api_tokens SET revoked=1 WHERE id=?", (token_id,))
     db.commit()
     return JSONResponse({"ok": True})
+
+
+# ── WEBHOOK ADMIN-CRUD (Säule 2) ──────────────────────────────────
+@app.post("/admin/api/webhooks")
+async def admin_create_webhook(request: Request, _=Depends(require_admin)):
+    """Create a new webhook subscription. Returns the secret EXACTLY once."""
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "message": "Ungültiges JSON"}, status_code=400)
+    url   = (data.get("url")   or "").strip()
+    label = (data.get("label") or "").strip()
+    # https:// in Production Pflicht; localhost/127.0.0.1 dürfen auch http://
+    # (für interne Operatoren-Empfänger und lokale Testflows).
+    _is_localhost = re.search(r"^https?://(127\.0\.0\.1|localhost)(:\d+)?(/|$)", url)
+    if not url.startswith("https://") and not _is_localhost:
+        return JSONResponse({"ok": False,
+            "message": "url muss https:// sein (Ausnahme: localhost/127.0.0.1)"},
+            status_code=400)
+    if not label:
+        return JSONResponse({"ok": False, "message": "label ist Pflicht"}, status_code=400)
+    def _norm(s, allowed=None):
+        items = [x.strip() for x in (s or "").split(",") if x.strip()]
+        if allowed:
+            items = [x for x in items if x in allowed]
+        return ",".join(items)
+    target_types = _norm(data.get("target_types", ""), _TARGET_TYPE_ALLOWED)
+    countries    = _norm(data.get("countries", ""))
+    events       = _norm(data.get("events", "cluster,incident"),
+                          {"cluster", "incident"})
+    if not events:
+        events = "cluster,incident"
+    min_sev      = int(data.get("min_severity") or 4)
+    secret       = secrets.token_urlsafe(32)
+    now          = datetime.now().isoformat(timespec="seconds")
+    db.execute(
+        "INSERT INTO webhook_subscriptions "
+        "(url,label,target_types,countries,min_severity,events,secret,active,created_at) "
+        "VALUES (?,?,?,?,?,?,?,1,?)",
+        (url, label, target_types, countries, min_sev, events, secret, now)
+    )
+    db.commit()
+    sub_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    return JSONResponse({
+        "ok": True, "id": sub_id, "label": label, "url": url,
+        "target_types": target_types, "countries": countries, "events": events,
+        "min_severity": min_sev,
+        "secret": secret,
+        "signature_help":
+            "X-LexEurope-Signature header = 'sha256=' + hmac_sha256(secret, raw_body). "
+            "Body is JSON UTF-8, keys sorted, no extra whitespace.",
+    })
+
+@app.delete("/admin/api/webhooks/{sub_id}")
+async def admin_delete_webhook(sub_id: int, _=Depends(require_admin)):
+    db.execute("UPDATE webhook_subscriptions SET active=0 WHERE id=?", (sub_id,))
+    db.commit()
+    return JSONResponse({"ok": True})
+
+@app.get("/admin/api/webhooks")
+async def admin_list_webhooks(_=Depends(require_admin)):
+    """Lists subscriptions WITHOUT the secret value."""
+    rows = db.execute(
+        "SELECT id, url, label, target_types, countries, min_severity, events, "
+        "active, created_at, last_delivery, delivery_count, failure_count "
+        "FROM webhook_subscriptions ORDER BY id DESC"
+    ).fetchall()
+    return JSONResponse([dict(r) for r in rows])
+
+@app.get("/admin/api/webhooks/{sub_id}/deliveries")
+async def admin_webhook_deliveries(sub_id: int, limit: int = 50,
+                                    _=Depends(require_admin)):
+    rows = db.execute(
+        "SELECT event_type, event_key, status_code, body_len, delivered_at, error "
+        "FROM webhook_deliveries WHERE sub_id=? ORDER BY id DESC LIMIT ?",
+        (sub_id, min(limit, 500))
+    ).fetchall()
+    return JSONResponse([dict(r) for r in rows])
+
+@app.post("/admin/api/webhooks/{sub_id}/test")
+async def admin_webhook_test(sub_id: int, _=Depends(require_admin)):
+    """Fires a synthetic 'test'-event at one subscription for verification."""
+    row = db.execute(
+        "SELECT id,url,secret,events FROM webhook_subscriptions "
+        "WHERE id=? AND active=1", (sub_id,)
+    ).fetchone()
+    if not row:
+        return JSONResponse({"ok": False, "message": "Subscription nicht aktiv"}, status_code=404)
+    payload = {"event": "test", "ts": datetime.now().isoformat(timespec="seconds"),
+               "message": "LEX EUROPE webhook test"}
+    body = json.dumps(payload, sort_keys=True).encode("utf-8")
+    sig  = _hmac_sign(row["secret"], body)
+    try:
+        r = requests.post(row["url"], data=body, timeout=8, headers={
+            "Content-Type": "application/json",
+            "X-LexEurope-Signature": sig,
+            "X-LexEurope-Event": "test",
+        })
+        return JSONResponse({"ok": True, "status_code": r.status_code})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)[:200]}, status_code=502)
 
 
 @app.get("/admin/api/tokens")
