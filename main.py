@@ -5156,7 +5156,9 @@ async def sitemap_xml(request: Request):
         f"{base}/bookmarklet", f"{base}/api/incidents/export.csv",
         f"{base}/api/incidents/export.json", f"{base}/api/target-types",
         f"{base}/api/incidents.rss", f"{base}/api/early-warning.rss",
-        f"{base}/embed/counter", f"{base}/embed/headline",
+        f"{base}/embed/counter", f"{base}/embed/headline", f"{base}/embed/trend",
+        f"{base}/api/timeline/v2", f"{base}/api/heatmap",
+        f"{base}/api/actors/cross-references",
         f"{base}/api/v1/docs",
     ]
     # Per-target-type + per-country pages dynamisch ergänzen.
@@ -7347,6 +7349,132 @@ async def incidents_by_actor(actor: str = "", limit: int = 200):
         "by_country":  sorted(by_co.items(), key=lambda x: -x[1]),
         "matches": filtered[:limit],
     })
+
+
+@app.get("/api/timeline/v2")
+async def timeline_data(months: int = 24, country: str = "", tier: str = "act"):
+    """Monatliche Event-Density mit Tier-Breakdown — Datenquelle für
+    Chart.js-Trends im Dashboard und Embed-Widgets. months default 24.
+    Output: series[{month, total, act, enable, context, by_category{}}]."""
+    today = datetime.now().date()
+    start = (today.replace(day=1) - timedelta(days=32 * months)).replace(day=1)
+    q = "SELECT date, tier, category, severity_score FROM incidents WHERE date >= ?"
+    p = [start.isoformat()]
+    if country: q += " AND country = ?"; p.append(country)
+    rows = db.execute(q, p).fetchall()
+    from collections import defaultdict
+    buckets = defaultdict(lambda: {"total": 0, "act": 0, "enable": 0, "context": 0,
+                                    "hi": 0, "by_category": defaultdict(int)})
+    for r in rows:
+        try: d = datetime.fromisoformat(r["date"]).date()
+        except Exception: continue
+        key = f"{d.year}-{d.month:02d}"
+        b = buckets[key]
+        b["total"] += 1
+        b[r["tier"] or "context"] = b.get(r["tier"] or "context", 0) + 1
+        if (r["severity_score"] or 0) >= 4: b["hi"] += 1
+        b["by_category"][r["category"]] += 1
+    series = []
+    cur = start
+    while cur <= today:
+        key = f"{cur.year}-{cur.month:02d}"
+        b = buckets.get(key, {"total": 0, "act": 0, "enable": 0, "context": 0, "hi": 0, "by_category": {}})
+        b_clean = {**b, "month": key,
+                   "by_category": dict(b["by_category"]) if b["by_category"] else {}}
+        series.append(b_clean)
+        cur = cur.replace(year=cur.year+1, month=1) if cur.month==12 else cur.replace(month=cur.month+1)
+    return JSONResponse({
+        "months":   months,
+        "country":  country or "ALL",
+        "series":   series,
+        "asof":     datetime.now().isoformat(timespec="seconds"),
+    })
+
+
+@app.get("/api/heatmap")
+async def heatmap_data(months: int = 12):
+    """Monat × Land Vorfalls-Density für Heatmap-Visualisierung.
+    Output: {months:[...], countries:[...], matrix:{country:[counts]}}."""
+    today = datetime.now().date()
+    start = (today.replace(day=1) - timedelta(days=32 * months)).replace(day=1)
+    rows = db.execute(
+        "SELECT date, country FROM incidents WHERE tier='act' AND date >= ? "
+        "ORDER BY date ASC", (start.isoformat(),)
+    ).fetchall()
+    # Build month axis
+    month_axis = []
+    cur = start
+    while cur <= today:
+        month_axis.append(f"{cur.year}-{cur.month:02d}")
+        cur = cur.replace(year=cur.year+1, month=1) if cur.month==12 else cur.replace(month=cur.month+1)
+    # Build country axis from data, sortiert nach total volume
+    from collections import Counter, defaultdict
+    co_totals = Counter(r["country"] for r in rows)
+    country_axis = [c for c, _ in co_totals.most_common(15)]
+    matrix = {c: [0] * len(month_axis) for c in country_axis}
+    for r in rows:
+        co = r["country"]
+        if co not in matrix: continue
+        try: d = datetime.fromisoformat(r["date"]).date()
+        except Exception: continue
+        key = f"{d.year}-{d.month:02d}"
+        if key in month_axis:
+            matrix[co][month_axis.index(key)] += 1
+    return JSONResponse({
+        "months":     month_axis,
+        "countries":  country_axis,
+        "matrix":     matrix,
+        "asof":       datetime.now().isoformat(timespec="seconds"),
+    })
+
+
+@app.get("/embed/trend", response_class=HTMLResponse)
+async def embed_trend():
+    """Embed-fähiger Mini-Trend-Chart als reines inline-SVG — kein JS,
+    kein Tracking. Zeigt T1-Akte pro Monat über die letzten 12 Monate."""
+    res = await timeline_data(months=12)  # timeline_data ist /api/timeline/v2
+    import json as _j
+    d = _j.loads(res.body)
+    series = d["series"]
+    if not series:
+        return HTMLResponse("<svg width='100%' height='80'><text x='50%' y='50%' text-anchor='middle' fill='#6c7986' font-family='monospace' font-size='11'>Keine Daten</text></svg>")
+    max_t = max(s["total"] for s in series) or 1
+    w, h = 460, 100
+    pad = 24
+    pts = []
+    bars = []
+    for i, s in enumerate(series):
+        x = pad + i * (w - 2*pad) / max(len(series)-1, 1)
+        y = h - pad - (s["total"] / max_t) * (h - 2*pad)
+        bars.append(f'<rect x="{x-6}" y="{y}" width="12" height="{h-pad-y}" fill="#6aa9c9" opacity="0.40"/>')
+        if s["hi"]:
+            yhi = h - pad - (s["hi"] / max_t) * (h - 2*pad)
+            bars.append(f'<rect x="{x-6}" y="{yhi}" width="12" height="{h-pad-yhi}" fill="#d4495d" opacity="0.85"/>')
+        pts.append(f"{x},{y}")
+    line = f'<polyline points="{" ".join(pts)}" fill="none" stroke="#6aa9c9" stroke-width="2"/>'
+    # X-axis labels (first, middle, last month)
+    labels = []
+    for idx in (0, len(series)//2, len(series)-1):
+        x = pad + idx * (w - 2*pad) / max(len(series)-1, 1)
+        labels.append(f'<text x="{x}" y="{h-4}" text-anchor="middle" fill="#6c7986" font-family="monospace" font-size="9">{series[idx]["month"]}</text>')
+    total_n = sum(s["total"] for s in series)
+    hi_n    = sum(s["hi"] for s in series)
+    return HTMLResponse(f"""<!doctype html><html><head><meta charset="utf-8">
+<style>body{{margin:0;padding:8px;background:transparent;font-family:ui-monospace,Menlo,Consolas,monospace;color:#aab5c0}}
+.box{{background:#080c12;border:1px solid rgba(255,255,255,0.08);padding:10px}}
+.head{{font-size:8.5px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between}}
+.head a{{color:#6aa9c9;text-decoration:none}}
+.stats{{display:flex;gap:14px;font-size:9px;margin-bottom:4px;color:#6c7986;letter-spacing:1.5px;text-transform:uppercase}}
+.stats .a{{color:#6aa9c9}}.stats .r{{color:#d4495d}}
+</style></head><body><div class="box">
+<div class="head"><span>◆ LEX EUROPE · T1-AKTE · 12 MONATE</span><a href="/dashboard" target="_top">→ dashboard</a></div>
+<div class="stats"><span class="a">Σ {total_n}</span> T1-Akte <span class="r">{hi_n}</span> hoch-Schwere</div>
+<svg width="100%" viewBox="0 0 {w} {h}" preserveAspectRatio="none">
+{''.join(bars)}
+{line}
+{''.join(labels)}
+</svg>
+</div></body></html>""")
 
 
 @app.get("/api/actors/cross-references")
