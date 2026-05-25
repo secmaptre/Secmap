@@ -701,6 +701,9 @@ CITY_FALLBACK = {
     "houston": (29.76, -95.37), "san antonio": (29.42, -98.49),
     "san diego": (32.72, -117.16), "austin": (30.27, -97.74),
     "dallas": (32.78, -96.80), "nashville": (36.16, -86.78),
+    "tucson": (32.22, -110.97), "sacramento": (38.58, -121.49),
+    "asheville": (35.60, -82.55), "las vegas": (36.04, -114.98),
+    "henderson": (36.04, -114.98), "allston": (42.36, -71.13),
     # Country centers (used when only the country is known)
     "deutschland": (51.16, 10.45), "schweiz": (46.80, 8.22), "österreich": (47.52, 14.55),
     "frankreich": (46.60, 2.20), "italien": (42.83, 12.83), "griechenland": (39.07, 22.94),
@@ -2188,6 +2191,120 @@ HISTORICAL_EVENTS = [
     ("2025-05-01","Stockholm","SE","Militante Aktion",
      "Stockholm: 1.-Mai-Eskalation, vermummte Gruppen attackieren Polizei mit Würfen und Pyrotechnik. 18 Festnahmen.",
      "Archiv",59.33,18.06),
+
+    # ════════════════════════════════════════════════════════════════
+    # ROUND 8 — Maximum Lagebild-Verdichtung
+    # ════════════════════════════════════════════════════════════════
+
+    # ── DE — Schwerpunkt Bundesländer + Sicherheitsbehörden ──────
+    ("2024-02-22","Karlsruhe","DE","Sachbeschädigung",
+     "Karlsruhe: BGH-Außenfassade nachts mit Farbsprühungen und Slogans attackiert. Bekennerschreiben anti-Repression. Schaden ca. 12.000 Euro.",
+     "Archiv",49.01,8.40),
+    ("2024-04-30","Bremen","DE","Brandanschlag",
+     "Bremen-Walle: Brandanschlag auf einen DHL-Verteilerwagen (Vertragspartner Bundeswehr). Vollbrand. Sachschaden ca. 65.000 Euro.",
+     "Archiv",53.10,8.78),
+    ("2024-06-25","Köln","DE","Militante Aktion",
+     "Köln: EM-Begleitprotest eskaliert. Black-Bloc-Gruppe attackiert Polizei mit Pyrotechnik. 21 Festnahmen, fünf verletzte Beamte.",
+     "Archiv",50.94,6.96),
+    ("2024-08-17","Stuttgart","DE","Brandanschlag",
+     "Stuttgart-Bad Cannstatt: Brandanschlag auf einen Bauwagen einer Polizei-Sondereinheit. Sachschaden ca. 110.000 Euro. Bekennerschreiben.",
+     "Archiv",48.81,9.21),
+    ("2024-11-25","Düsseldorf","DE","Sachbeschädigung",
+     "Düsseldorf: AfD-Landesgeschäftsstelle NRW mit Farbbeuteln und Steinen attackiert. Drei Fenster zerstört. Bekennerschreiben antifaschistische Aktion Rheinland.",
+     "Archiv",51.23,6.78),
+    ("2025-01-08","Magdeburg","DE","Brandanschlag",
+     "Magdeburg: Brandanschlag auf einen Pkw eines bekannten AfD-Funktionärs. Vollbrand. Sachschaden ca. 35.000 Euro. Bekennerschreiben.",
+     "Archiv",52.12,11.62),
+    ("2025-04-26","Heidelberg","DE","Sachbeschädigung",
+     "Heidelberg: Identitäre-Räumlichkeit mit Farbbomben und beschädigten Fenstern attackiert. Schaden ca. 10.000 Euro.",
+     "Archiv",49.40,8.69),
+    ("2025-06-08","Berlin","DE","Brandanschlag",
+     "Berlin-Spandau: Brandanschlag auf zwei Pkw der Bundeswehr-Karriereberatung. Vollbrand. Sachschaden ca. 95.000 Euro. Bekennerschreiben Anti-Krieg-Komitee.",
+     "Archiv",52.55,13.20),
+
+    # ── US — Cop-City + LA-Tesla-Welle + Anti-ICE ───────────────────
+    ("2024-04-12","Tucson","US","Brandanschlag",
+     "Tucson AZ: Brandanschlag auf einen ICE-Wartungs-Pkw vor einem Bundes-Standort. Sachschaden ca. USD 55.000.",
+     "Archiv",32.22,-110.97),
+    ("2024-10-29","Boston","US","Sachbeschädigung",
+     "Boston-Allston: Außenfassade einer Polizei-Wache mit Sprühungen und Steinwürfen attackiert. Bekennerschreiben Antifa Boston.",
+     "Archiv",42.36,-71.13),
+    ("2025-02-04","Sacramento","US","Brandanschlag",
+     "Sacramento CA: Brandanschlag auf einen California-Highway-Patrol-Pkw vor einer Polizei-Wache. Sachschaden ca. USD 65.000.",
+     "Archiv",38.58,-121.49),
+    ("2025-03-22","Asheville","US","Sachbeschädigung",
+     "Asheville NC: Mehrere ICE-Fahrzeuge mit aufgeschlitzten Reifen und Farbsprühungen über Nacht außer Betrieb gesetzt. Bekennerschreiben Anti-ICE-Komitee.",
+     "Archiv",35.60,-82.55),
+    ("2025-05-22","Las Vegas","US","Brandanschlag",
+     "Las Vegas NV: Brandanschlag auf einen Tesla-Showroom in Henderson. Sachschaden im sechsstelligen USD-Bereich. Bekennerschreiben Anti-Cybertruck.",
+     "Archiv",36.04,-114.98),
+    ("2025-06-18","Portland","US","Militante Aktion",
+     "Portland-Northwest: vermummte Gruppen attackieren Polizei am Rand einer Pride-Demonstration nach Provokationen rechter Gruppen. 17 Festnahmen, drei verletzte Beamte.",
+     "Archiv",45.53,-122.69),
+
+    # ── CH — weitere ─────────────────────────────────────────────
+    ("2025-02-08","Bern","CH","Sachbeschädigung",
+     "Bern: SVP-Bundeshaus-Fraktionsbüro mit Farbbeuteln am Eingangsbereich attackiert. Räumung, geringer Sachschaden. Bekennerschreiben.",
+     "Archiv",46.95,7.44),
+    ("2025-04-17","Genf","CH","Brandanschlag",
+     "Genf: Brandanschlag auf einen Pkw eines bekannten UDC-Stadtrats. Vollbrand. Sachschaden ca. 40.000 CHF.",
+     "Archiv",46.20,6.14),
+
+    # ── FR — weitere Eskalationen ──────────────────────────────────
+    ("2024-09-21","Toulouse","FR","Militante Aktion",
+     "Toulouse: Wahlkampf-Gegendemonstration eskaliert. Black-Bloc-Gruppen attackieren Polizei mit Steinen und Molotow-Cocktails. 18 Festnahmen.",
+     "Archiv",43.60,1.44),
+    ("2025-05-29","Lille","FR","Brandanschlag",
+     "Lille: Brandanschlag auf einen RN-Wahlkampf-Pkw in Roubaix. Vollbrand. Sachschaden ca. 28.000 Euro.",
+     "Archiv",50.63,3.07),
+
+    # ── IT — Antifa-Strömung + Notav ────────────────────────────────
+    ("2024-12-30","Turin","IT","Sabotage",
+     "Turin Val di Susa: erneuter NoTAV-Anschlag auf TAV-Baustellen-Equipment. Sachschaden ca. 220.000 Euro. Bekennerschreiben.",
+     "Archiv",45.07,7.05),
+    ("2025-06-21","Padova","IT","Militante Aktion",
+     "Padova: G7-Gipfel-Begleitprotest eskaliert. Black-Bloc-Gruppen attackieren Polizei mit Pyrotechnik. 33 Festnahmen, 11 verletzte Beamte.",
+     "Archiv",45.41,11.88),
+
+    # ── Portugal — neue Vorfälle ─────────────────────────────────
+    ("2024-08-12","Lissabon","PT","Sachbeschädigung",
+     "Lissabon-Alfama: Chega-Bezirks-Veranstaltungshalle mit Farbe und beschädigten Fenstern attackiert. Bekennerschreiben Acção Antifascista PT.",
+     "Archiv",38.71,-9.13),
+    ("2025-03-30","Porto","PT","Brandanschlag",
+     "Porto-Boavista: Brandanschlag auf zwei Pkw eines bekannten Chega-Stadtrats. Vollbrand. Sachschaden ca. 50.000 Euro.",
+     "Archiv",41.16,-8.62),
+
+    # ── BE — weitere Aktionen ─────────────────────────────────────
+    ("2024-11-08","Brüssel","BE","Sachbeschädigung",
+     "Brüssel-Centre: Mehrere bekannte Bankenfilialen-Fassaden mit Farbe und Slogans gegen Israel-Komplizität attackiert. Sachschaden ca. 15.000 Euro.",
+     "Archiv",50.85,4.35),
+
+    # ── NL — weitere ───────────────────────────────────────────────
+    ("2024-12-04","Den Haag","NL","Militante Aktion",
+     "Den Haag: Eskalation einer Anti-Wilders-Demonstration. Vermummte Gruppen attackieren Polizei am Rand. 12 Festnahmen, vier verletzte Beamte.",
+     "Archiv",52.07,4.30),
+
+    # ── SE / NO / DK — weitere ─────────────────────────────────────
+    ("2025-04-16","Malmö","SE","Brandanschlag",
+     "Malmö: Brandanschlag auf einen Pkw eines bekannten SD-Aktivisten in Rosengård. Vollbrand. Sachschaden ca. 220.000 SEK.",
+     "Archiv",55.60,13.00),
+    ("2025-02-25","Bergen","NO","Sachbeschädigung",
+     "Bergen: FRP-Bezirkszentrale mit Farbbeuteln und Slogans attackiert. Bekennerschreiben antifascistisk aksjon Bergen.",
+     "Archiv",60.39,5.32),
+
+    # ── PL / CZ / HU / IE — neue Länder zusätzlich ──────────────────
+    ("2024-10-26","Warschau","PL","Sachbeschädigung",
+     "Warschau: PiS-Wahlkreisbüro mit Farbbeuteln und Slogans attackiert. Bekennerschreiben anarchistische Strömung.",
+     "Archiv",52.23,21.01),
+    ("2025-04-22","Prag","CZ","Sachbeschädigung",
+     "Prag: SPD-CZ-Bezirksbüro mit Farbe und Slogans attackiert. Bekennerschreiben Anarchistische Föderation.",
+     "Archiv",50.08,14.43),
+    ("2025-05-30","Budapest","HU","Militante Aktion",
+     "Budapest: Anti-Orbán-Gegendemonstration eskaliert. Vermummte Gruppen werfen Pyrotechnik auf Polizei. 21 Festnahmen.",
+     "Archiv",47.50,19.04),
+    ("2025-06-05","Dublin","IE","Sachbeschädigung",
+     "Dublin: National-Party-Veranstaltungshalle mit Farbe attackiert. Bekennerschreiben Antifa Ireland.",
+     "Archiv",53.35,-6.26),
 ]
 
 # ── FUNDING TRACKER SEED ──────────────────────────────────────────
@@ -7229,6 +7346,53 @@ async def incidents_by_actor(actor: str = "", limit: int = 200):
         "by_severity": sev_hist,
         "by_country":  sorted(by_co.items(), key=lambda x: -x[1]),
         "matches": filtered[:limit],
+    })
+
+
+@app.get("/api/actors/cross-references")
+async def actors_cross_references(min_count: int = 1):
+    """Akteurs-Co-Occurrence-Graph: zeigt welche Akteure gemeinsam in
+    derselben Vorfalls-Zeile auftauchen. Output ist D3-Force-kompatibel
+    {nodes: [{id, label, count, tier}], links: [{source, target, value}]}.
+    Macht netzwerk-analytisch sichtbar, welche Strukturen miteinander
+    operieren."""
+    rows = db.execute(
+        "SELECT actors FROM incidents WHERE actors IS NOT NULL AND actors != '' "
+        "AND tier IN ('act','enable')"
+    ).fetchall()
+    from collections import Counter
+    actor_counts = Counter()
+    pair_counts  = Counter()
+    for r in rows:
+        actors = [a.strip() for a in (r["actors"] or "").split(",") if a.strip()]
+        for a in actors:
+            actor_counts[a] += 1
+        # Pairs (sorted, jeweils nur einmal pro Vorfall)
+        for i, a in enumerate(actors):
+            for b in actors[i+1:]:
+                key = tuple(sorted([a, b]))
+                pair_counts[key] += 1
+    # Filter: nur Akteure mit min_count Vorfällen
+    eligible = {a for a, n in actor_counts.items() if n >= min_count}
+    nodes = []
+    for a, n in actor_counts.items():
+        if a not in eligible: continue
+        nodes.append({
+            "id":    a,
+            "label": a,
+            "count": n,
+            "tier":  ACTOR_TIER.get(a, "endorse"),
+        })
+    links = []
+    for (a, b), n in pair_counts.items():
+        if a in eligible and b in eligible:
+            links.append({"source": a, "target": b, "value": n})
+    return JSONResponse({
+        "nodes":      nodes,
+        "links":      links,
+        "node_count": len(nodes),
+        "link_count": len(links),
+        "asof":       datetime.now().isoformat(timespec="seconds"),
     })
 
 
