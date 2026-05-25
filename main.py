@@ -4835,8 +4835,9 @@ async def sitemap_xml(request: Request):
     base = str(request.base_url).rstrip("/")
     urls = [
         f"{base}/", f"{base}/dashboard", f"{base}/lagebericht",
-        f"{base}/sources",
+        f"{base}/sources", f"{base}/press", f"{base}/methodology",
         f"{base}/api/incidents.rss", f"{base}/api/early-warning.rss",
+        f"{base}/embed/counter", f"{base}/embed/headline",
         f"{base}/api/v1/docs",
     ]
     # Per-target-type + per-country pages dynamisch ergänzen.
@@ -5106,6 +5107,281 @@ h2{{font-size:10px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-trans
   </div>
 
   <div class="footer">LEX EUROPE · transparente Crawler-Health · automatisch aktualisiert</div>
+</div>
+</body></html>""")
+
+
+@app.get("/press", response_class=HTMLResponse)
+async def public_press_kit():
+    """Press-Kit — schnelle Übersicht für Journalist:innen + Pressestellen
+    mit Download-Buttons (RSS-Feeds, Markdown-Wochenbericht, JSON-API),
+    Methodik-Box, Kontakt + Plattform-Statistik."""
+    s = await public_stats()
+    import json as _j
+    d = _j.loads(s.body)
+    today = d["asof"]
+    contact = os.getenv("CONTACT_EMAIL", "kontakt@lex-europe.org")
+    return HTMLResponse(f"""<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><title>Press Kit — LEX EUROPE</title>
+<meta name="description" content="Press Kit: alle Schnittstellen, Methodik, Kontakt für Journalist:innen und Pressestellen.">
+<meta property="og:title"       content="LEX EUROPE — Press Kit">
+<meta property="og:description" content="Download-Schnittstellen, Methodik-Dokumentation und Redaktions-Kontakt für die LEX-EUROPE-OSINT-Plattform.">
+<meta property="og:type"        content="article">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:ui-monospace,Menlo,Consolas,monospace;background:#080c12;color:#aab5c0;font-size:13px;line-height:1.55;}}
+.classbar{{background:#0a1219;border-bottom:1px solid rgba(255,255,255,0.06);padding:5px 18px;font-size:9px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;display:flex;justify-content:space-between;}}
+.classbar .l{{color:#6aa9c9;}}
+.page{{max-width:880px;margin:0 auto;padding:30px 24px 60px;}}
+h1{{font-family:'Inter',system-ui,sans-serif;font-size:32px;font-weight:600;color:#e9eef3;letter-spacing:0.5px;margin-bottom:6px;}}
+.sub{{font-size:10px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;margin-bottom:30px;}}
+.section{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:22px 24px;margin-bottom:14px;}}
+h2{{font-size:11px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-transform:uppercase;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid rgba(106,169,201,0.18);}}
+.kpis{{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px;}}
+.kpi{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:14px 18px;}}
+.kpi .lbl{{font-size:8px;color:#6c7986;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;}}
+.kpi .val{{font-size:24px;font-weight:600;color:#e9eef3;font-variant-numeric:tabular-nums;}}
+.cta-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;}}
+.cta{{display:block;padding:14px 16px;border:1px solid #6aa9c9;text-decoration:none;color:#aab5c0;background:rgba(106,169,201,0.04);transition:background .12s,color .12s;}}
+.cta:hover{{background:rgba(106,169,201,0.10);color:#e9eef3;}}
+.cta b{{color:#6aa9c9;display:block;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;}}
+.cta span{{display:block;font-size:11px;color:#6c7986;}}
+.cite{{background:rgba(106,169,201,0.06);border-left:3px solid #6aa9c9;padding:12px 16px;font-size:11px;}}
+.cite code{{display:block;margin-top:6px;color:#e9eef3;font-size:10px;word-break:break-all;}}
+.kontakt{{padding:14px 16px;border:1px solid rgba(106,169,201,0.45);background:rgba(106,169,201,0.08);}}
+.kontakt a{{color:#e9eef3;font-size:14px;text-decoration:none;}}
+.kontakt a:hover{{text-decoration:underline;}}
+.footer{{font-size:9px;letter-spacing:1.5px;color:#3a4551;text-align:center;margin-top:30px;text-transform:uppercase;}}
+.body-text{{font-family:'Inter',system-ui,sans-serif;font-size:13px;color:#aab5c0;}}
+</style></head>
+<body>
+<div class="classbar"><span class="l">◆ OPEN SOURCE INTELLIGENCE · LEX EUROPE</span><span>PRESS KIT · STAND {today}</span></div>
+<div class="page">
+  <h1>Press Kit</h1>
+  <div class="sub">Schnittstellen, Methodik & Kontakt für Journalist:innen, Forschung, Behörden</div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="lbl">T1-Akte gesamt</div><div class="val">{d['total_t1']}</div></div>
+    <div class="kpi"><div class="lbl">Hoch-Schwere ≥4</div><div class="val">{d['high_severity']}</div></div>
+    <div class="kpi"><div class="lbl">Aktive Cluster</div><div class="val">{d['active_clusters']}</div></div>
+    <div class="kpi"><div class="lbl">Identifizierte Akteure</div><div class="val">{d['distinct_actors']}</div></div>
+  </div>
+
+  <div class="section">
+    <h2>Sofort-Schnittstellen</h2>
+    <div class="cta-grid">
+      <a class="cta" href="/api/incidents.rss"><b>↗ RSS · Vorfälle</b><span>Default T1, severity ≥3, ?country=DE/US/CH/…</span></a>
+      <a class="cta" href="/api/early-warning.rss"><b>↗ RSS · Frühwarn-Cluster</b><span>≥3 gleichartige Anschläge / 6 Wochen</span></a>
+      <a class="cta" href="/api/lagebericht/weekly.md"><b>↓ Markdown · Wochenbericht</b><span>Press-ready zum Direkt-Einbau</span></a>
+      <a class="cta" href="/lagebericht"><b>→ Wochenbericht-Seite</b><span>HTML, druckfreundlich, OG-getaggt</span></a>
+      <a class="cta" href="/dashboard"><b>→ Live-Dashboard</b><span>KPI-Karten + Top-Länder</span></a>
+      <a class="cta" href="/sources"><b>→ Crawler-Quellen-Status</b><span>Transparente Health-Übersicht</span></a>
+      <a class="cta" href="/api/public/stats"><b>↗ JSON-Stats</b><span>Aggregat-Endpoint für Embedding</span></a>
+      <a class="cta" href="/api/v1/docs"><b>→ LEA / Research API v1</b><span>Authentifizierter Vollzugang</span></a>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Embed-Widgets</h2>
+    <p class="body-text">Externe Sites können kompakte LEX-EUROPE-KPIs direkt
+       einbinden — kein JavaScript, kein Tracking, transparenter Hintergrund:</p>
+    <div class="cite">
+      <code>&lt;iframe src="/embed/counter" width="100%" height="180" style="border:0"&gt;&lt;/iframe&gt;</code>
+      <code>&lt;iframe src="/embed/headline" width="100%" height="100" style="border:0"&gt;&lt;/iframe&gt;</code>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Zitations-Schnittstelle</h2>
+    <p class="body-text">Für akademische Nutzung: jeder Vorfall liefert
+       BibTeX, RIS oder Chicago mit eingebettetem SHA-256 des WARC-Snapshots,
+       damit Zitate reproduzierbar verifizierbar sind:</p>
+    <div class="cite">
+      <code>GET /api/incident/&lt;id&gt;/cite?format=bibtex</code>
+      <code>GET /api/incident/&lt;id&gt;/cite?format=ris</code>
+      <code>GET /api/incident/&lt;id&gt;/cite?format=chicago</code>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Methodik (Kurz)</h2>
+    <p class="body-text">Die Plattform übernimmt das Fedpol Art. 19 Abs. 2
+       Bst. e NDG-Schema („act / enable / context") und macht die
+       Strafverfolgungs-Lücke öffentlich messbar. Aufnahme nur, wenn
+       der Empfänger oder Akteur in einem aktuellen
+       Verfassungsschutzbericht (BfV, LfV, DSN, NDB) benannt ist oder
+       gegen die Strukturen ein laufendes §§ 129/129a-Verfahren
+       geführt wird. Doxxing-Inhalte werden ohne PII protokolliert
+       und mit gelöschter Quelle ausgegeben.
+       <a href="/methodology" style="color:#6aa9c9">→ Vollständige Methodik-Doku</a></p>
+  </div>
+
+  <div class="section">
+    <h2>Redaktions-Kontakt</h2>
+    <div class="kontakt">
+      <a href="mailto:{contact}">{contact}</a><br>
+      <span style="font-size:10px;color:#6c7986">PGP auf Anfrage. Sichere Übermittlung von Hinweisen über SecureDrop in Vorbereitung.</span>
+    </div>
+  </div>
+
+  <div class="footer">LEX EUROPE · {today} · unabhängige OSINT-Plattform · keine Werbung · kein Tracking</div>
+</div>
+</body></html>""")
+
+
+@app.get("/methodology", response_class=HTMLResponse)
+async def public_methodology():
+    """Standalone Methodik-Dokumentation — was wird aufgenommen, was nicht,
+    welche Schwellenwerte, welche §C3-Ausschlusskriterien."""
+    return HTMLResponse(f"""<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><title>Methodik — LEX EUROPE</title>
+<meta name="description" content="LEX EUROPE Methodik: Aufnahmekriterien (Fedpol-Taxonomie, VS-Berichte, §129-Verfahren), Datenpolitik (DSGVO §C3, Doxxing-Sanitisierung), Quellenintegrität (WARC + SHA-256), Verfolgungs-Status-Tracking.">
+<meta property="og:title"       content="LEX EUROPE — Methodik">
+<meta property="og:description" content="Aufnahmekriterien, Datenpolitik, Quellenintegrität, Verfolgungs-Tracking. Vollständige Doku der Plattform-Schwellen.">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#080c12;color:#aab5c0;font-size:14px;line-height:1.7;}}
+.classbar{{background:#0a1219;border-bottom:1px solid rgba(255,255,255,0.06);padding:5px 18px;font-size:9px;letter-spacing:2.5px;color:#6c7986;font-family:ui-monospace,Menlo,monospace;text-transform:uppercase;display:flex;justify-content:space-between;}}
+.classbar .l{{color:#6aa9c9;}}
+.page{{max-width:780px;margin:0 auto;padding:30px 28px 60px;}}
+h1{{font-size:34px;font-weight:600;color:#e9eef3;letter-spacing:0.3px;margin-bottom:8px;}}
+.sub{{font-size:11px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;font-family:ui-monospace,Menlo,monospace;margin-bottom:28px;}}
+.section{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:24px 28px;margin-bottom:14px;}}
+h2{{font-size:12px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-transform:uppercase;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid rgba(106,169,201,0.18);font-family:ui-monospace,Menlo,monospace;}}
+p,li{{margin-bottom:10px;}}
+ol,ul{{padding-left:22px;}}
+b{{color:#e9eef3;}}
+code{{font-family:ui-monospace,Menlo,monospace;background:rgba(106,169,201,0.10);padding:1px 5px;color:#e9eef3;font-size:13px;}}
+.tier{{display:grid;grid-template-columns:auto 1fr;gap:14px 18px;align-items:start;}}
+.tier-label{{padding:5px 12px;font-family:ui-monospace,Menlo,monospace;font-size:10px;font-weight:700;letter-spacing:2px;text-align:center;border:1px solid currentColor;}}
+.t1{{color:#d4495d;}}.t2{{color:#d99a2b;}}.t3{{color:#6c7986;}}
+.warn{{background:rgba(217,154,43,0.10);border-left:3px solid #d99a2b;padding:14px 18px;margin:14px 0;}}
+.cta{{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#6aa9c9;border:1px solid #6aa9c9;padding:8px 16px;text-decoration:none;margin-right:6px;}}
+.footer{{font-family:ui-monospace,Menlo,monospace;font-size:9px;letter-spacing:1.5px;color:#3a4551;text-align:center;margin-top:30px;text-transform:uppercase;}}
+</style></head>
+<body>
+<div class="classbar"><span class="l">◆ OPEN SOURCE INTELLIGENCE · LEX EUROPE</span><span>METHODIK-DOKUMENTATION</span></div>
+<div class="page">
+  <h1>Methodik & Datenpolitik</h1>
+  <div class="sub">Aufnahmekriterien · Schwellenwerte · Ausschluss-Linien · Quellenintegrität</div>
+
+  <div class="section">
+    <h2>1 · Aufnahmekriterien für Vorfälle</h2>
+    <p>Ein Ereignis wird nur dokumentiert, wenn mindestens eines der folgenden
+       Kriterien erfüllt ist:</p>
+    <ol>
+      <li><b>VS-Bericht-Nennung:</b> Der Akteur oder die Trägerorganisation
+          ist in einem aktuellen Verfassungsschutzbericht (BfV, LfV der
+          Länder, DSN Österreich, NDB Schweiz, ggf. US-FBI-Domestic-
+          Terrorism-Reports) namentlich erwähnt.</li>
+      <li><b>Laufendes §129/§129a-Verfahren</b> bzw. analoge Normen
+          (§ 246a öStGB, Art. 260ter StGB Schweiz, GA RICO Code § 16-4-10).</li>
+      <li><b>Dokumentierte Solidar-/Infrastruktur</b> für Personen, die
+          wegen militanter linker Straftaten verurteilt oder angeklagt sind.</li>
+    </ol>
+    <div class="warn">
+      <b>Was NICHT aufgenommen wird:</b> Demos, legale Petitionen,
+      normale Parteiarbeit, Gegen-Demonstrationen ohne Eskalation,
+      humanitäre NGOs ohne dokumentierte Linksextrem-Querverbindungen.
+      Tech-/Auto-/Krypto-Themen ohne politischen Bezug werden vom
+      Klassifikator automatisch herausgefiltert.
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>2 · Fedpol-Tier-Klassifikation</h2>
+    <p>Jeder Vorfall wird nach Art. 19 Abs. 2 Bst. e NDG einer von drei
+       Handlungs-Klassen zugewiesen:</p>
+    <div class="tier">
+      <div class="tier-label t1">T1 ACT</div>
+      <div><b>Verüben</b> — Brandanschlag, Sabotage, Gewalt, Militante Aktion,
+        Sachbeschädigung mit politischem Motiv. Kernbereich der Plattform.</div>
+      <div class="tier-label t2">T2 ENABLE</div>
+      <div><b>Fördern</b> — Aufruf zu Gewalt, Mobilisierungstreffen,
+        Gewaltpropaganda, Schmiererei mit konkreter Drohphrase + Schwere ≥3.</div>
+      <div class="tier-label t3">T3 CONTEXT</div>
+      <div><b>Befürworten/Kontext</b> — Demos, Repressionsberichte,
+        Verhaftungen, Sonstiges. Im Lagebild zur Vollständigkeit
+        protokolliert, aber visuell de-emphasiert.</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>3 · Doxxing- und PII-Schutz</h2>
+    <p>Doxxing-Vorfälle (Klarnamen, Wohnadressen, Arbeitgeber-Outings,
+       Wohnumfeld-Berichte) werden <b>dokumentiert, aber sanitisiert</b>:
+       die Quelle (Original-URL) wird gelöscht, die Beschreibung durch
+       einen Rollen-Hinweis ersetzt (<code>"Politiker:in in &lt;Stadt&gt;
+       wurde gedoxxt"</code>), Klartext-Inhalt verlässt die Datenbank nie.
+       Erkennung über kombinierte Heuristik: Doxxing-Kontext-Trigger
+       (geoutet/enttarnt/Wohnumfeld/Klarnamen veröffentlicht) PLUS
+       mindestens ein PII-Signal (Adresse, E-Mail, Telefon, Geburtsdatum).</p>
+  </div>
+
+  <div class="section">
+    <h2>4 · Quellenintegrität (Säule 4)</h2>
+    <p>Jeder crawled Vorfall bekommt einen WARC/1.1-Snapshot der
+       Originalquelle plus SHA-256-Hash + ISO-Zeitstempel.
+       Citation-Export (BibTeX/RIS/Chicago) bettet den Hash in die
+       Zitations-Notiz ein — damit ist jede Quellenangabe
+       reproduzierbar verifizierbar, auch wenn die Original-URL später
+       verschwindet. Cloudflare-/Anti-Bot-geschützte Hosts werden über
+       cloudscraper + web.archive.org als Fallback erfasst.</p>
+  </div>
+
+  <div class="section">
+    <h2>5 · Strafverfolgungs-Status-Tracking (Säule 1)</h2>
+    <p>Bekannte, in Mainstream-Berichterstattung dokumentierte
+       Strafverfahren werden mit ihrem Aktenzeichen auf die Vorfälle
+       gemapped (Lina E. OLG Dresden 4 OJs 9/21, G20 Hamburg LG Hamburg
+       612 KLs, Stop Cop City Fulton County 23SC183872, Letzte Generation
+       GStA München 1 BJs 7/23-2, Tesla Grünheide GStA Berlin 4 BJs 4/24,
+       Minneapolis Third Precinct D.Minn. 0:20-cr-00203, …).
+       Der <a href="/dashboard">öffentliche Strafverfolgungs-Gap-Counter</a>
+       misst, welcher Anteil der hoch-Schwere-T1-Vorfälle nach ≥180 Tagen
+       noch ohne dokumentiertes Verfahren ist.</p>
+  </div>
+
+  <div class="section">
+    <h2>6 · Funding-Quellen-Verifikation</h2>
+    <p>Funding-Records tragen ein zweistufiges Vertrauenslabel:
+      <b style="color:#5fb583">✓ verifiziert</b> wenn die Quellen-URL
+      direkt auf ein spezifisches Primärdokument zeigt
+      (Climate-Emergency-Fund-Grantees-Liste, Letzte-Generation-Finanzbericht,
+      Bürgerschafts-Drucksache mit Aktenzeichen).
+      <b style="color:#d99a2b">⚠ ungeprüft</b> wenn die Quelle eine
+      Programm-Landingpage ist — das spezifische Dokument ist dahinter
+      veröffentlicht, aber die Plattform verlinkt nicht direkt darauf
+      (bitte vor Zitation eigenständig prüfen). Fiktive Trägervereins-
+      Namen sind aus dem Datenbestand entfernt.</p>
+  </div>
+
+  <div class="section">
+    <h2>7 · Was NIEMALS in der Datenbank steht</h2>
+    <ul>
+      <li>Klarnamen, Wohnadressen, Arbeitgeber privater Personen
+          (auch nicht von „bekannten Linksextremisten").</li>
+      <li>Personenbezogene Daten aus Mailing-Listen-Archiven
+          (alle Riseup-Listen-Imports durchlaufen PII-Redaktion).</li>
+      <li>Vorverurteilungs-Aussagen — Aufnahme bedeutet NICHT Schuld;
+          Pflichtfeld ist immer ein Verbindungsnachweis.</li>
+      <li>Selbstjustiz-Werkzeuge: keine Live-Locations laufender Aktionen,
+          keine Karten von Veranstaltungs-Adressen einzelner Personen.</li>
+      <li>Vollständige Gewaltpropaganda im Klartext — nur Hash + Zitat
+          ≤200 Zeichen + Link.</li>
+    </ul>
+  </div>
+
+  <div class="section" style="text-align:center">
+    <a class="cta" href="/dashboard">→ Dashboard</a>
+    <a class="cta" href="/press">→ Press Kit</a>
+    <a class="cta" href="/api/v1/docs">→ LEA API</a>
+    <a class="cta" href="/">→ Karte</a>
+  </div>
+
+  <div class="footer">LEX EUROPE · Methodik-Dokumentation · {datetime.now().date().isoformat()}</div>
 </div>
 </body></html>""")
 
