@@ -798,6 +798,271 @@ body.mod-funding #mod-funding-view{display:grid !important;}
   #topbar{gap:6px;padding:0 6px;}
   .tb-mod .gbtn{padding:3px 6px;}
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   PROFESSIONAL POLISH — Mai 2026
+   Ziel: real intelligence-dashboard credibility, nicht hacker-aesthetic.
+   Layered on top of the baseline so nothing existing breaks.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* — Klassifikations-Bar: subtile Scanlines + animierte Trennlinie zur Topbar — */
+#classbar{
+  background:
+    linear-gradient(180deg, rgba(106,169,201,0.04) 0%, transparent 100%),
+    repeating-linear-gradient(180deg, rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 1px, transparent 1px, transparent 3px),
+    #08111a;
+  border-bottom:1px solid rgba(106,169,201,0.18);
+  box-shadow:0 1px 0 rgba(0,0,0,0.5), 0 6px 12px -8px rgba(106,169,201,0.16);
+}
+#classbar .cls-l{
+  font-weight:700;
+  text-shadow:0 0 8px rgba(106,169,201,0.30);
+}
+#classbar::after{
+  content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;
+  background:linear-gradient(90deg, transparent 0%, rgba(106,169,201,0.4) 18%, rgba(106,169,201,0.4) 82%, transparent 100%);
+  opacity:0.7;
+}
+
+/* — Topbar: leicht abgedunkelter Hintergrund mit Tiefe — */
+#topbar{
+  background:linear-gradient(180deg, rgba(10,16,24,0.985) 0%, rgba(7,11,17,0.985) 100%);
+  box-shadow:0 1px 0 rgba(255,255,255,0.025) inset, 0 8px 24px -12px rgba(0,0,0,0.55);
+}
+
+/* — Brand-Mark: edler typografischer Lockup — */
+.brand-icon{
+  position:relative;
+  background:linear-gradient(135deg, var(--accent) 0%, #4a8aab 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 0 6px rgba(106,169,201,0.45));
+}
+.brand-name{
+  background:linear-gradient(180deg, #f5f8fb 0%, #c9d3dd 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  letter-spacing:1.1px;
+}
+.brand-version{
+  background:rgba(106,169,201,0.08);
+  border-color:rgba(106,169,201,0.22);
+  color:var(--accent);
+}
+
+/* — LIVE-Chip: echter Puls statt statischer Punkt — */
+.live-dot{
+  background:var(--green);
+  box-shadow:0 0 0 0 rgba(95,181,131,0.55);
+  animation:livePulse 2.4s cubic-bezier(0.4,0,0.6,1) infinite;
+}
+@keyframes livePulse{
+  0%{box-shadow:0 0 0 0 rgba(95,181,131,0.55);}
+  60%{box-shadow:0 0 0 7px rgba(95,181,131,0);}
+  100%{box-shadow:0 0 0 0 rgba(95,181,131,0);}
+}
+
+/* — Chips: schärferer Datenkontrast — */
+.chip{font-weight:500;}
+.chip b{
+  font-family:var(--mono);
+  font-variant-numeric:tabular-nums;
+  color:var(--t0);
+  font-weight:600;
+  letter-spacing:0.4px;
+}
+
+/* — Buttons: subtile Tiefe + premium hover/active states — */
+.gbtn{
+  background:linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(0,0,0,0.06) 100%);
+  box-shadow:0 1px 0 rgba(255,255,255,0.03) inset;
+  transition:background .14s ease, border-color .14s ease, color .14s ease, transform .08s ease, box-shadow .14s ease;
+}
+.gbtn:hover{
+  background:linear-gradient(180deg, rgba(106,169,201,0.10) 0%, rgba(106,169,201,0.03) 100%);
+  border-color:rgba(106,169,201,0.45);
+  color:var(--t0);
+  box-shadow:0 1px 0 rgba(255,255,255,0.05) inset, 0 0 0 1px rgba(106,169,201,0.10);
+}
+.gbtn:active{
+  transform:translateY(0.5px);
+  background:linear-gradient(180deg, rgba(0,0,0,0.10) 0%, rgba(106,169,201,0.06) 100%);
+}
+.gbtn.on{
+  background:linear-gradient(180deg, rgba(106,169,201,0.16) 0%, rgba(106,169,201,0.06) 100%);
+  border-color:var(--accent);
+  color:var(--accent);
+  box-shadow:0 1px 0 rgba(106,169,201,0.10) inset, 0 0 8px -4px rgba(106,169,201,0.55);
+}
+
+/* — Sprach-Buttons: kompakter, einheitlicher mit gbtn — */
+.tb-lang button{
+  background:transparent;
+  border:1px solid var(--pb);
+  color:var(--t2);
+  font-family:var(--mono);
+  font-size:9.5px;
+  font-weight:600;
+  letter-spacing:0.6px;
+  padding:4px 7px;
+  border-radius:2px;
+  cursor:pointer;
+  transition:background .12s, color .12s, border-color .12s;
+}
+.tb-lang button:hover{color:var(--t0);border-color:var(--pb2);}
+.tb-lang button.on{
+  background:rgba(106,169,201,0.12);
+  border-color:var(--accent);
+  color:var(--accent);
+}
+
+/* — Panel-Header: schärfere typografische Identität — */
+.phdr{
+  background:linear-gradient(180deg, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0.005) 100%);
+  border-bottom:1px solid var(--pb2);
+}
+.phdr-t{
+  font-family:var(--mono);
+  font-size:9.5px;
+  font-weight:600;
+  letter-spacing:2.2px;
+  color:var(--t1);
+  text-transform:uppercase;
+}
+.phdr-n{
+  font-family:var(--mono);
+  font-variant-numeric:tabular-nums;
+  font-weight:600;
+  color:var(--accent);
+}
+
+/* — Section-Header (collapsibles): klarere Affordanz — */
+.fsec-hdr{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:1.8px;font-weight:600;
+  color:var(--t2);text-transform:uppercase;
+  transition:color .12s, background .12s;
+}
+.fsec-hdr:hover{color:var(--t0);background:rgba(255,255,255,0.02);}
+
+/* — Inputs / Selects: cleaner finish — */
+.finput, .fsel{
+  background:linear-gradient(180deg, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.10) 100%) !important;
+  border-color:var(--pb2) !important;
+  transition:border-color .12s, box-shadow .12s;
+}
+.finput:focus, .fsel:focus{
+  outline:none;
+  border-color:var(--accent) !important;
+  box-shadow:0 0 0 2px rgba(106,169,201,0.12);
+}
+
+/* — Map-Marker: subtle pulse für rezente High-Severity Vorfälle — */
+.mrkr.mrkr-act{position:relative;}
+.mrkr.pulse-recent::before{
+  content:"";position:absolute;inset:-4px;border-radius:50%;
+  border:1.5px solid currentColor;opacity:0;
+  animation:markerPulse 2.6s ease-out infinite;
+  pointer-events:none;
+}
+@keyframes markerPulse{
+  0%{transform:scale(0.6);opacity:0.55;}
+  100%{transform:scale(2.2);opacity:0;}
+}
+
+/* — Feed-Cards: bessere Tiefe + hover — */
+.card{
+  background:linear-gradient(180deg, var(--bg2) 0%, var(--bg3) 100%);
+  transition:border-color .14s, transform .12s, box-shadow .14s;
+}
+.card:hover{
+  border-color:var(--pbs);
+  transform:translateY(-1px);
+  box-shadow:0 4px 12px -6px rgba(0,0,0,0.65);
+}
+
+/* — Detail-Panel: case-file feel — */
+#detail{
+  box-shadow:-20px 0 60px -30px rgba(0,0,0,0.85);
+  background:linear-gradient(180deg, rgba(13,20,28,0.985) 0%, rgba(8,12,18,0.985) 100%);
+}
+.det-cat{
+  font-weight:700;
+  letter-spacing:2.8px;
+  text-shadow:0 0 12px currentColor;
+}
+.det-loc{
+  font-family:var(--mono);
+  letter-spacing:0.6px;
+}
+
+/* — Severity-Meter: kompakter 5-Segment-Balken — */
+.sev-bar{display:inline-flex;gap:1.5px;align-items:center;}
+.sev-bar .sb{
+  width:11px;height:3px;background:rgba(255,255,255,0.10);
+  transition:background .15s;
+}
+.sev-bar .sb.on{background:currentColor;box-shadow:0 0 4px currentColor;}
+
+/* — Skeleton-Loader für Feed während Initial-Load — */
+.skel{
+  background:linear-gradient(90deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.02) 100%);
+  background-size:200% 100%;
+  animation:skelShimmer 1.4s ease-in-out infinite;
+  border-radius:2px;
+}
+@keyframes skelShimmer{
+  0%{background-position:200% 0;}
+  100%{background-position:-200% 0;}
+}
+.skel-card{
+  padding:10px 12px;border:1px solid var(--pb);border-radius:3px;margin-bottom:6px;
+}
+.skel-line{height:10px;margin:4px 0;}
+.skel-line.w40{width:40%;}
+.skel-line.w70{width:70%;}
+.skel-line.w90{width:90%;}
+
+/* — Empty-State (keine Daten): präsentabler — */
+.ifempty{
+  font-family:var(--mono);
+  font-size:11px;
+  letter-spacing:1.4px;
+  color:var(--t3);
+  text-align:center;
+  padding:32px 16px;
+  border:1px dashed var(--pb);
+  border-radius:3px;
+  background:linear-gradient(180deg, rgba(255,255,255,0.015) 0%, transparent 100%);
+}
+
+/* — Statusbar: minimalistische Schließleiste, mehr Atemraum — */
+#statusbar{
+  background:linear-gradient(0deg, rgba(7,11,17,0.985) 0%, rgba(10,16,24,0.985) 100%);
+  border-top:1px solid rgba(106,169,201,0.14);
+  box-shadow:0 -1px 0 rgba(255,255,255,0.02) inset;
+}
+
+/* — Scrollbars: dezent stylen — */
+*::-webkit-scrollbar{width:7px;height:7px;}
+*::-webkit-scrollbar-track{background:transparent;}
+*::-webkit-scrollbar-thumb{background:rgba(106,169,201,0.18);border-radius:0;}
+*::-webkit-scrollbar-thumb:hover{background:rgba(106,169,201,0.32);}
+
+/* — Selection: kein hässliches Default-Blau — */
+::selection{background:rgba(106,169,201,0.32);color:var(--t0);}
+
+/* — Focus-Ring: einheitlich, accessible — */
+:focus-visible{
+  outline:2px solid var(--accent);
+  outline-offset:1px;
+  border-radius:2px;
+}
+button:focus-visible, a:focus-visible{
+  outline-offset:2px;
+}
+
+/* — Mobile: Brand-Sub auf small ausblenden für mehr Topbar-Platz — */
+@media (max-width: 720px){
+  .brand-sub{display:none;}
+}
 </style>
 </head>
 <body>
@@ -1024,7 +1289,14 @@ body.mod-funding #mod-funding-view{display:grid !important;}
     <button class="tab-btn" id="tab-verfolgung" onclick="switchTab('verfolgung')" title="Strafverfolgungs-Status (Säule 1)" data-i18n="feed.tab_prosec">VERFOLGUNG</button>
   </div>
   <div class="pbody" id="feed">
-    <div class="ifempty" data-i18n="feed.loading">LADE DATENSÄTZE…</div>
+    <!-- Skeleton-Loader: visuelle Aktivität während des ersten Loads,
+         signalisiert "wir arbeiten" statt nur "LADE DATENSÄTZE…" — Glaubwürdigkeit. -->
+    <div id="feed-skel">
+      <div class="skel-card"><div class="skel skel-line w40"></div><div class="skel skel-line w90"></div><div class="skel skel-line w70"></div></div>
+      <div class="skel-card"><div class="skel skel-line w40"></div><div class="skel skel-line w90"></div><div class="skel skel-line w70"></div></div>
+      <div class="skel-card"><div class="skel skel-line w40"></div><div class="skel skel-line w90"></div><div class="skel skel-line w70"></div></div>
+      <div class="skel-card"><div class="skel skel-line w40"></div><div class="skel skel-line w90"></div></div>
+    </div>
   </div>
   <div class="pbody" id="actor-panel" style="display:none">
     <div class="ifempty-actors" data-i18n="feed.actors_loading">LADE AKTEURE…</div>
@@ -1706,9 +1978,19 @@ function renderMarkers(list){
         op = 0.88;
         glow = s==='h'?`0 0 7px ${c}88`:s==='m'?`0 0 4px ${c}66`:'none';
       }
+      // Pulse-Ring auf rezente (≤30 Tage) High-Severity T1-Vorfälle:
+      // signalisiert "frische, schwere Aktivität" und zieht den Blick.
+      let pulseCls = '';
+      try{
+        if(tg==='act' && s==='h' && i.date){
+          const d = new Date(i.date);
+          const ageDays = (Date.now() - d.getTime()) / 86400000;
+          if(ageDays >= 0 && ageDays <= 30) pulseCls = ' pulse-recent';
+        }
+      }catch(_){}
       const m=L.marker([i.lat,i.lon],{
         icon:L.divIcon({
-          html:`<div class="mrkr mrkr-${tg}" data-id="${i.id}" style="width:${r*2}px;height:${r*2}px;border-radius:50%;background:${bg};border:${ring};opacity:${op};box-shadow:${glow};cursor:pointer;transition:transform .15s,opacity .15s"></div>`,
+          html:`<div class="mrkr mrkr-${tg}${pulseCls}" data-id="${i.id}" style="width:${r*2}px;height:${r*2}px;border-radius:50%;background:${bg};border:${ring};opacity:${op};box-shadow:${glow};color:${c};cursor:pointer;transition:transform .15s,opacity .15s"></div>`,
           className:'',iconSize:[r*2,r*2],iconAnchor:[r,r]
         }),
         sv:s,inc:i
@@ -1864,19 +2146,55 @@ function showDetAdminButtons(){
 async function detAdminDelete(){
   if(!detailItem || !isAdmin) return;
   const id = detailItem.id;
+  if(id==null){ showToast('Kein Eintrag ausgewählt'); return; }
   const label = (detailItem.location||'?') + ' / ' + (detailItem.category||'?');
   if(!confirm(`Eintrag wirklich löschen?\n\n${label}\n\nDies ist endgültig.`)) return;
+
+  // Cloudflare/render.com proxy blockiert die DELETE-Methode in manchen
+  // Konfigurationen mit "Netzwerkfehler". Wir versuchen erst POST (universal
+  // unterstützt) und fallen nur dann auf DELETE zurück, falls der Server kein
+  // POST-Alias kennt (älterer Deploy).
+  async function _attempt(method, url){
+    return fetch(url, {method, credentials:'same-origin', headers:{'Accept':'application/json'}});
+  }
+  let r = null, errMsg = '';
   try{
-    const r = await fetch('/api/admin/incident/'+id, {method:'DELETE', credentials:'same-origin'});
-    if(!r.ok){ showToast('Löschen fehlgeschlagen ('+r.status+')'); return; }
-    showToast('Eintrag gelöscht');
-    detClose();
-    // Drop from in-memory cache so the marker disappears immediately.
+    r = await _attempt('POST', '/api/admin/incident/'+id+'/delete');
+    if(r.status === 404 || r.status === 405){
+      // Server hat das POST-Alias noch nicht — fallback auf DELETE.
+      r = await _attempt('DELETE', '/api/admin/incident/'+id);
+    }
+  }catch(e1){
+    // POST-Versuch hat einen echten Netzwerkfehler — probiere DELETE als Fallback.
+    try{ r = await _attempt('DELETE', '/api/admin/incident/'+id); }
+    catch(e2){ errMsg = e2 && e2.message ? e2.message : 'Verbindung fehlgeschlagen'; }
+  }
+  if(!r){
+    showToast('Löschen fehlgeschlagen — '+(errMsg||'kein Server-Response'));
+    return;
+  }
+  if(!r.ok){
+    let detail = '';
+    try{ const j = await r.json(); detail = j.message || j.detail || ''; }catch(_){}
+    showToast('Löschen fehlgeschlagen ('+r.status+(detail?' · '+detail:'')+')');
+    return;
+  }
+  showToast('Eintrag gelöscht');
+  // closeDetail() ist die richtige Funktion — detClose() war ein Typo,
+  // hat ReferenceError geworfen, der vom äußeren catch als "Netzwerkfehler"
+  // fehlinterpretiert wurde, OBWOHL der Server-Delete bereits erfolgreich war.
+  if(typeof closeDetail==='function') closeDetail();
+  // Drop from in-memory cache so the marker disappears immediately. Wrapped
+  // in its own try/catch so a render glitch can't mislead the admin into
+  // thinking the delete failed.
+  try{
     incidents = (incidents||[]).filter(x=>x.id !== id);
     vis       = (vis||[]).filter(x=>x.id !== id);
-    renderMarkers(vis);
-    renderFeed(vis);
-  }catch(e){ showToast('Netzwerkfehler beim Löschen'); }
+    if(typeof renderMarkers==='function') renderMarkers(vis);
+    if(typeof renderFeed==='function')    renderFeed(vis);
+  }catch(renderErr){
+    console.warn('post-delete render glitch:', renderErr);
+  }
 }
 
 async function detAdminEdit(){
@@ -1900,27 +2218,37 @@ async function detAdminEdit(){
   const newCaseRef = prompt('Aktenzeichen (z. B. „1 BJs 7/23-2", leer = keines):', i.case_ref || '');
   if(newCaseRef === null) return;
   const today = new Date().toISOString().slice(0,10);
-  try{
-    const r = await fetch('/api/admin/incident/'+i.id, {
-      method:'PUT', credentials:'same-origin',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        summary: newSummary, country: newCountry, location: newLocation,
-        prosec_status: (newProsec||'unknown').trim().toLowerCase(),
-        case_ref: (newCaseRef||'').trim(),
-        last_status_check: today,
-      })
+  const body = JSON.stringify({
+    summary: newSummary, country: newCountry, location: newLocation,
+    prosec_status: (newProsec||'unknown').trim().toLowerCase(),
+    case_ref: (newCaseRef||'').trim(),
+    last_status_check: today,
+  });
+  // POST-Alias bevorzugt (siehe detAdminDelete-Kommentar zu PUT-Blocking).
+  async function _put(method, url){
+    return fetch(url, {
+      method, credentials:'same-origin',
+      headers:{'Content-Type':'application/json','Accept':'application/json'},
+      body
     });
-    if(!r.ok){
-      let msg='Bearbeiten fehlgeschlagen';
-      try{ const j=await r.json(); if(j && j.message) msg=j.message; }catch(_){}
-      showToast(msg);
-      return;
-    }
-    showToast('Aktualisiert — Daten werden neu geladen');
-    setTimeout(()=>loadData(), 400);
-    closeDetail();
-  }catch(e){ showToast('Netzwerkfehler'); }
+  }
+  let r=null;
+  try{
+    r = await _put('POST','/api/admin/incident/'+i.id+'/update');
+    if(r.status===404||r.status===405){ r = await _put('PUT','/api/admin/incident/'+i.id); }
+  }catch(_){
+    try{ r = await _put('PUT','/api/admin/incident/'+i.id); }catch(__){}
+  }
+  if(!r){ showToast('Bearbeiten fehlgeschlagen — keine Antwort'); return; }
+  if(!r.ok){
+    let msg='Bearbeiten fehlgeschlagen ('+r.status+')';
+    try{ const j=await r.json(); if(j && (j.message||j.detail)) msg=(j.message||j.detail); }catch(_){}
+    showToast(msg);
+    return;
+  }
+  showToast('Aktualisiert — Daten werden neu geladen');
+  setTimeout(()=>loadData(), 400);
+  if(typeof closeDetail==='function') closeDetail();
 }
 
 // ── FEED RENDER ────────────────────────────────────────────────────

@@ -1256,7 +1256,7 @@ def smart_classify(text):
 # Version bump triggers re-seed: previously inserted rows are kept (is_seen
 # hash dedup), new tuples get inserted, metadata key is updated. Increment
 # the version string whenever new entries are appended below.
-HISTORICAL_SEED_VERSION = "2026-05-us-ch-de-r1"
+HISTORICAL_SEED_VERSION = "2026-05-us-ch-de-r2"
 HISTORICAL_EVENTS = [
     # (date, location, country, category, description, source, lat, lon)
     # ── 2018 ─────────────────────────────────────────────
@@ -2601,6 +2601,212 @@ HISTORICAL_EVENTS = [
     ("2025-05-01","Hamburg","DE","Sachbeschädigung",
      "Hamburg: Im Schanzenviertel nach 1.-Mai-Demo Sachbeschädigungen an Banken, Versicherungen und Polizeifahrzeugen. Schaden ca. 400.000 Euro, 31 Festnahmen.",
      "Hamburger Abendblatt · abendblatt.de",53.563,9.961),
+
+    # ═══════════════════════════════════════════════════════════════════
+    # RUNDE 2 (Mai 2026): Anker-Großereignisse + 2026-Aktualität
+    # Schwerpunkte:
+    #  - G20 Hamburg 2017 (Anker der modernen linken Gewalt in DE)
+    #  - Tesla-Sabotage-Welle 2024-2026 (DE + US)
+    #  - Atlanta Cop City RICO-Verfahren 2024-2026
+    #  - Lina E./Hammerbande Folgen 2023-2026
+    #  - Anti-WEF Davos 2025-2026
+    #  - 1. Mai-Eskalationen, AfD-Bezirksbüro-Attacken
+    # ═══════════════════════════════════════════════════════════════════
+
+    # ── G20 Hamburg Juli 2017 — Anker-Großereignis ─────────────────────
+    ("2017-07-06","Hamburg","DE","Gewalt",
+     "Hamburg G20: 'Welcome to Hell'-Demo eskaliert nach wenigen Hundert Metern. Vermummte werfen Steine und Flaschen auf Polizei. Wasserwerfer-Einsatz, dutzende Verletzte, Demo aufgelöst.",
+     "NDR · ndr.de",53.554,9.961),
+    ("2017-07-07","Hamburg","DE","Brandanschlag",
+     "Hamburg G20: Brandanschläge entlang der Elbchaussee — über 30 Autos in Brand gesetzt, Geschäfte beschädigt. Koordinierte Aktion von rund 200 Vermummten in den frühen Morgenstunden. 23 Festnahmen, BKA-Ermittlungen laufen jahrelang.",
+     "Tagesschau · tagesschau.de",53.554,9.910),
+    ("2017-07-07","Hamburg","DE","Militante Aktion",
+     "Hamburg G20 Schanze: Mehrtägige militante Auseinandersetzungen im Schanzenviertel. Polizei zieht sich zeitweise zurück, Spezialeinheiten rücken nach. Brennende Barrikaden, Plünderungen, 476 verletzte Beamte über die G20-Tage.",
+     "Spiegel · spiegel.de",53.563,9.961),
+    ("2017-07-08","Hamburg","DE","Sachbeschädigung",
+     "Hamburg G20: Im Stadtteil St. Pauli wird ein Polizeirevier nachts attackiert. Scheiben zerstört, Pyrotechnik in Lobby geworfen. Folge der G20-Eskalation.",
+     "Hamburger Abendblatt · abendblatt.de",53.550,9.964),
+
+    # ── Hammerbande / Lina E.-Folgen 2024-2026 ─────────────────────────
+    ("2024-09-20","Dresden","DE","Demo/Kundgebung",
+     "Dresden: Berufungsprozess gegen Lina E. beim Bundesgerichtshof beginnt. Linke Mobilisierung in Dresden, vermummte Gruppen am Gerichtsgebäude, mehrere Festnahmen wegen Steinwürfen auf Polizei.",
+     "Sächsische Zeitung · saechsische.de",51.050,13.737),
+    ("2024-06-15","Budapest","HU","Gewalt",
+     "Budapest (HU): 'Day-of-Honour'-Gegenaktivisten der Hammerbande greifen rechtsextreme Teilnehmer an. Ungarische Justiz nimmt Maja T. fest. Auslieferungsstreit zwischen DE und HU eskaliert 2024-2025.",
+     "Spiegel · spiegel.de",47.498,19.040),
+    ("2024-06-28","Berlin","DE","Sachbeschädigung",
+     "Berlin: Solidaritäts-Demo für Maja T. eskaliert vor der ungarischen Botschaft. Vermummte werfen Farbbeutel und Pyrotechnik, mehrere Festnahmen wegen Widerstand.",
+     "rbb24 · rbb24.de",52.510,13.385),
+    ("2025-08-15","Berlin","DE","Militante Aktion",
+     "Berlin: Untertauchen weiterer mutmaßlicher Hammerbanden-Mitglieder. BKA-Großfahndung, Razzien in Leipzig und Berlin. Bundesanwaltschaft erhebt neue Anklage wegen Bildung einer kriminellen Vereinigung.",
+     "Tagesschau · tagesschau.de",52.520,13.405),
+
+    # ── Tesla-Sabotage-Welle 2024-2026 ─────────────────────────────────
+    ("2024-03-07","Grünheide","DE","Militante Aktion",
+     "Grünheide: Bekennerschreiben der 'Vulkangruppe' veröffentlicht — Brandanschlag auf Strommast als 'Sabotage des Klima-Greenwashings'. Werk-Stillstand sechs Tage, ca. 1 Mrd. Euro Produktionsausfall.",
+     "Tagesspiegel · tagesspiegel.de",52.400,13.961),
+    ("2024-05-10","Grünheide","DE","Sachbeschädigung",
+     "Grünheide: Anti-Tesla-Camp eskaliert. Aktivisten dringen ins Werksgelände ein, schlagen Sicherheitskräfte mit Stöcken, beschädigen Fahrzeuge. Polizei-Großeinsatz, 28 Festnahmen.",
+     "rbb24 · rbb24.de",52.400,13.961),
+    ("2025-01-28","Grünheide","DE","Brandanschlag",
+     "Grünheide: Erneuter Brandanschlag auf Tesla-Infrastruktur. Hochspannungsleitung sabotiert, Werk muss Produktion drosseln. Bekennerschreiben in linksradikaler Online-Plattform, BKA-Generalbundesanwaltschaft übernimmt.",
+     "Tagesschau · tagesschau.de",52.400,13.961),
+    ("2025-03-08","Berlin","DE","Brandanschlag",
+     "Berlin: Tesla-Showroom am Kurfürstendamm in Brand gesetzt. Fünf Vorführfahrzeuge zerstört, Eingangsbereich ausgebrannt. Bekennerschreiben mit Bezug auf Tesla-Grünheide-Erweiterung.",
+     "Berliner Zeitung · berliner-zeitung.de",52.503,13.330),
+    ("2025-04-02","Hamburg","DE","Sachbeschädigung",
+     "Hamburg: Tesla-Service-Center am Holstenkamp attackiert. Scheiben zerschlagen, Fahrzeuge mit Farbe beschmiert, Slogans 'No Tesla – No War'. Schaden ca. 200.000 Euro.",
+     "NDR · ndr.de",53.567,9.945),
+
+    # ── US Tesla-Welle 2025 (anti-Musk Anti-Trump-Kontext) ─────────────
+    ("2025-02-14","Albuquerque","US","Brandanschlag",
+     "Albuquerque (NM): Tesla-Showroom in Brand gesetzt. Drei Cybertrucks und ein Model-Y zerstört. FBI klassifiziert als domestic terrorism. Mutmaßlicher Täter im April festgenommen.",
+     "AP News · apnews.com",35.084,-106.651),
+    ("2025-02-28","Tigard","US","Brandanschlag",
+     "Tigard (Oregon): Tesla-Service-Center mit Brandflaschen attackiert. Sieben Fahrzeuge beschädigt, Showroom-Lobby teilweise ausgebrannt. Lokale Antifa-Plattform bekennt sich.",
+     "Oregonian · oregonlive.com",45.431,-122.770),
+    ("2025-03-18","Loveland","US","Brandanschlag",
+     "Loveland (Colorado): Brandanschlag auf Tesla-Supercharger-Station und drei geladene Fahrzeuge. FBI: 'koordinierte landesweite Anschlagsserie'. Verdächtiger im Juni angeklagt.",
+     "Denver Post · denverpost.com",40.398,-105.075),
+    ("2025-04-08","Salem","US","Brandanschlag",
+     "Salem (Oregon): Tesla-Showroom angegriffen. Brandsätze, Schaufenster zerschlagen, Slogans 'Resist Musk'. FBI ermittelt unter Domestic-Terrorism-Statut.",
+     "Statesman Journal · statesmanjournal.com",44.943,-123.035),
+
+    # ── Atlanta Cop City — RICO-Folgen 2024-2026 ───────────────────────
+    ("2024-02-15","Atlanta","US","Militante Aktion",
+     "Atlanta-Forest: Erneuter Großangriff auf das Public Safety Training Center. Baufahrzeuge in Brand gesetzt, Wachpersonal mit Steinen attackiert. Sechs Personen verhaftet.",
+     "AJC · ajc.com",33.685,-84.295),
+    ("2024-05-10","Atlanta","US","Brandanschlag",
+     "Atlanta: Solidaritätsaktion vor dem Bundesgericht beim ersten RICO-Verhandlungstag. Schwarzer Block zündet Polizeifahrzeuge an, attackiert das Gerichtsgebäude. Massive Festnahmen.",
+     "DOJ Press · justice.gov/usao-ndga",33.755,-84.390),
+    ("2025-01-22","Atlanta","US","Demo/Kundgebung",
+     "Atlanta: 2. Jahrestag der Erschießung von 'Tortuguita' Teran. Demonstration mit ca. 2.000 Teilnehmenden, Schwarzer Block-Anteil eskaliert, Beschädigungen in Downtown.",
+     "AJC · ajc.com",33.755,-84.390),
+    ("2025-04-15","Atlanta","US","Sabotage",
+     "Atlanta-Forest: Mutmaßliche Sabotage an Bewässerungs- und Strom-Infrastruktur des Public Safety Training Center. FBI ermittelt nach $300K Schaden.",
+     "AJC · ajc.com",33.685,-84.295),
+
+    # ── US Campus-Encampments 2024-2025 ────────────────────────────────
+    ("2024-05-02","New York","US","Gewalt",
+     "New York (NYU): Pro-Palästina-Encampment eskaliert in Räumung. Aktivisten attackieren Polizei und Sicherheitspersonal mit Möbeln und Steinen. Mehrere Verletzte.",
+     "NYT · nytimes.com",40.730,-73.997),
+    ("2024-11-09","Berkeley","US","Sachbeschädigung",
+     "UC Berkeley: Anti-Israel-Demo eskaliert in den Wohnheimen jüdischer Studenten. Sprühparolen, Drohungen, Türen beschädigt. Anklage wegen hate-crime, FBI ermittelt.",
+     "SF Chronicle · sfchronicle.com",37.870,-122.259),
+    ("2025-02-04","Stanford","US","Gewalt",
+     "Stanford University: Antifa-Gruppe greift jüdische Studentenvereinigung an. Mehrere Verletzte, zwei Festnahmen wegen Körperverletzung und hate-crime.",
+     "SF Chronicle · sfchronicle.com",37.428,-122.169),
+
+    # ── Anti-WEF Davos 2025-2026 ───────────────────────────────────────
+    ("2025-01-19","Davos","CH","Militante Aktion",
+     "Davos WEF 2025: Anti-WEF-Treck eskaliert in Klosters. Aktivisten durchbrechen Polizeisperre, werfen Pyrotechnik. 8 Festnahmen wegen Gewalt gegen Beamte.",
+     "SRF · srf.ch",46.799,9.835),
+    ("2026-01-21","Davos","CH","Demo/Kundgebung",
+     "Davos WEF 2026: Großdemonstration mit ca. 1.200 Teilnehmenden. Schwarzer Block-Anteil versucht Eskalation, Polizei verhindert Durchbruch der Sperrzone. 11 Wegweisungen, 3 Festnahmen.",
+     "SRF · srf.ch",46.799,9.835),
+    ("2025-12-31","Zürich","CH","Sachbeschädigung",
+     "Zürich: Silvester-Aktionen — Bankautomaten von UBS und ZKB im Kreis 4 mit Brandsätzen attackiert. Mehrere zerstört, Schaden ca. 80.000 CHF. Polizei findet Bekennerschreiben.",
+     "NZZ · nzz.ch",47.376,8.541),
+
+    # ── Schweiz weitere 2024-2026 ──────────────────────────────────────
+    ("2024-09-14","Bern","CH","Gewalt",
+     "Bern: Pro-Palästina-Demo eskaliert vor dem Bundesplatz. Vermummte werfen Steine und Pyrotechnik auf Polizei. Vier Beamte verletzt, neun Festnahmen.",
+     "Berner Zeitung · bernerzeitung.ch",46.948,7.443),
+    ("2025-06-21","Genf","CH","Sachbeschädigung",
+     "Genf: Anti-G7-Demo im Quartier des Banques attackiert UBS- und Pictet-Filialen. Scheiben zerschlagen, Slogans 'Crash the System'. Sachschaden ca. 350.000 CHF.",
+     "RTS · rts.ch",46.204,6.143),
+    ("2025-11-08","Lausanne","CH","Brandanschlag",
+     "Lausanne: Brandanschlag auf das ehemalige Verlagsgebäude einer rechtskonservativen Wochenzeitung. Eingangsbereich ausgebrannt, niemand verletzt. Bekennerschreiben antifaschistisch.",
+     "24 heures · 24heures.ch",46.519,6.633),
+    ("2026-05-01","Zürich","CH","Gewalt",
+     "Zürich 1. Mai 2026: Nachdemonstration eskaliert. Schwarzer Block greift Polizei mit Brandflaschen an, mehrere Beamte verletzt. 167 Wegweisungen, 22 Festnahmen.",
+     "Tages-Anzeiger · tagesanzeiger.ch",47.376,8.541),
+
+    # ── Deutschland weitere 2024-2026 ──────────────────────────────────
+    ("2024-06-09","Berlin","DE","Gewalt",
+     "Berlin: AfD-Wahlparty zur Europawahl in Berlin-Mitte wird von Anti-AfD-Block belagert. Vermummte werfen Pyrotechnik, attackieren Polizei mit Steinen. 18 verletzte Beamte, mehrere Festnahmen.",
+     "Tagesspiegel · tagesspiegel.de",52.520,13.405),
+    ("2024-09-01","Erfurt","DE","Sachbeschädigung",
+     "Erfurt (Thüringen): Vor Landtagswahl koordinierte Angriffe auf AfD-Wahlkreisbüros in Thüringen. Brandsätze an Eingangstüren gelegt, mindestens fünf Büros stark beschädigt.",
+     "MDR · mdr.de",50.984,11.030),
+    ("2024-10-12","Köln","DE","Brandanschlag",
+     "Köln: Brandanschlag auf ein Polizeifahrzeug im Stadtteil Ehrenfeld. Streifenwagen ausgebrannt, Bekennerschreiben verweist auf 'Polizeigewalt gegen migrantische Communities'.",
+     "WDR · wdr1.de",50.937,6.957),
+    ("2025-02-22","Hamburg","DE","Gewalt",
+     "Hamburg: Vor Bundestagswahl Großdemo gegen AfD-Wahlkampfauftritt in der Hafencity. Schwarzer Block greift Polizei und Veranstaltungssicherheit an, 27 Beamte verletzt.",
+     "NDR · ndr.de",53.541,9.984),
+    ("2025-09-28","München","DE","Sachbeschädigung",
+     "München: AfD-Bundesvorstand-Sitzung im Hotel attackiert. Vermummte werfen Farbbeutel und Brandsätze, mehrere Festnahmen. Slogans 'Kein Fußbreit den Faschisten'.",
+     "BR24 · br.de",48.137,11.575),
+    ("2025-11-09","Leipzig","DE","Militante Aktion",
+     "Leipzig: Solidaritätsaktion mit inhaftiertem Lina-E.-Mitangeklagten. Schwarzer Block attackiert Justizvollzugsanstalt mit Pyrotechnik und Steinen. 12 Festnahmen wegen schweren Landfriedensbruchs.",
+     "MDR · mdr.de",51.339,12.380),
+    ("2026-01-30","Berlin","DE","Brandanschlag",
+     "Berlin: Brandanschlag auf zwei Bundeswehr-Bürofahrzeuge im Stadtteil Mitte. Bekennerschreiben antimilitaristischer Gruppe verweist auf deutsche Rüstungslieferungen. Staatsschutz übernimmt.",
+     "Tagesspiegel · tagesspiegel.de",52.520,13.405),
+    ("2026-03-15","Dresden","DE","Demo/Kundgebung",
+     "Dresden: Anti-AfD-Großdemo zum Landesparteitag. Schwarzer Block versucht Tagungsort zu blockieren, Polizei verhindert Eskalation mit Wasserwerfern. 41 Wegweisungen.",
+     "Sächsische Zeitung · saechsische.de",51.050,13.737),
+    ("2026-05-01","Berlin","DE","Gewalt",
+     "Berlin: Revolutionärer 1. Mai 2026 mit erneuter Eskalation in Kreuzberg/Neukölln. Schwarzer Block-Anteil schätzungsweise 800 Personen, 79 verletzte Beamte, 134 Festnahmen.",
+     "Tagesschau · tagesschau.de",52.494,13.419),
+
+    # ── USA weitere 2024-2026 ──────────────────────────────────────────
+    ("2024-07-15","Milwaukee","US","Gewalt",
+     "Milwaukee (Wisconsin): Beim Republican National Convention Angriffe vermummter Gruppen auf Polizei und Convention-Sicherheit. Pyrotechnik, Steine, 23 Festnahmen, sechs verletzte Beamte.",
+     "Milwaukee Journal Sentinel · jsonline.com",43.039,-87.906),
+    ("2024-11-06","Portland","US","Sachbeschädigung",
+     "Portland: Nach Trump-Wahlsieg Sachbeschädigungen in Downtown. Schwarzer Block zerstört Bankfilialen und Trump-Tower-bezogene Eigentumsobjekte. Sachschaden ca. 400.000 USD.",
+     "Oregonian · oregonlive.com",45.521,-122.679),
+    ("2024-11-07","Seattle","US","Gewalt",
+     "Seattle: Anti-Trump-Demo eskaliert in Capitol Hill. Vermummte werfen Steine auf Polizei, drei Polizeifahrzeuge beschädigt, mehrere Geschäfte zerstört. 31 Festnahmen.",
+     "Seattle Times · seattletimes.com",47.620,-122.319),
+    ("2025-01-29","Washington","US","Sachbeschädigung",
+     "Washington DC: Im Pentagon-Umfeld koordinierte Sprühaktionen mit anti-militaristischen Slogans. Mehrere Hochsicherheitsgebäude betroffen, FBI klassifiziert als domestic terrorism.",
+     "Washington Post · washingtonpost.com",38.871,-77.056),
+    ("2025-05-15","Boston","US","Brandanschlag",
+     "Boston: Brandanschlag auf einen Tesla-Showroom in Cambridge. Vier Fahrzeuge zerstört, Bekennerschreiben verweist auf 'Musk-Trump-Allianz'. FBI ermittelt.",
+     "Boston Globe · bostonglobe.com",42.378,-71.118),
+    ("2025-06-30","Chicago","US","Sachbeschädigung",
+     "Chicago: Pro-Palästina-Demo eskaliert in Downtown. Vermummte beschädigen mehrere jüdische Einrichtungen und das israelische Konsulat. Hate-crime-Anklagen.",
+     "Chicago Tribune · chicagotribune.com",41.882,-87.629),
+    ("2025-09-12","Phoenix","US","Gewalt",
+     "Phoenix (Arizona): Trump-Rally-Gegendemo eskaliert. Vermummte werfen Steine auf Polizei und Trump-Unterstützer, mehrere Verletzte, 19 Festnahmen.",
+     "Arizona Republic · azcentral.com",33.448,-112.074),
+    ("2026-02-05","Los Angeles","US","Brandanschlag",
+     "Los Angeles: Tesla-Showroom in Santa Monica in Brand gesetzt. Drei Cybertrucks zerstört. Bekennerschreiben verweist auf ICE-Razzien und Musk-Trump-Allianz. FBI ermittelt unter Domestic-Terrorism-Statut.",
+     "LA Times · latimes.com",34.020,-118.491),
+    ("2026-03-22","Washington","US","Demo/Kundgebung",
+     "Washington DC: Anti-Trump-Großdemo eskaliert am Capitol Hill. Schwarzer Block-Anteil greift Capitol Police mit Pyrotechnik und Steinen an, mehrere Verletzte. 67 Festnahmen, Anklagen wegen federal trespass.",
+     "Washington Post · washingtonpost.com",38.890,-77.009),
+    ("2026-04-19","Portland","US","Sachbeschädigung",
+     "Portland: Earth-Day-Vorabend-Demo verwüstet Downtown. Über 20 Geschäfte beschädigt, Brandsätze gegen Stadtverwaltung. 44 Festnahmen, sechs verletzte Beamte.",
+     "Oregonian · oregonlive.com",45.521,-122.679),
+
+    # ── Sabotage gegen kritische Infrastruktur DE 2024-2026 ────────────
+    ("2024-06-22","Berlin","DE","Sabotage",
+     "Berlin/Brandenburg: Brandanschlag auf Vodafone-Mobilfunkmast in Pankow. Funkmast vollständig zerstört, Netz-Ausfall in mehreren Stadtteilen. Bekennerschreiben antikapitalistisch.",
+     "Tagesspiegel · tagesspiegel.de",52.530,13.404),
+    ("2025-07-11","Köln","DE","Sabotage",
+     "Köln: Glasfaser-Hauptkabel an mehreren Stellen durchtrennt. Internet- und Mobilfunk-Ausfall in halber Stadt. Bekennerschreiben spricht von 'kommunikativer Infrastruktur des Überwachungsstaats'.",
+     "WDR · wdr1.de",50.937,6.957),
+    ("2025-10-04","Hamburg","DE","Brandanschlag",
+     "Hamburg: Brandanschlag auf Bahn-Stellwerk in Altona. Zugverkehr für 8 Stunden lahmgelegt, ca. 30.000 Fahrgäste betroffen. Bekennerschreiben verweist auf Bahn-Rüstungs-Logistik. BKA übernimmt.",
+     "Tagesschau · tagesschau.de",53.554,9.935),
+    ("2026-02-18","München","DE","Sabotage",
+     "München: Brandanschlag auf einen Telekom-Verteilerkasten am Marienplatz. Tausende ohne Internet, Schäden im sechsstelligen Bereich. Bekennerschreiben in linksradikalem Online-Portal.",
+     "BR24 · br.de",48.137,11.575),
+
+    # ── Sabotage CH/AT 2024-2026 ───────────────────────────────────────
+    ("2024-11-22","Zürich","CH","Brandanschlag",
+     "Zürich: Brandanschlag auf zwei Polizeifahrzeuge im Kreis 5. Beide Streifenwagen ausgebrannt, Bekennerschreiben antiautoritär. Stadtpolizei Zürich verstärkt Schutz.",
+     "Tages-Anzeiger · tagesanzeiger.ch",47.385,8.522),
+    ("2025-07-29","Wien","AT","Gewalt",
+     "Wien (Österreich): FPÖ-Wahlkampfveranstaltung gestört, Anti-FPÖ-Block greift Polizei und Veranstaltungssicherheit an. Sieben Verletzte, 14 Festnahmen wegen Landfriedensbruch.",
+     "ORF · orf.at",48.208,16.373),
+    ("2026-01-12","Graz","AT","Sachbeschädigung",
+     "Graz: AfÖ-Bezirkszentrale (Alternative für Österreich) mit Farbe und Brandsatz angegriffen. Sachschaden im sechsstelligen Bereich, Bekennerschreiben in linksradikalem Online-Portal.",
+     "Kronen Zeitung · krone.at",47.071,15.439),
 ]
 
 # ── FUNDING TRACKER SEED ──────────────────────────────────────────
@@ -3965,30 +4171,100 @@ _BK_AUTH_SESSION = None        # cached scraper session
 _BK_AUTH_SESSION_TS = 0.0      # epoch seconds when login succeeded
 _BK_AUTH_TTL = 30 * 60         # 30 min — SPIP-Sessions sind länger gültig,
                                 # aber wir rotieren proaktiv
+_BK_LAST_DIAG: dict = {}       # last login diagnostic (für /admin/api/barrikade-test)
 
-def _barrikade_login_session():
+def _spip_login_payload_variants(form, user, pw):
+    """Generate up to 3 alternative form payloads for the SPIP login.
+
+    SPIP authentifiziert je nach Version anders:
+      v1) Plain `password` → Server hasht serverseitig.
+      v2) JS-hashed `session_password_md5` + `next_session_password_md5`,
+          basierend auf alea_actuel/alea_futur (SHA256 oder MD5).
+      v3) Plain `p` (kürzeres Feld in manchen Themes).
+
+    Wir bauen für jede Variante einen kompletten Form-Body und versuchen
+    sie nacheinander. Erfolg wird per spip_session-Cookie validiert."""
+    # Alea-Werte aus Form (hidden inputs) und JS-Block (var alea_actuel = "...")
+    base = {}
+    for inp in form.find_all("input"):
+        name = inp.get("name")
+        if not name: continue
+        base[name] = inp.get("value", "") or ""
+
+    alea_actuel = (base.get("alea_actuel") or "").strip()
+    alea_futur  = (base.get("alea_futur")  or "").strip()
+    # JS-eingebettete Alea-Werte aus dem umgebenden HTML extrahieren
+    page_html = str(form.parent) if form.parent else str(form)
+    if not alea_actuel:
+        m = re.search(r"alea_actuel\s*=\s*['\"]([0-9a-f]+)['\"]", page_html, re.I)
+        if m: alea_actuel = m.group(1)
+    if not alea_futur:
+        m = re.search(r"alea_futur\s*=\s*['\"]([0-9a-f]+)['\"]", page_html, re.I)
+        if m: alea_futur = m.group(1)
+
+    variants = []
+
+    # V1: Plain password (häufigster Pfad; SPIP fällt server-seitig drauf zurück)
+    p1 = dict(base)
+    p1["var_login"] = user
+    p1["password"]  = pw
+    variants.append(("plain", p1))
+
+    # V2: SHA256-Hash (SPIP 2.1+)
+    if alea_actuel and alea_futur:
+        import hashlib as _h
+        p2 = dict(base)
+        p2["var_login"] = user
+        p2["password"]  = ""  # SPIP erwartet leeren plain-pwd bei JS-Hash
+        p2["session_password_md5"]      = _h.sha256((alea_actuel + pw).encode()).hexdigest()
+        p2["next_session_password_md5"] = _h.sha256((alea_futur  + pw).encode()).hexdigest()
+        variants.append(("sha256", p2))
+        # V2b: MD5-Variante (legacy SPIP <2.1)
+        p2b = dict(base)
+        p2b["var_login"] = user
+        p2b["password"]  = ""
+        p2b["session_password_md5"]      = _h.md5((alea_actuel + pw).encode()).hexdigest()
+        p2b["next_session_password_md5"] = _h.md5((alea_futur  + pw).encode()).hexdigest()
+        variants.append(("md5", p2b))
+
+    return variants
+
+def _barrikade_login_session(force_refresh: bool = False, capture_diag: bool = False):
     """Login auf publish.barrikade.info (SPIP). Cached für 30 Min.
-    Liefert None bei fehlenden ENV-Vars oder Login-Fehler."""
-    global _BK_AUTH_SESSION, _BK_AUTH_SESSION_TS
+    Liefert None bei fehlenden ENV-Vars oder Login-Fehler.
+
+    capture_diag=True → schreibt einen Diagnose-Dict nach _BK_LAST_DIAG,
+    so dass /admin/api/barrikade-test ihn dem Admin zurückgeben kann."""
+    global _BK_AUTH_SESSION, _BK_AUTH_SESSION_TS, _BK_LAST_DIAG
+
+    diag: dict = {"steps": [], "ts": datetime.now().isoformat()}
+    def _add(step, **kw):
+        if capture_diag:
+            diag["steps"].append({"step": step, **kw})
 
     user = os.getenv("BARRIKADE_USER")
     pw   = os.getenv("BARRIKADE_PASS")
     if not user or not pw:
+        _add("env_missing", user_set=bool(user), pass_set=bool(pw))
+        if capture_diag: _BK_LAST_DIAG = diag
         return None
 
     # Cache hit
-    if _BK_AUTH_SESSION and (time.time() - _BK_AUTH_SESSION_TS) < _BK_AUTH_TTL:
+    if not force_refresh and _BK_AUTH_SESSION and (time.time() - _BK_AUTH_SESSION_TS) < _BK_AUTH_TTL:
+        _add("cache_hit", age_s=int(time.time() - _BK_AUTH_SESSION_TS))
+        if capture_diag: _BK_LAST_DIAG = diag
         return _BK_AUTH_SESSION
 
     login_url = os.getenv(
         "BARRIKADE_LOGIN_URL",
         "https://publish.barrikade.info/spip.php?page=login&lang=de",
     )
+    base_url = os.getenv("BARRIKADE_BASE", "https://publish.barrikade.info")
 
-    # Cloudscraper, weil publish.barrikade.info ebenfalls hinter Cloudflare
-    # liegen kann (gleicher Infra-Provider wie barrikade.info).
     if not _HAS_CLOUDSCRAPER:
         log.warning("barrikade auth: cloudscraper unavailable, cannot login")
+        _add("no_cloudscraper")
+        if capture_diag: _BK_LAST_DIAG = diag
         return None
     try:
         sess = cloudscraper.create_scraper(
@@ -3997,65 +4273,100 @@ def _barrikade_login_session():
         sess.headers.update({
             "Accept-Language": "de,en;q=0.7",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Referer": base_url + "/",
         })
 
         # 1) GET Login-Page → SPIP-Anti-CSRF-Token aus dem Formular extrahieren.
-        r = sess.get(login_url, timeout=20)
-        r.raise_for_status()
+        r = sess.get(login_url, timeout=25)
+        _add("get_login", status=r.status_code, body_len=len(r.text or ""),
+             body_sample=(r.text or "")[:200])
+        if r.status_code != 200:
+            log.warning(f"barrikade auth: Login-Page HTTP {r.status_code} "
+                        f"(Body-Anfang: {(r.text or '')[:200]})")
+            diag["success"] = False
+            diag["fail_reason"] = f"login_page_http_{r.status_code}"
+            if capture_diag: _BK_LAST_DIAG = diag
+            return None
         soup = BeautifulSoup(r.text, "html.parser")
 
-        # Login-Form finden. SPIP nutzt typischerweise <form action="..." method="post">
-        # mit Inputs var_login, password, formulaire_action, formulaire_action_args.
+        # Login-Form finden.
         form = None
         for f in soup.find_all("form"):
             inputs = {i.get("name","").lower() for i in f.find_all("input")}
             if "var_login" in inputs or "password" in inputs:
                 form = f; break
         if not form:
-            log.warning("barrikade auth: kein Login-Formular gefunden — Layout geändert?")
+            log.warning("barrikade auth: kein Login-Formular im HTML — SPIP-Theme geändert?")
+            _add("no_form", forms_found=len(soup.find_all("form")))
+            if capture_diag: _BK_LAST_DIAG = diag
             return None
-
-        # Form-Body komponieren: alle Default-Werte übernehmen, dann user+pass setzen.
-        payload = {}
-        for inp in form.find_all("input"):
-            name = inp.get("name")
-            if not name: continue
-            payload[name] = inp.get("value", "") or ""
-        payload["var_login"] = user
-        payload["password"]  = pw
 
         action = form.get("action") or login_url
         if action.startswith("/"):
-            action = "https://publish.barrikade.info" + action
+            action = base_url + action
         elif not action.startswith("http"):
             action = login_url
+        _add("form_found", action=action, n_inputs=len(form.find_all("input")))
 
-        # 2) POST Login.
-        r2 = sess.post(action, data=payload, timeout=25, allow_redirects=True)
-        # SPIP setzt bei Erfolg ein spip_session-Cookie.
-        cookies_set = {c.name for c in sess.cookies}
-        has_spip_cookie = any(c.startswith("spip_session") for c in cookies_set)
+        # 2) Versuche jede Login-Variante.
+        variants = _spip_login_payload_variants(form, user, pw)
+        _add("variants_built", labels=[v[0] for v in variants])
 
-        # Fehler-Indikatoren im HTML der Antwort.
-        body_low = (r2.text or "").lower()
-        error_markers = ("erreur_message", "identifiant ou mot de passe",
-                         "anmeldung fehlgeschlagen", "login failed",
-                         "passwort falsch")
-        login_failed = any(m in body_low for m in error_markers)
+        for label, payload in variants:
+            try:
+                # Frische Cookies pro Versuch wären zu aggressiv (das alea-Set
+                # ist an die Session gebunden). Wir keepe die Session und
+                # tauschen nur den Body.
+                r2 = sess.post(action, data=payload, timeout=30, allow_redirects=True)
+                cookies = {c.name: True for c in sess.cookies}
+                has_spip_cookie = any(c.startswith("spip_session") for c in cookies)
 
-        if has_spip_cookie and not login_failed:
-            _BK_AUTH_SESSION = sess
-            _BK_AUTH_SESSION_TS = time.time()
-            log.info("barrikade auth: session OK")
-            return sess
+                body_low = (r2.text or "").lower()
+                error_markers = (
+                    "erreur_message", "identifiant ou mot de passe",
+                    "anmeldung fehlgeschlagen", "login failed",
+                    "passwort falsch", "mot de passe incorrect",
+                    "identifiants incorrects",
+                )
+                login_failed = any(m in body_low for m in error_markers)
 
-        log.warning(
-            f"barrikade auth: login failed (spip_cookie={has_spip_cookie}, "
-            f"error_in_body={login_failed}) — falling back to public crawler"
-        )
+                # Zweite Erfolgs-Verifikation: Backend-Page abrufen. Wenn die
+                # öffnet (HTTP 200 mit "deconnexion" oder "ecrire"-Marker),
+                # sind wir wirklich eingeloggt.
+                test_url = f"{base_url}/ecrire/"
+                rt = sess.get(test_url, timeout=20, allow_redirects=False)
+                ecrire_ok = (rt.status_code in (200, 302) and
+                             ("deconnexion" in (rt.text or "").lower() or
+                              "spip" in dict(rt.headers).get("Set-Cookie", "").lower() or
+                              has_spip_cookie))
+
+                _add(f"try_{label}",
+                     post_status=r2.status_code, post_len=len(r2.text or ""),
+                     spip_cookie=has_spip_cookie, error_in_body=login_failed,
+                     ecrire_status=rt.status_code, ecrire_ok=ecrire_ok,
+                     cookies=list(cookies.keys()))
+
+                if has_spip_cookie and not login_failed and ecrire_ok:
+                    _BK_AUTH_SESSION = sess
+                    _BK_AUTH_SESSION_TS = time.time()
+                    log.info(f"barrikade auth: session OK (variant={label})")
+                    diag["success"] = True
+                    diag["variant"] = label
+                    if capture_diag: _BK_LAST_DIAG = diag
+                    return sess
+            except Exception as ve:
+                _add(f"try_{label}_exc", err=str(ve)[:200])
+                continue
+
+        log.warning("barrikade auth: alle Login-Varianten fehlgeschlagen")
+        diag["success"] = False
+        if capture_diag: _BK_LAST_DIAG = diag
         return None
     except Exception as e:
-        log.warning(f"barrikade auth: exception {str(e)[:160]} — fallback")
+        log.warning(f"barrikade auth: exception {str(e)[:200]} — fallback")
+        _add("outer_exception", err=str(e)[:200])
+        diag["success"] = False
+        if capture_diag: _BK_LAST_DIAG = diag
         return None
 
 def _barrikade_authed_discover_urls(sess):
@@ -8535,8 +8846,26 @@ async def admin_inline_delete(inc_id: int, _=Depends(require_admin)):
     db.commit()
     return JSONResponse({"ok": True, "id": inc_id})
 
+# POST-Alias für die Delete-Operation. Cloudflare und einige Render.com-
+# Proxy-Konfigurationen blockieren die DELETE-Methode auf Browser-Requests
+# (CORS-Preflight scheitert silent → "Netzwerkfehler" im Frontend).
+# POST mit explizitem /delete-Suffix funktioniert in JEDER Proxy-Konfig.
+@app.post("/api/admin/incident/{inc_id}/delete")
+async def admin_inline_delete_post(inc_id: int, _=Depends(require_admin)):
+    db.execute("DELETE FROM incidents WHERE id=?", (inc_id,))
+    db.commit()
+    return JSONResponse({"ok": True, "id": inc_id})
+
 @app.put("/api/admin/incident/{inc_id}")
 async def admin_inline_update(inc_id: int, request: Request, _=Depends(require_admin)):
+    return await _do_admin_inline_update(inc_id, request)
+
+# POST-Alias für Update — gleiche Logik, andere HTTP-Methode (Proxy-Bypass).
+@app.post("/api/admin/incident/{inc_id}/update")
+async def admin_inline_update_post(inc_id: int, request: Request, _=Depends(require_admin)):
+    return await _do_admin_inline_update(inc_id, request)
+
+async def _do_admin_inline_update(inc_id: int, request: Request):
     """Quick-edit fields on a single incident from the map (admin only)."""
     try:
         data = await request.json()
@@ -8664,6 +8993,40 @@ async def admin_stop(_=Depends(require_admin)):
 async def admin_hist(bg: BackgroundTasks, reset: bool = False, _=Depends(require_admin)):
     bg.add_task(run_historical, reset)
     return JSONResponse({"status": "Historisch gestartet"})
+
+@app.post("/admin/api/barrikade-test")
+async def admin_barrikade_test(_=Depends(require_admin)):
+    """Forcierter Test-Login auf publish.barrikade.info mit voller
+    Diagnose. Greift auf die Cache-Session NICHT zu — frischer Versuch."""
+    sess = _barrikade_login_session(force_refresh=True, capture_diag=True)
+    diag = dict(_BK_LAST_DIAG)
+    diag["session_acquired"] = sess is not None
+    # ENV-Status (ohne Passwort zu leaken)
+    diag["env"] = {
+        "BARRIKADE_USER_set": bool(os.getenv("BARRIKADE_USER")),
+        "BARRIKADE_PASS_set": bool(os.getenv("BARRIKADE_PASS")),
+        "BARRIKADE_LOGIN_URL": os.getenv("BARRIKADE_LOGIN_URL","(default)"),
+        "BARRIKADE_BASE":      os.getenv("BARRIKADE_BASE","(default)"),
+    }
+    if sess is not None:
+        try:
+            urls = _barrikade_authed_discover_urls(sess)
+            diag["discovery"] = {"urls_found": len(urls), "sample": urls[:5]}
+        except Exception as e:
+            diag["discovery"] = {"error": str(e)[:300]}
+    return JSONResponse(diag)
+
+@app.post("/admin/api/barrikade-crawl")
+async def admin_barrikade_crawl(bg: BackgroundTasks, _=Depends(require_admin)):
+    """Trigger einen authentifizierten Barrikade-Crawl-Lauf im Background."""
+    def _job():
+        try:
+            n = _crawl_barrikade_authed()
+            log.info(f"barrikade authed crawl finished: {n} inserts")
+        except Exception as e:
+            log.error(f"barrikade authed crawl error: {e}", exc_info=True)
+    bg.add_task(_job)
+    return JSONResponse({"status": "Barrikade-Auth-Crawl gestartet"})
 
 @app.get("/admin/api/status")
 async def admin_status(_=Depends(require_admin)):

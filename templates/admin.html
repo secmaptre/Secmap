@@ -235,6 +235,8 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
       <button class="btn" onclick="stopCrawl()">■ STOPPEN</button>
       <button class="btn btn-accent" onclick="seedData()" id="btn-seed">↓ HISTORISCHE DATEN</button>
       <button class="btn" onclick="testGrok()">⚡ GROK TESTEN</button>
+      <button class="btn" onclick="testBarrikadeAuth()" title="publish.barrikade.info SPIP-Login testen">⚡ BARRIKADE-AUTH</button>
+      <button class="btn" onclick="crawlBarrikadeAuth()" title="Authentifizierten Crawl auf publish.barrikade.info starten">▶ BARRIKADE-CRAWL</button>
       <button class="btn" onclick="reGeo()">⊕ GEOCODING WIEDERHOLEN</button>
       <button class="btn" onclick="refreshStatus()">↺ STATUS</button>
       <button class="btn btn-red" onclick="clearDB()">✕ DB LÖSCHEN</button>
@@ -606,6 +608,33 @@ async function testGrok(){
   log('Teste Grok API…');
   try{const d=await apiFetch('/admin/api/grok-test',{method:'POST'});log('Grok → '+JSON.stringify(d));toast('Grok OK');}
   catch(e){log('Fehler: '+e.message);}
+}
+
+async function testBarrikadeAuth(){
+  log('Teste publish.barrikade.info SPIP-Login (volle Diagnose)…');
+  try{
+    const d = await apiFetch('/admin/api/barrikade-test', {method:'POST'});
+    log('— ENV: '+JSON.stringify(d.env||{}));
+    (d.steps||[]).forEach(s => log('  · '+s.step+' '+JSON.stringify(Object.assign({},s,{step:undefined}))));
+    if(d.session_acquired){
+      log('✓ LOGIN OK (variant='+d.variant+')');
+      if(d.discovery) log('✓ Discovery: '+d.discovery.urls_found+' URLs · sample='+JSON.stringify(d.discovery.sample||[]));
+      toast('Barrikade-Auth OK');
+    } else {
+      log('✗ LOGIN FEHLGESCHLAGEN — siehe steps oben');
+      toast('Barrikade-Auth fehlgeschlagen');
+    }
+  }catch(e){ log('Fehler: '+e.message); toast('Test-Fehler'); }
+}
+
+async function crawlBarrikadeAuth(){
+  log('Starte authentifizierten Barrikade-Crawl…');
+  try{
+    const d = await apiFetch('/admin/api/barrikade-crawl', {method:'POST'});
+    log(d.status||'gestartet');
+    toast('Barrikade-Crawl läuft');
+    setTimeout(refreshStatus, 5000);
+  }catch(e){ log('Fehler: '+e.message); }
 }
 
 async function reGeo(){
