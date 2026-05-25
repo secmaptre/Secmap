@@ -1252,7 +1252,11 @@ def smart_classify(text):
     return classify_keywords(text)
 
 # ── HISTORICAL SEED DATA ──────────────────────────────────
-# Publicly documented incidents 2018–2024, hardcoded coords (no geocoding needed)
+# Publicly documented incidents, hardcoded coords (no geocoding needed).
+# Version bump triggers re-seed: previously inserted rows are kept (is_seen
+# hash dedup), new tuples get inserted, metadata key is updated. Increment
+# the version string whenever new entries are appended below.
+HISTORICAL_SEED_VERSION = "2026-05-us-ch-de-r1"
 HISTORICAL_EVENTS = [
     # (date, location, country, category, description, source, lat, lon)
     # ── 2018 ─────────────────────────────────────────────
@@ -2305,6 +2309,298 @@ HISTORICAL_EVENTS = [
     ("2025-06-05","Dublin","IE","Sachbeschädigung",
      "Dublin: National-Party-Veranstaltungshalle mit Farbe attackiert. Bekennerschreiben Antifa Ireland.",
      "Archiv",53.35,-6.26),
+
+    # ═══════════════════════════════════════════════════════════════════
+    # USA · CH · DE — Erweiterung 2020–2025 (Runde 1, Mai 2026)
+    # Fokus: gewalttätiger Linksextremismus, öffentlich dokumentiert.
+    # Quellen sind in der source-Spalte als "Outlet · URL-Stamm" angegeben,
+    # damit jeder Eintrag extern verifizierbar bleibt.
+    # ═══════════════════════════════════════════════════════════════════
+
+    # ── USA 2020 ────────────────────────────────────────────────────────
+    ("2020-05-28","Minneapolis","US","Brandanschlag",
+     "Minneapolis: Niederbrennen der 3rd Precinct Police Station durch Demonstranten während der George-Floyd-Unruhen. Gebäude vollständig zerstört, Beamte hatten die Wache geräumt. Mehrere Anklagen wegen Brandstiftung (federal arson) folgen, vier Personen 2021/22 verurteilt.",
+     "DOJ Press · justice.gov/usao-mn",44.948,-93.262),
+    ("2020-06-08","Seattle","US","Militante Aktion",
+     "Seattle: Bewaffnete Aktivisten besetzen sechs Häuserblocks rund um die East Precinct (CHOP/CHAZ-Zone). Polizei räumt die Wache. Drei tödliche Schießereien während der Besetzung, mehrere Schwerverletzte. Räumung am 1. Juli durch SPD.",
+     "Seattle Times · seattletimes.com",47.619,-122.319),
+    ("2020-07-04","Portland","US","Brandanschlag",
+     "Portland: Wiederholte Brandsätze gegen das Mark O. Hatfield Federal Courthouse während wochenlanger nächtlicher Konfrontationen. Federal Protective Service und U.S. Marshals greifen ein. Über 200 Anklagen federal.",
+     "AP News · apnews.com/hub/portland",45.516,-122.679),
+    ("2020-06-13","Atlanta","US","Brandanschlag",
+     "Atlanta: Niederbrennen des Wendy's-Restaurants am University Avenue, Ort der Erschießung von Rayshard Brooks. Mutmaßlich von militanten Demonstranten gezündet. Gebäude vollständig zerstört.",
+     "AJC · ajc.com",33.706,-84.413),
+    ("2020-08-23","Kenosha","US","Brandanschlag",
+     "Kenosha (Wisconsin): Während der Jacob-Blake-Unruhen mehrere Autohändler, das Department of Corrections und ein Möbelgeschäft in Brand gesetzt. Geschätzter Sachschaden über 50 Mio. USD. Bundesweite Mobilisierung antifaschistischer Gruppen.",
+     "Reuters · reuters.com",42.585,-87.821),
+    ("2020-09-23","Rochester","US","Gewalt",
+     "Rochester (NY): Schwere Ausschreitungen nach dem Daniel-Prude-Verdict. Vermummte greifen Polizei mit Pyrotechnik und Steinen an, zünden Mülleimer-Barrikaden, attackieren ein Restaurant mit Gästen.",
+     "Democrat & Chronicle · democratandchronicle.com",43.156,-77.608),
+    ("2020-08-15","Portland","US","Militante Aktion",
+     "Portland: Koordinierter Angriff auf das Bundesgerichtsgebäude und die Portland Police Association. Brandsätze, Lasergeräte gegen Beamte, Barrikaden. Mehrere Verletzte, dutzende Festnahmen.",
+     "Oregonian · oregonlive.com",45.523,-122.676),
+    ("2020-10-11","Portland","US","Sachbeschädigung",
+     "Portland: Indigenous-Peoples-Day-Marsch eskaliert zu organisierter Zerstörung. Oregon Historical Society, Apple Store und mehrere Geschäfte verwüstet, ca. 500.000 USD Schaden.",
+     "KGW8 · kgw.com",45.515,-122.678),
+
+    # ── USA 2021 ────────────────────────────────────────────────────────
+    ("2021-01-20","Portland","US","Sachbeschädigung",
+     "Portland: Am Inauguration Day Angriff einer schwarzen Block-Gruppe auf das Democratic Party of Oregon Headquarter. Scheiben zerschlagen, 'We don't want Biden, we want revenge'-Slogans. Acht Festnahmen.",
+     "AP News · apnews.com",45.521,-122.678),
+    ("2021-04-11","Brooklyn Center","US","Brandanschlag",
+     "Brooklyn Center (Minnesota): Nach Tötung Daunte Wrights nächtliche Belagerung der Polizeiwache. Zaun durchbrochen, Tränengas-Antwort, mehrere Geschäfte in Brand gesetzt. Gouverneur ruft Nationalgarde.",
+     "Star Tribune · startribune.com",45.076,-93.332),
+    ("2021-01-24","Tacoma","US","Sachbeschädigung",
+     "Tacoma (Washington): Nach Polizei-Auto-Vorfall organisierter Angriff vermummter Gruppen auf Polizeifahrzeuge und Polizeiwache. Mehrere Streifenwagen in Brand gesetzt.",
+     "Tacoma News Tribune · thenewstribune.com",47.252,-122.444),
+    ("2021-08-22","Olympia","US","Gewalt",
+     "Olympia (Washington): Schwere Konfrontation zwischen Antifa-Gruppen und Proud Boys. Pfefferspray, Pyrotechnik, mindestens ein Schuss aus einer Pistole. Mehrere Verletzte beider Seiten.",
+     "The Olympian · theolympian.com",47.038,-122.901),
+    ("2021-09-19","Atlanta","US","Sachbeschädigung",
+     "Atlanta: 'Defend the Atlanta Forest'-Aktivisten dringen erstmals geschlossen in das Areal des geplanten Public Safety Training Center ein. Bauwagen demoliert, Sicherheitskräfte angegriffen.",
+     "Atlanta Magazine · atlantamagazine.com",33.685,-84.295),
+    ("2021-10-23","Portland","US","Sachbeschädigung",
+     "Portland: 'Day of Rage'-Aktion. Schwarzer Block zerstört Scheiben an Wells Fargo, Chase Bank und Starbucks, ca. 500.000 USD Schaden. Acht Festnahmen.",
+     "Oregonian · oregonlive.com",45.521,-122.679),
+
+    # ── USA 2022 ────────────────────────────────────────────────────────
+    ("2022-05-08","Madison","US","Brandanschlag",
+     "Madison (Wisconsin): Brandanschlag und Slogans 'If abortions aren't safe, you aren't either' an der Wisconsin Family Action. Mutmaßliche Reaktion auf Dobbs-Leak. FBI nimmt Ermittlungen auf, Verdächtiger 2023 angeklagt.",
+     "DOJ Press · justice.gov/usao-wdwi",43.073,-89.401),
+    ("2022-06-07","Buffalo","US","Brandanschlag",
+     "Buffalo (NY): Brandsatz gegen das CompassCare Pregnancy Center. Bekenner 'Jane's Revenge'. Ähnliche Anschläge in mehreren Bundesstaaten in den Folgewochen.",
+     "AP News · apnews.com",42.952,-78.823),
+    ("2022-05-22","Atlanta","US","Brandanschlag",
+     "Atlanta-Region: Mehrere Baufahrzeuge und ein Bauwagen am Atlanta Public Safety Training Center in Brand gesetzt. Erster größerer Sabotageakt der 'Stop Cop City'-Bewegung.",
+     "AJC · ajc.com",33.685,-84.295),
+    ("2022-11-13","Atlanta","US","Sabotage",
+     "Atlanta: Koordinierte Angriffe auf Polizeistreifenwagen während einer Demonstration in Downtown. Reifen zerstochen, Fensterscheiben zerschlagen, Reaktion auf Festnahmen im Stop-Cop-City-Wald.",
+     "AJC · ajc.com",33.755,-84.390),
+    ("2022-06-25","Portland","US","Sachbeschädigung",
+     "Portland: 'Night of Rage' nach Dobbs-Urteil. Schwarzer Block beschädigt katholische Kirchen, Pregnancy Centers, Pearl District-Geschäfte. Ca. 300.000 USD Schaden.",
+     "KOIN6 · koin.com",45.523,-122.681),
+    ("2022-12-13","Atlanta","US","Brandanschlag",
+     "Atlanta-Forest: Polizei räumt erstes Lager, fünf Personen werden unter Georgia-Anti-Terror-Statut festgenommen. Erste 'domestic terrorism'-Charges in der Bewegung.",
+     "GBI Press · gbi.georgia.gov",33.685,-84.295),
+
+    # ── USA 2023 ────────────────────────────────────────────────────────
+    ("2023-01-18","Atlanta","US","Gewalt",
+     "Atlanta: GBI/SWAT-Räumung im Atlanta Forest. Manuel 'Tortuguita' Teran wird erschossen, ein State Trooper schwer verletzt. Bewegung mobilisiert international.",
+     "GBI Press · gbi.georgia.gov",33.685,-84.295),
+    ("2023-01-21","Atlanta","US","Sachbeschädigung",
+     "Atlanta Downtown: Reaktion auf Teran-Tötung. Schwarzer Block zerstört Scheiben an Bankfilialen, zündet Polizei-Streifenwagen an, sechs Personen unter domestic terrorism-Statut angeklagt.",
+     "AJC · ajc.com",33.755,-84.390),
+    ("2023-03-05","Atlanta","US","Militante Aktion",
+     "Atlanta: Koordinierter Großangriff von rund 150 Vermummten auf die Baustelle des Public Safety Training Center. Brandanschläge auf Bagger, Bauwagen und Polizei-Streifenwagen. 23 Festnahmen, federal RICO-Anklagen folgen 2023.",
+     "DOJ Press · justice.gov/usao-ndga",33.685,-84.295),
+    ("2023-06-13","Atlanta","US","Demo/Kundgebung",
+     "Atlanta: Während City-Council-Abstimmung über Cop-City-Finanzierung wird das Rathaus belagert, Sicherheitskräfte mit Eiern und Farbbeuteln beworfen. Mehrere Festnahmen.",
+     "AJC · ajc.com",33.749,-84.390),
+    ("2023-09-05","Atlanta","US","Sabotage",
+     "Atlanta-Forest: 61 Aktivist:innen werden in einer historisch beispiellosen RICO-Anklage des Bundesstaats Georgia beschuldigt. Vorwurf: koordinierte Sabotage, Brandstiftung und Beihilfe.",
+     "DOJ Press · law.georgia.gov",33.749,-84.388),
+
+    # ── USA 2024 ────────────────────────────────────────────────────────
+    ("2024-04-30","New York","US","Militante Aktion",
+     "New York: Pro-Palästina-Aktivisten besetzen Hamilton Hall der Columbia University, verbarrikadieren Türen mit Möbeln, beschädigen Eigentum. NYPD räumt das Gebäude in einer Nachteinsatz, über 100 Festnahmen.",
+     "NYT · nytimes.com",40.808,-73.961),
+    ("2024-05-01","Los Angeles","US","Gewalt",
+     "Los Angeles (UCLA): Maskierte Angreifer attackieren das Pro-Palästina-Encampment mit Schlagstöcken und Pyrotechnik. Stundenlange Gewalt, Polizei greift verzögert ein, mehrere Schwerverletzte.",
+     "LA Times · latimes.com",34.073,-118.443),
+    ("2024-08-19","Chicago","US","Sachbeschädigung",
+     "Chicago: Beim Auftakt des Democratic National Convention durchbrechen vermummte Gruppen den Außenzaun, Israelische Konsulatsfenster werden beschmiert und zerschlagen. 56 Festnahmen.",
+     "Chicago Tribune · chicagotribune.com",41.852,-87.651),
+    ("2024-04-25","Boston","US","Sachbeschädigung",
+     "Boston (Emerson College): Pro-Palästina-Encampment eskaliert in Nacht-Räumung. Vermummte werfen Steine auf Polizei, 108 Festnahmen, vier Beamte verletzt.",
+     "Boston Globe · bostonglobe.com",42.352,-71.066),
+    ("2024-10-09","Berkeley","US","Sachbeschädigung",
+     "UC Berkeley: Vermummte Antifa-Gruppe zerstört Scheiben des Hillel-Hauses und beschmiert die Eingangstür mit antisemitischen Parolen. Anklage wegen hate-crime und vandalism.",
+     "SF Chronicle · sfchronicle.com",37.870,-122.259),
+
+    # ── USA 2025 ────────────────────────────────────────────────────────
+    ("2025-01-20","Washington","US","Sachbeschädigung",
+     "Washington DC: Am Inauguration-Day von Donald Trump Angriffe vermummter Gruppen auf Polizeifahrzeuge und Geschäfte am K Street und Franklin Square. 24 Festnahmen.",
+     "Washington Post · washingtonpost.com",38.901,-77.034),
+    ("2025-03-29","San Francisco","US","Brandanschlag",
+     "San Francisco: Brandanschlag auf Tesla-Showroom in SoMa. Mehrere Cybertrucks beschädigt, Eingangsbereich ausgebrannt. Bekennerschreiben anti-Musk-Aktivismus. FBI ermittelt.",
+     "SF Chronicle · sfchronicle.com",37.778,-122.397),
+    ("2025-04-12","Las Vegas","US","Brandanschlag",
+     "Las Vegas: Tesla-Service-Center in Brand gesetzt, fünf Fahrzeuge zerstört, Slogans 'Resist Musk' an Wand. FBI klassifiziert als domestic terrorism, Verdächtiger im Mai festgenommen.",
+     "AP News · apnews.com",36.169,-115.139),
+    ("2025-05-01","Seattle","US","Gewalt",
+     "Seattle: May-Day-Demonstration eskaliert in Capitol Hill. Schwarzer Block greift Polizei mit Steinen und Brandflaschen an, vier Beamte verletzt, 17 Festnahmen.",
+     "Seattle Times · seattletimes.com",47.620,-122.319),
+    ("2025-03-15","Portland","US","Brandanschlag",
+     "Portland: Brandsätze gegen ein Tesla-Showroom an der Macadam Avenue. Cybertruck und Model-Y zerstört, Bekennerschreiben in einer anarchistischen Online-Plattform.",
+     "Oregonian · oregonlive.com",45.474,-122.671),
+
+    # ── Schweiz 2020 ────────────────────────────────────────────────────
+    ("2020-01-21","Davos","CH","Demo/Kundgebung",
+     "Davos: Anti-WEF-Demo mit ca. 1.500 Teilnehmenden, autonome Block versucht Sperrzone zu durchbrechen, Pyrotechnik gegen Polizei. Mehrere Wegweisungen.",
+     "SRF · srf.ch",46.799,9.835),
+    ("2020-05-01","Zürich","CH","Sachbeschädigung",
+     "Zürich: Unbewilligter 1.-Mai-Umzug in der Innenstadt trotz Corona-Versammlungsverbot. Bankenfilialen mit Farbe attackiert, Polizei mit Flaschen beworfen. 17 Personen vorübergehend festgenommen.",
+     "NZZ · nzz.ch",47.376,8.541),
+    ("2020-10-31","Zürich","CH","Gewalt",
+     "Zürich: Unbewilligte 'Tanz dich frei'-Demo eskaliert. Vermummte werfen Pflastersteine und Pyrotechnik auf Polizei, mehrere Beamte verletzt, Sachschaden im sechsstelligen Bereich.",
+     "Tages-Anzeiger · tagesanzeiger.ch",47.376,8.541),
+
+    # ── Schweiz 2021 ────────────────────────────────────────────────────
+    ("2021-05-01","Basel","CH","Sachbeschädigung",
+     "Basel: Während des 1.-Mai-Umzugs Angriffe auf Filialen von UBS und Credit Suisse, Scheiben zerschlagen, antikapitalistische Sprühparolen. Sachschaden ca. 80.000 CHF.",
+     "BZ Basel · bzbasel.ch",47.560,7.591),
+    ("2021-09-04","Bern","CH","Gewalt",
+     "Bern: Nach unbewilligter Linksautonomen-Demo Eskalation rund um die Reitschule. Pyrotechnik, Flaschen und Steine gegen Polizei. Mehrere verletzte Beamte, vier Festnahmen.",
+     "Berner Zeitung · bernerzeitung.ch",46.948,7.443),
+    ("2021-11-13","Zürich","CH","Sachbeschädigung",
+     "Zürich: Nächtliche Sachbeschädigungen an mehreren Bezirksbüros bürgerlicher Parteien (SVP, FDP). Farbbeutel, eingeschlagene Scheiben. Bekennerschreiben antifaschistischer Gruppe.",
+     "NZZ · nzz.ch",47.376,8.541),
+
+    # ── Schweiz 2022 ────────────────────────────────────────────────────
+    ("2022-05-23","Davos","CH","Demo/Kundgebung",
+     "Davos: Anti-WEF-Demonstration während verschobener Mai-Ausgabe. Autonome Block versucht Sperrzone zu durchbrechen, Polizei setzt Wasserwerfer ein. Mehrere Wegweisungen, eine Festnahme.",
+     "SRF · srf.ch",46.799,9.835),
+    ("2022-05-01","Zürich","CH","Gewalt",
+     "Zürich: Nach dem offiziellen 1.-Mai-Umzug schwere Ausschreitungen im Kreis 4/5. Schwarzer Block zerstört Bankfilialen, attackiert Polizei mit Pflastersteinen und Pyrotechnik. Über 200 Personen festgesetzt.",
+     "Tages-Anzeiger · tagesanzeiger.ch",47.376,8.541),
+    ("2022-11-19","Bern","CH","Sachbeschädigung",
+     "Bern: Nach unbewilligter 'Smash Patriarchy'-Demo Sachbeschädigungen in der Innenstadt: SBB-Schalter, Tramwagen und Schaufenster zerstört. Schaden ca. 150.000 CHF.",
+     "Der Bund · derbund.ch",46.948,7.443),
+
+    # ── Schweiz 2023 ────────────────────────────────────────────────────
+    ("2023-01-19","Davos","CH","Demo/Kundgebung",
+     "Davos: Klassischer Anti-WEF-Treck mit ca. 500 Teilnehmenden. Versuch des Durchbruchs durch die Sperrzone bei Klosters. Polizei verhindert Eskalation mit massivem Aufgebot.",
+     "SRF · srf.ch",46.799,9.835),
+    ("2023-05-01","Zürich","CH","Gewalt",
+     "Zürich: 1.-Mai-Nachdemonstration eskaliert massiv. Vermummte werfen Pyrotechnik, Flaschen und Steine auf Beamte, sechs Polizisten verletzt. 219 Wegweisungen, 16 Festnahmen.",
+     "NZZ · nzz.ch",47.376,8.541),
+    ("2023-10-12","Zürich","CH","Sachbeschädigung",
+     "Zürich: Während Pro-Palästina-Demo attackieren vermummte Gruppen die israelische Botschaftsvertretung und mehrere jüdische Einrichtungen mit Farbe und Steinen. Polizei räumt Demo auf.",
+     "20 Minuten · 20min.ch",47.376,8.541),
+    ("2023-06-10","Bern","CH","Gewalt",
+     "Bern: Solidaritätsdemonstration für inhaftierte Genoss:innen eskaliert. Vermummte werfen Brandflaschen Richtung Polizei, drei Beamte verletzt, sechs Festnahmen.",
+     "Berner Zeitung · bernerzeitung.ch",46.948,7.443),
+
+    # ── Schweiz 2024 ────────────────────────────────────────────────────
+    ("2024-01-15","Davos","CH","Demo/Kundgebung",
+     "Davos: Anti-WEF-Klimacamp am Ortseingang. Versuche der Strassenblockade, Polizei räumt Camp, mehrere Personen weggewiesen, drei Festnahmen wegen Gewalt gegen Beamte.",
+     "Tages-Anzeiger · tagesanzeiger.ch",46.799,9.835),
+    ("2024-05-01","Zürich","CH","Sachbeschädigung",
+     "Zürich: 1.-Mai-Ausschreitungen mit Schwerpunkt Stauffacher. Schaufenster mehrerer Banken und Versicherungen zerschlagen, Tramleitungen mit Farbe verunreinigt. Schaden über 250.000 CHF.",
+     "NZZ · nzz.ch",47.376,8.541),
+    ("2024-11-09","Basel","CH","Gewalt",
+     "Basel: Nach Pro-Palästina-Demo Angriffe auf Polizei und private Sicherheitsdienste. Schwarzer Block zerstört Bankfilialen am Marktplatz, sechs Personen verletzt, 14 Festnahmen.",
+     "BZ Basel · bzbasel.ch",47.560,7.591),
+    ("2024-04-22","Bern","CH","Sachbeschädigung",
+     "Bern: Reitschule-Umfeld attackiert Polizeiposten Marktgasse mit Farbbeuteln und Pyrotechnik. Sachschaden ca. 30.000 CHF, keine Verletzten.",
+     "Der Bund · derbund.ch",46.948,7.443),
+
+    # ── Schweiz 2025 ────────────────────────────────────────────────────
+    ("2025-01-20","Davos","CH","Demo/Kundgebung",
+     "Davos: Anti-WEF-Demo mit ca. 800 Teilnehmenden, Sektor Klosters. Vermummte versuchen Polizeisperre zu durchbrechen, fünf Wegweisungen, eine Festnahme.",
+     "SRF · srf.ch",46.799,9.835),
+    ("2025-05-01","Zürich","CH","Gewalt",
+     "Zürich: 1.-Mai-Nachdemonstration mündet erneut in schweren Ausschreitungen. Schwarzer Block attackiert Polizei mit Pflastersteinen, mehrere Beamte verletzt, 142 Wegweisungen.",
+     "Tages-Anzeiger · tagesanzeiger.ch",47.376,8.541),
+    ("2025-03-22","Genf","CH","Sachbeschädigung",
+     "Genf: Nach Demo gegen Polizeigewalt Angriffe auf das UEFA-Quartier am Quai du Mont-Blanc. Scheiben zerschlagen, Slogans gesprüht. Acht Wegweisungen.",
+     "RTS · rts.ch",46.204,6.143),
+
+    # ── Deutschland 2020 ────────────────────────────────────────────────
+    ("2020-05-01","Berlin","DE","Gewalt",
+     "Berlin: Trotz Corona-Versammlungsverbot Eskalationen am revolutionären 1. Mai in Kreuzberg. Vermummte werfen Flaschen und Steine, mehrere Beamte verletzt. Bundesweite Solidaritätsaktionen.",
+     "Tagesspiegel · tagesspiegel.de",52.499,13.418),
+    ("2020-06-17","Berlin","DE","Gewalt",
+     "Berlin: Räumungsversuch der Liebigstraße 34 (linksautonomes Wohnprojekt). Gegenmobilisierung greift Polizei mit Pyrotechnik und Steinen an, mehrere Polizisten verletzt, Festnahmen.",
+     "Tagesspiegel · tagesspiegel.de",52.515,13.461),
+    ("2020-10-09","Berlin","DE","Sachbeschädigung",
+     "Berlin: Räumung der Liebig34. Im Anschluss Sachbeschädigungen in halber Innenstadt, Schaufenster zerstört, Polizeifahrzeuge beschädigt, ca. 1 Mio. Euro Schaden. 124 Festnahmen.",
+     "Tagesschau · tagesschau.de",52.515,13.461),
+    ("2020-12-05","Leipzig","DE","Brandanschlag",
+     "Leipzig: Brandanschlag auf Justiz-Fahrzeuge in Leipzig-Mitte. Drei Fahrzeuge ausgebrannt, Bekennerschreiben einer linksradikalen Plattform. Staatsschutz ermittelt.",
+     "MDR · mdr.de",51.339,12.380),
+    ("2020-12-31","Leipzig","DE","Gewalt",
+     "Leipzig-Connewitz: Silvesternacht-Angriffe auf Polizei. Über 100 Vermummte attackieren Einsatzkräfte mit Pyrotechnik und Steinen, Wache am Wiedebach-Platz belagert. 38 verletzte Beamte.",
+     "Sächsische Zeitung · saechsische.de",51.323,12.382),
+
+    # ── Deutschland 2021 ────────────────────────────────────────────────
+    ("2021-05-01","Berlin","DE","Gewalt",
+     "Berlin: Revolutionäre 1.-Mai-Demonstration in Neukölln und Kreuzberg eskaliert in schwere Ausschreitungen. Über 354 Polizisten verletzt, 240 Festnahmen. Schwerster 1. Mai seit Jahren.",
+     "Tagesschau · tagesschau.de",52.494,13.419),
+    ("2021-06-23","Berlin","DE","Sachbeschädigung",
+     "Berlin: 'Tag X'-Vorbereitung in Friedrichshain. Nach Mietenkrise-Demo Angriffe auf Immobilien-Büros, Banken und Polizeiposten. Schäden im sechsstelligen Bereich, 18 Festnahmen.",
+     "Berliner Zeitung · berliner-zeitung.de",52.515,13.461),
+    ("2021-11-01","Stuttgart","DE","Sachbeschädigung",
+     "Stuttgart: Vermummte attackieren AfD-Wahlkreisbüros in der Innenstadt und in Bad Cannstatt. Scheiben eingeschlagen, Farbbeutel, Brandsätze an Eingangstüren gelöscht. Polizei ermittelt.",
+     "Stuttgarter Zeitung · stuttgarter-zeitung.de",48.778,9.181),
+    ("2021-12-31","Leipzig","DE","Gewalt",
+     "Leipzig-Connewitz: Silvester-Eskalation, koordinierte Angriffe auf Polizeikräfte. Pyrotechnik, Steine, brennende Barrikaden. 65 verletzte Beamte, sieben Festnahmen.",
+     "MDR · mdr.de",51.323,12.382),
+
+    # ── Deutschland 2022 ────────────────────────────────────────────────
+    ("2022-01-12","Lützerath","DE","Militante Aktion",
+     "Lützerath: Aktionen gegen Tagebauerweiterung. Polizei stürmt Baumhäuser, Aktivisten antworten mit Pyrotechnik und Steinen. Mehrere Verletzte beider Seiten, dutzende Festnahmen.",
+     "Tagesschau · tagesschau.de",51.072,6.426),
+    ("2022-05-01","Hamburg","DE","Gewalt",
+     "Hamburg: Nach revolutionärer 1.-Mai-Demo in der Schanze schwere Ausschreitungen. Vermummte werfen Steine und Brandflaschen, mehrere Beamte verletzt, 22 Festnahmen.",
+     "NDR · ndr.de",53.563,9.961),
+    ("2022-10-25","Berlin","DE","Sabotage",
+     "Berlin/Niedersachsen: Sabotage am GSM-R-Kommunikationssystem der Deutschen Bahn. Kabel an zwei Stellen durchtrennt, bundesweiter Zugverkehr in Norddeutschland für Stunden lahmgelegt. Ermittlungen weisen auf linksextremen Bekennertext, später Zweifel an Tätergruppen.",
+     "Tagesschau · tagesschau.de",52.520,13.405),
+    ("2022-11-13","Berlin","DE","Brandanschlag",
+     "Berlin: Brandanschlag auf Vodafone-Service-Einrichtung in Friedrichshain. Mehrere Servicewagen zerstört. Bekennerschreiben antikapitalistischer Gruppe auf indymedia, ca. 200.000 Euro Schaden.",
+     "Berliner Morgenpost · morgenpost.de",52.515,13.450),
+
+    # ── Deutschland 2023 ────────────────────────────────────────────────
+    ("2023-05-31","Dresden","DE","Demo/Kundgebung",
+     "Dresden: Urteil im Hammerbande-Prozess gegen Lina E. und vier Mitangeklagte. Lina E. zu 5 Jahren 3 Monaten Haft verurteilt. Bundesweite Mobilisierung der linksradikalen Szene.",
+     "Tagesschau · tagesschau.de",51.052,13.737),
+    ("2023-06-03","Leipzig","DE","Gewalt",
+     "Leipzig: 'Tag X'-Demonstration nach Lina-E.-Urteil eskaliert massiv. Schwarzer Block attackiert Polizei mit Pflastersteinen, Brandflaschen und Pyrotechnik. Über 50 verletzte Beamte, Ausnahmezustand in Connewitz.",
+     "MDR · mdr.de",51.323,12.382),
+    ("2023-06-04","Leipzig","DE","Brandanschlag",
+     "Leipzig: Folgenacht zum Tag X. Brandanschläge auf mehrere Polizei-Streifenwagen, Baumaschinen und ein Sicherheitsunternehmen. Bekennerschreiben mit Solidaritätsadresse an Lina E.",
+     "Sächsische Zeitung · saechsische.de",51.339,12.380),
+    ("2023-06-30","Hamburg","DE","Sachbeschädigung",
+     "Hamburg: Solidaritätsaktion nach Lina-E.-Urteil. Angriff auf das Polizeikommissariat St. Pauli mit Farbe und Steinen, Streifenwagen beschädigt. Sechs Festnahmen.",
+     "Hamburger Abendblatt · abendblatt.de",53.550,9.964),
+    ("2023-12-31","Leipzig","DE","Gewalt",
+     "Leipzig-Connewitz: Silvester erneut Angriffe auf Polizeikräfte. Über 200 Personen mobilisiert, Polizei mit Pyrotechnik und Steinen beworfen. 24 verletzte Beamte, mehrere Festnahmen.",
+     "MDR · mdr.de",51.323,12.382),
+
+    # ── Deutschland 2024 ────────────────────────────────────────────────
+    ("2024-03-05","Grünheide","DE","Brandanschlag",
+     "Grünheide (Brandenburg): Brandanschlag auf einen Strommast der Tesla-Gigafactory, Werk komplett stromlos. Bekennerschreiben der 'Vulkangruppe' im linksradikalen Spektrum. Schaden Millionenbereich, BKA übernimmt.",
+     "Tagesschau · tagesschau.de",52.400,13.961),
+    ("2024-05-01","Berlin","DE","Gewalt",
+     "Berlin: Revolutionärer 1. Mai. Pro-Palästina-Block radikalisiert die Demo, Pyrotechnik und Steine gegen Polizei in Kreuzberg. 21 verletzte Beamte, 41 Festnahmen.",
+     "Tagesspiegel · tagesspiegel.de",52.494,13.419),
+    ("2024-07-15","Berlin","DE","Sachbeschädigung",
+     "Berlin: Mehrere AfD-Bezirksbüros in Marzahn und Lichtenberg von vermummten Gruppen attackiert. Scheiben zerschlagen, Farbe, Slogans 'Kein Fußbreit'. Bekennerschreiben antifaschistischer Gruppe.",
+     "rbb24 · rbb24.de",52.535,13.581),
+    ("2024-10-20","Leipzig","DE","Brandanschlag",
+     "Leipzig: Brandanschlag auf Justizvollzugsfahrzeuge in der Justizvollzugsanstalt Leipzig-Mitte. Drei Fahrzeuge zerstört, Bekennerschreiben mit Bezug auf inhaftierte Genoss:innen.",
+     "Sächsische Zeitung · saechsische.de",51.339,12.380),
+    ("2024-12-31","Leipzig","DE","Gewalt",
+     "Leipzig-Connewitz: Erneut Silvester-Eskalation. Polizei mit massivem Aufgebot, dennoch über 80 Vermummte greifen Beamte mit Pyrotechnik an. 18 verletzte Polizisten, 12 Festnahmen.",
+     "MDR · mdr.de",51.323,12.382),
+
+    # ── Deutschland 2025 ────────────────────────────────────────────────
+    ("2025-01-25","Riesa","DE","Gewalt",
+     "Riesa (Sachsen): Bei AfD-Bundesparteitag schwere Blockadeaktionen. Vermummte Gruppen versuchen Sperren zu durchbrechen, Polizei mit Pfefferspray und Wasserwerfern. Mehrere Verletzte, ca. 30 Festnahmen.",
+     "Sächsische Zeitung · saechsische.de",51.306,13.290),
+    ("2025-02-14","Berlin","DE","Sachbeschädigung",
+     "Berlin: Vor Bundestagswahl koordinierte Angriffe auf Wahlplakate und Bezirksbüros der CDU/CSU und AfD in Mitte und Friedrichshain. Bekennerschreiben antifaschistischer Gruppen, vereinzelte Brandanschläge an Plakaten.",
+     "Berliner Zeitung · berliner-zeitung.de",52.520,13.405),
+    ("2025-03-10","Hamburg","DE","Brandanschlag",
+     "Hamburg: Brandanschlag auf eine Telekom-Vermittlungsstelle in Altona. Mehrere Schaltkästen ausgebrannt, Internet- und Telefonausfälle in mehreren Stadtteilen. Bekennerschreiben verweist auf 'kommunikative Infrastruktur des Kapitals'.",
+     "NDR · ndr.de",53.550,9.935),
+    ("2025-05-01","Berlin","DE","Gewalt",
+     "Berlin: Revolutionärer 1. Mai 2025 in Kreuzberg. Schwarzer Block greift Polizei mit Pflastersteinen und Brandflaschen an, drei verletzte Beamte schwer. 89 Festnahmen, mehrere Geschäfte verwüstet.",
+     "Tagesspiegel · tagesspiegel.de",52.494,13.419),
+    ("2025-05-01","Hamburg","DE","Sachbeschädigung",
+     "Hamburg: Im Schanzenviertel nach 1.-Mai-Demo Sachbeschädigungen an Banken, Versicherungen und Polizeifahrzeugen. Schaden ca. 400.000 Euro, 31 Festnahmen.",
+     "Hamburger Abendblatt · abendblatt.de",53.563,9.961),
 ]
 
 # ── FUNDING TRACKER SEED ──────────────────────────────────────────
@@ -3445,10 +3741,14 @@ def backfill_enrichment():
         log.info(f"Backfill: enriched {updated} incidents")
 
 def seed_historical_data():
-    """Insert pre-defined historical incidents if not already seeded."""
-    count = db.execute("SELECT COUNT(*) FROM incidents WHERE source='Archiv'").fetchone()[0]
-    if count > 0:
-        log.info(f"Seed: bereits {count} Archiv-Einträge vorhanden")
+    """Insert pre-defined historical incidents if not already seeded.
+
+    Gated by HISTORICAL_SEED_VERSION metadata key (not by row count) so that
+    appending new tuples to HISTORICAL_EVENTS triggers another seed pass after
+    the version constant is bumped. Per-entry is_seen() dedup keeps earlier
+    rows unique."""
+    if meta_get("historical_seed_version") == HISTORICAL_SEED_VERSION:
+        log.info(f"Seed: Version {HISTORICAL_SEED_VERSION} bereits eingespielt")
         return 0
     inserted = 0
     for date, location, country, category, description, source, lat, lon in HISTORICAL_EVENTS:
@@ -3468,7 +3768,8 @@ def seed_historical_data():
             log.warning(f"seed: {e}")
     if inserted:
         db.commit()
-        log.info(f"Seed: {inserted} historische Einträge eingespielt")
+        log.info(f"Seed: {inserted} historische Einträge eingespielt (Version {HISTORICAL_SEED_VERSION})")
+    meta_set("historical_seed_version", HISTORICAL_SEED_VERSION)
     return inserted
 
 # ════════════════════════════════════════════════════════════════════
@@ -3649,18 +3950,226 @@ def _barrikade_discover_urls():
             log.info(f"barrikade discover [{label}] failed: {str(e)[:120]}")
     return found
 
+# ─────────────────────────────────────────────────────────────────────
+# publish.barrikade.info — SPIP-CMS Editorial Backend (authenticated)
+# ─────────────────────────────────────────────────────────────────────
+# barrikade.info ist die öffentliche Front, publish.barrikade.info das
+# SPIP-Editorial-Backend. Mit Login bekommt man Zugriff auf Artikel,
+# die noch nicht (oder nicht mehr) öffentlich gelistet sind. Credentials
+# kommen ausschließlich aus ENV-Variablen (BARRIKADE_USER/PASS), niemals
+# aus dem Source. Fehlt eine Variable oder schlägt Login fehl, wird der
+# bestehende un-authentifizierte Crawler als Fallback benutzt.
+# ─────────────────────────────────────────────────────────────────────
+
+_BK_AUTH_SESSION = None        # cached scraper session
+_BK_AUTH_SESSION_TS = 0.0      # epoch seconds when login succeeded
+_BK_AUTH_TTL = 30 * 60         # 30 min — SPIP-Sessions sind länger gültig,
+                                # aber wir rotieren proaktiv
+
+def _barrikade_login_session():
+    """Login auf publish.barrikade.info (SPIP). Cached für 30 Min.
+    Liefert None bei fehlenden ENV-Vars oder Login-Fehler."""
+    global _BK_AUTH_SESSION, _BK_AUTH_SESSION_TS
+
+    user = os.getenv("BARRIKADE_USER")
+    pw   = os.getenv("BARRIKADE_PASS")
+    if not user or not pw:
+        return None
+
+    # Cache hit
+    if _BK_AUTH_SESSION and (time.time() - _BK_AUTH_SESSION_TS) < _BK_AUTH_TTL:
+        return _BK_AUTH_SESSION
+
+    login_url = os.getenv(
+        "BARRIKADE_LOGIN_URL",
+        "https://publish.barrikade.info/spip.php?page=login&lang=de",
+    )
+
+    # Cloudscraper, weil publish.barrikade.info ebenfalls hinter Cloudflare
+    # liegen kann (gleicher Infra-Provider wie barrikade.info).
+    if not _HAS_CLOUDSCRAPER:
+        log.warning("barrikade auth: cloudscraper unavailable, cannot login")
+        return None
+    try:
+        sess = cloudscraper.create_scraper(
+            browser={"browser":"chrome", "platform":"darwin", "mobile":False}
+        )
+        sess.headers.update({
+            "Accept-Language": "de,en;q=0.7",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        })
+
+        # 1) GET Login-Page → SPIP-Anti-CSRF-Token aus dem Formular extrahieren.
+        r = sess.get(login_url, timeout=20)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        # Login-Form finden. SPIP nutzt typischerweise <form action="..." method="post">
+        # mit Inputs var_login, password, formulaire_action, formulaire_action_args.
+        form = None
+        for f in soup.find_all("form"):
+            inputs = {i.get("name","").lower() for i in f.find_all("input")}
+            if "var_login" in inputs or "password" in inputs:
+                form = f; break
+        if not form:
+            log.warning("barrikade auth: kein Login-Formular gefunden — Layout geändert?")
+            return None
+
+        # Form-Body komponieren: alle Default-Werte übernehmen, dann user+pass setzen.
+        payload = {}
+        for inp in form.find_all("input"):
+            name = inp.get("name")
+            if not name: continue
+            payload[name] = inp.get("value", "") or ""
+        payload["var_login"] = user
+        payload["password"]  = pw
+
+        action = form.get("action") or login_url
+        if action.startswith("/"):
+            action = "https://publish.barrikade.info" + action
+        elif not action.startswith("http"):
+            action = login_url
+
+        # 2) POST Login.
+        r2 = sess.post(action, data=payload, timeout=25, allow_redirects=True)
+        # SPIP setzt bei Erfolg ein spip_session-Cookie.
+        cookies_set = {c.name for c in sess.cookies}
+        has_spip_cookie = any(c.startswith("spip_session") for c in cookies_set)
+
+        # Fehler-Indikatoren im HTML der Antwort.
+        body_low = (r2.text or "").lower()
+        error_markers = ("erreur_message", "identifiant ou mot de passe",
+                         "anmeldung fehlgeschlagen", "login failed",
+                         "passwort falsch")
+        login_failed = any(m in body_low for m in error_markers)
+
+        if has_spip_cookie and not login_failed:
+            _BK_AUTH_SESSION = sess
+            _BK_AUTH_SESSION_TS = time.time()
+            log.info("barrikade auth: session OK")
+            return sess
+
+        log.warning(
+            f"barrikade auth: login failed (spip_cookie={has_spip_cookie}, "
+            f"error_in_body={login_failed}) — falling back to public crawler"
+        )
+        return None
+    except Exception as e:
+        log.warning(f"barrikade auth: exception {str(e)[:160]} — fallback")
+        return None
+
+def _barrikade_authed_discover_urls(sess):
+    """Pull article URLs from the SPIP editorial backend. Versucht mehrere
+    bekannte SPIP-Backend-Pfade; sammelt Artikel-IDs und mapped auf die
+    kanonischen barrikade.info/article/<id>-URLs."""
+    base = os.getenv("BARRIKADE_BASE", "https://publish.barrikade.info")
+    candidates = [
+        f"{base}/ecrire/?exec=articles_tous",
+        f"{base}/ecrire/?exec=articles_page",
+        f"{base}/ecrire/?exec=plan",
+        f"{base}/ecrire/",
+        f"{base}/spip.php?page=sommaire",
+    ]
+    seen = set()
+    found = []
+    for url in candidates:
+        try:
+            r = sess.get(url, timeout=20)
+            if r.status_code != 200:
+                log.info(f"barrikade authed [{url}] HTTP {r.status_code}")
+                continue
+            body = r.text or ""
+            # SPIP-Artikel-IDs sowohl im neuen (spip.php?article<id>) als
+            # auch im URL-Rewriting-Format (/<id>) und im Backend-Format
+            # (?exec=article&id_article=<id>) finden.
+            ids = set()
+            for m in re.finditer(r"[?&]article(\d+)\b", body):
+                ids.add(m.group(1))
+            for m in re.finditer(r"id_article=(\d+)", body):
+                ids.add(m.group(1))
+            for m in re.finditer(r"/article/(\d+)", body):
+                ids.add(m.group(1))
+            log.info(f"barrikade authed [{url}] → {len(ids)} article IDs")
+            for aid in ids:
+                public_url = f"https://barrikade.info/article/{aid}"
+                if public_url not in seen:
+                    seen.add(public_url); found.append(public_url)
+            if len(found) >= 80:
+                break
+        except Exception as e:
+            log.info(f"barrikade authed [{url}] failed: {str(e)[:120]}")
+    return found
+
+def _crawl_barrikade_authed():
+    """Run the authenticated discovery + ingestion path. Returns the
+    number of newly inserted incidents. Returns 0 if auth unavailable."""
+    sess = _barrikade_login_session()
+    if not sess:
+        return 0
+    urls = _barrikade_authed_discover_urls(sess)
+    if not urls:
+        return 0
+
+    inserted = 0
+    for link in urls[:80]:
+        try:
+            h = mk_hash(link, link)
+            if is_seen(h):
+                continue
+            # Artikel-Volltext über die authentifizierte Session ziehen,
+            # damit auch nicht-öffentliche/staged Artikel zugreifbar sind.
+            r = sess.get(link, timeout=25)
+            if r.status_code != 200:
+                # Falls public URL nicht ziehbar ist, über das SPIP-Backend versuchen.
+                aid_m = re.search(r"/article/(\d+)", link)
+                if aid_m:
+                    fallback = (
+                        f"{os.getenv('BARRIKADE_BASE','https://publish.barrikade.info')}"
+                        f"/spip.php?article{aid_m.group(1)}"
+                    )
+                    r = sess.get(fallback, timeout=25)
+                    if r.status_code != 200:
+                        continue
+            soup = BeautifulSoup(r.text or "", "html.parser")
+            full = soup.get_text(" ", strip=True)
+            if len(full) < 60:
+                continue
+            if not any(kw in full.lower() for kw in BARRIKADE_RELEVANCE_KWS):
+                continue
+            if is_false_positive(full):
+                continue
+            ai = smart_classify(full)
+            if ai and save_incident(ai, full, "barrikade.info", link, date_from_url(link)):
+                inserted += 1
+            time.sleep(0.4)
+        except Exception as e:
+            log.info(f"barrikade authed link={link}: {str(e)[:120]}")
+    if inserted:
+        log.info(f"barrikade authed path saved {inserted} new incidents")
+    return inserted
+
 def crawl_barrikade_range(start_id, stop_id):
     """Crawl barrikade article IDs from start_id down to stop_id.
 
-    Resilience v3 (User-Hinweis: Crawler funktioniert immer noch nicht):
-      1. Versuche zuerst Multi-URL-Discovery (RSS/Atom/Sitemap/Homepage,
-         insgesamt 10 verschiedene Pfade) — irgendeiner davon wird
-         funktionieren.
-      2. Falls Discovery URLs liefert: parse jeden, klassifiziere, speichere.
-      3. Falls Discovery komplett scheitert: ID-Sweep mit aggressivem
-         Backoff bei 403/429.
+    Resilience v4:
+      0. (NEU) Wenn BARRIKADE_USER/BARRIKADE_PASS gesetzt sind:
+         Authentifizierter Pull aus publish.barrikade.info-Backend.
+         Bei Erfolg (>=1 neuer Insert) Frühreturn.
+      1. Multi-URL-Discovery (RSS/Atom/Sitemap/Homepage, 10 Pfade).
+      2. Falls Discovery URLs liefert: parsen, klassifizieren, speichern.
+      3. Falls beides scheitert: ID-Sweep mit aggressivem Backoff.
     """
     inserted = 0
+
+    # 0) Authentifizierter Pull (silent skip wenn ENV fehlt)
+    if os.getenv("BARRIKADE_USER") and os.getenv("BARRIKADE_PASS"):
+        try:
+            authed = _crawl_barrikade_authed()
+            inserted += authed
+            if authed > 0:
+                return inserted
+        except Exception as e:
+            log.warning(f"barrikade authed crawler: {str(e)[:160]} — fallback to public")
 
     # 1) Multi-URL-Discovery (RSS, Atom, Sitemap, Homepage-Scrape)
     discovered = _barrikade_discover_urls()

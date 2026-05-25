@@ -788,6 +788,15 @@ body.mod-funding #mod-funding-view{display:grid !important;}
 @media (max-width: 480px) {
   .chip.hide-sm{display:none;}
   .tb-div.hide-sm{display:none;}
+  .brand-version{display:none;}
+  .tb-mod .gbtn{padding:4px 8px;font-size:10px;letter-spacing:1px;}
+  .tb-lang button{padding:2px 6px;}
+}
+@media (max-width: 360px){
+  .brand-name{font-size:10px;letter-spacing:1.5px;}
+  .tb-lang{margin-right:2px;}
+  #topbar{gap:6px;padding:0 6px;}
+  .tb-mod .gbtn{padding:3px 6px;}
 }
 </style>
 </head>
@@ -822,14 +831,14 @@ body.mod-funding #mod-funding-view{display:grid !important;}
   <div class="chip hide-mob"><span data-i18n="chip.sync">SYNC</span> <b id="ts">—</b></div>
   <div class="tb-sp"></div>
   <span class="tb-version hide-mob" data-i18n="brand.version">v2025.5 — Open Research</span>
-  <!-- LANGUAGE SWITCHER (DE / EN / FR / IT / ES / PT) -->
+  <!-- LANGUAGE SWITCHER (DE / EN sichtbar — FR/IT/ES/PT versteckt, JSONs bleiben für ?lang=xx Deep-Links) -->
   <div class="tb-lang" id="tb-lang" role="group" aria-label="Sprache">
     <button id="lang-de" data-lang="de" onclick="setLang('de')" title="Deutsch">DE</button>
     <button id="lang-en" data-lang="en" onclick="setLang('en')" title="English">EN</button>
-    <button id="lang-fr" data-lang="fr" onclick="setLang('fr')" title="Français">FR</button>
-    <button id="lang-it" data-lang="it" onclick="setLang('it')" title="Italiano">IT</button>
-    <button id="lang-es" data-lang="es" onclick="setLang('es')" title="Español">ES</button>
-    <button id="lang-pt" data-lang="pt" onclick="setLang('pt')" title="Português">PT</button>
+    <button id="lang-fr" data-lang="fr" onclick="setLang('fr')" title="Français" style="display:none" aria-hidden="true">FR</button>
+    <button id="lang-it" data-lang="it" onclick="setLang('it')" title="Italiano" style="display:none" aria-hidden="true">IT</button>
+    <button id="lang-es" data-lang="es" onclick="setLang('es')" title="Español" style="display:none" aria-hidden="true">ES</button>
+    <button id="lang-pt" data-lang="pt" onclick="setLang('pt')" title="Português" style="display:none" aria-hidden="true">PT</button>
   </div>
   <div class="tb-acts">
     <button class="gbtn hide-mob mod-inc-only" onclick="cmdOpen()" title="Suche (Strg+K)" data-i18n="topbar.search">Suche</button>
