@@ -5159,6 +5159,7 @@ async def sitemap_xml(request: Request):
         f"{base}/embed/counter", f"{base}/embed/headline", f"{base}/embed/trend",
         f"{base}/api/timeline/v2", f"{base}/api/heatmap",
         f"{base}/api/actors/cross-references",
+        f"{base}/en/dashboard", f"{base}/en/sources",
         f"{base}/api/v1/docs",
     ]
     # Per-target-type + per-country pages dynamisch ergänzen.
@@ -7475,6 +7476,177 @@ async def embed_trend():
 {''.join(labels)}
 </svg>
 </div></body></html>""")
+
+
+@app.get("/en/dashboard", response_class=HTMLResponse)
+async def public_dashboard_en():
+    """English version of /dashboard — for international press + research."""
+    s = await public_stats()
+    import json as _j
+    d = _j.loads(s.body)
+    today = d["asof"]
+    coBlocks = "\n".join(
+        f'<div class="kc-row"><span class="kc-co">{c["country"]}</span>'
+        f'<div class="kc-bar"><div class="kc-bar-fill" style="width:{round((c["n"]/max(d["by_country_top10"][0]["n"],1))*100)}%"></div></div>'
+        f'<span class="kc-n">{c["n"]}</span></div>'
+        for c in d["by_country_top10"]
+    )
+    return HTMLResponse(f"""<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><title>LEX EUROPE — Situation Dashboard {today}</title>
+<meta name="description" content="OSINT situational picture of politically-left motivated violence in Europe and the United States. {d['total_t1']} documented T1 acts, {d['active_clusters']} active early-warning clusters.">
+<meta property="og:title"       content="LEX EUROPE — Left-extremism Situational Picture">
+<meta property="og:description" content="{d['total_t1']} documented T1 acts · {d['last_7d']} in the last 7 days · {d['active_clusters']} active early-warning clusters.">
+<meta property="og:type"        content="website">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:ui-monospace,Menlo,Consolas,monospace;background:#080c12;color:#aab5c0;min-height:100vh;font-size:13px;line-height:1.5;}}
+.classbar{{background:#0a1219;border-bottom:1px solid rgba(255,255,255,0.06);padding:5px 18px;font-size:9px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;display:flex;justify-content:space-between;}}
+.classbar .l{{color:#6aa9c9;}}
+.page{{max-width:1100px;margin:0 auto;padding:30px 24px 60px;}}
+h1{{font-family:'Inter',system-ui,sans-serif;font-size:28px;font-weight:600;color:#e9eef3;letter-spacing:0.5px;margin-bottom:6px;}}
+.sub{{font-size:11px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;margin-bottom:32px;}}
+.kpi-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:32px;}}
+.kpi{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:18px 22px;}}
+.kpi .lbl{{font-size:9px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;margin-bottom:6px;}}
+.kpi .val{{font-size:30px;font-weight:600;color:#e9eef3;letter-spacing:-0.5px;font-variant-numeric:tabular-nums;}}
+.kpi.acc .val{{color:#6aa9c9;}}.kpi.red .val{{color:#d4495d;}}.kpi.amber .val{{color:#d99a2b;}}.kpi.green .val{{color:#5fb583;}}
+.kpi .delta{{font-size:10px;color:#6c7986;margin-top:4px;letter-spacing:1px;}}
+.section{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:24px;margin-bottom:18px;}}
+h2{{font-size:11px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-transform:uppercase;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid rgba(106,169,201,0.18);}}
+.kc-row{{display:flex;align-items:center;gap:14px;margin-bottom:8px;}}
+.kc-co{{font-size:11px;color:#aab5c0;min-width:35px;}}
+.kc-bar{{flex:1;height:6px;background:rgba(106,169,201,0.08);border-radius:1px;overflow:hidden;}}
+.kc-bar-fill{{height:100%;background:#6aa9c9;border-radius:1px;}}
+.kc-n{{font-size:11px;color:#e9eef3;min-width:30px;text-align:right;font-variant-numeric:tabular-nums;}}
+.cta{{display:inline-block;font-family:ui-monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#6aa9c9;border:1px solid #6aa9c9;padding:10px 16px;text-decoration:none;margin-right:8px;margin-top:8px;}}
+.cta:hover{{background:rgba(106,169,201,0.10);}}
+.footer{{font-size:9px;letter-spacing:1.5px;color:#3a4551;text-align:center;margin-top:30px;text-transform:uppercase;}}
+</style></head>
+<body>
+<div class="classbar"><span class="l">◆ OPEN SOURCE INTELLIGENCE · LEX EUROPE · UNCLASSIFIED // RELEASABLE</span><span>AS OF {today}</span></div>
+<div class="page">
+  <h1>Left-Extremism Situational Dashboard</h1>
+  <div class="sub">Europe + USA · OSINT aggregation · automatically generated</div>
+
+  <div class="kpi-grid">
+    <div class="kpi acc"><div class="lbl">Total T1 acts</div><div class="val">{d['total_t1']}</div><div class="delta">tier=act (arson / sabotage / violence / militant action)</div></div>
+    <div class="kpi"><div class="lbl">last 7 days</div><div class="val">{d['last_7d']}</div><div class="delta">new T1 acts</div></div>
+    <div class="kpi"><div class="lbl">last 30 days</div><div class="val">{d['last_30d']}</div><div class="delta">new T1 acts</div></div>
+    <div class="kpi red"><div class="lbl">high-severity ≥ 4</div><div class="val">{d['high_severity']}</div><div class="delta">personal injury / firebomb / ≥ €100k damage</div></div>
+    <div class="kpi amber"><div class="lbl">active early-warning clusters</div><div class="val">{d['active_clusters']}</div><div class="delta">≥ 3 similar attacks / 6 weeks</div></div>
+    <div class="kpi"><div class="lbl">identified actors</div><div class="val">{d['distinct_actors']}</div></div>
+    <div class="kpi"><div class="lbl">active sources</div><div class="val">{d['distinct_sources']}</div></div>
+  </div>
+
+  <div class="section">
+    <h2>Geographic distribution — Top 10 (T1)</h2>
+    {coBlocks}
+  </div>
+
+  <div class="section">
+    <h2>Interfaces</h2>
+    <a class="cta" href="/">→ Full map + filter</a>
+    <a class="cta" href="/lagebericht">→ Weekly briefing (DE)</a>
+    <a class="cta" href="/en/sources">→ Crawler sources</a>
+    <a class="cta" href="/api/incidents.rss">→ RSS feed</a>
+    <a class="cta" href="/api/early-warning.rss">→ Early-warning feed</a>
+    <a class="cta" href="/api/v1/docs">→ LEA / research API</a>
+    <a class="cta" href="/dashboard">→ Deutsch</a>
+  </div>
+
+  <div class="footer">
+    LEX EUROPE · OSINT platform · independent research · no ads · no tracking
+  </div>
+</div>
+</body></html>""")
+
+
+@app.get("/en/sources", response_class=HTMLResponse)
+async def public_sources_page_en():
+    """English version of /sources — crawler status visible to all."""
+    s_resp = await public_sources()
+    import json as _j
+    data = _j.loads(s_resp.body)
+    sources = data["sources"]
+    totals  = data["totals"]
+    order_map = {"healthy":0, "degraded":1, "warning":2, "untested":3, "disabled":4}
+    sources.sort(key=lambda s: (order_map.get(s["status"], 9), s["source"]))
+    def esc(s): return _xml_esc(s)
+    status_color = {"healthy":"#5fb583","degraded":"#d99a2b","warning":"#d99a2b","untested":"#6c7986","disabled":"#d4495d"}
+    status_label = {"healthy":"● active","degraded":"● degraded","warning":"● warning","untested":"○ untested","disabled":"● disabled"}
+    rows_html = "".join(
+        f"<tr class='s-{esc(s['status'])}'>"
+        f"<td><span style='color:{status_color.get(s['status'], '#6c7986')}'>{status_label.get(s['status'], '?')}</span></td>"
+        f"<td class='src'>{esc(s['source'])}</td><td class='url'>{esc(s.get('url') or '—')}</td>"
+        f"<td class='n'>{s.get('total_successes') or 0}</td><td class='n'>{s.get('total_attempts') or 0}</td>"
+        f"<td class='n'>{s.get('items_total') or 0}</td><td class='date'>{esc(s.get('last_success') or '—')}</td>"
+        f"<td class='n'>{s.get('consecutive_failures') or 0}</td></tr>"
+        for s in sources
+    ) or "<tr><td colspan='8' style='color:#6c7986;text-align:center;padding:20px'>— No crawl statistics yet (crawler runs ~20s after boot) —</td></tr>"
+    return HTMLResponse(f"""<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><title>Crawler sources — LEX EUROPE</title>
+<meta name="description" content="Status of all {data['configured']} configured crawler sources: {totals['healthy']} healthy, {totals['degraded']+totals['warning']} with errors, {totals['disabled']} auto-disabled.">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:ui-monospace,Menlo,Consolas,monospace;background:#080c12;color:#aab5c0;font-size:12px;line-height:1.5;}}
+.classbar{{background:#0a1219;border-bottom:1px solid rgba(255,255,255,0.06);padding:5px 18px;font-size:9px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;display:flex;justify-content:space-between;}}
+.classbar .l{{color:#6aa9c9;}}
+.page{{max-width:1100px;margin:0 auto;padding:30px 24px 60px;}}
+h1{{font-family:'Inter',system-ui,sans-serif;font-size:28px;font-weight:600;color:#e9eef3;letter-spacing:0.5px;margin-bottom:6px;}}
+.sub{{font-size:10px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;margin-bottom:24px;}}
+.kpi-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px;}}
+.kpi{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:16px 20px;}}
+.kpi .lbl{{font-size:8px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;margin-bottom:4px;}}
+.kpi .val{{font-size:24px;font-weight:600;color:#e9eef3;font-variant-numeric:tabular-nums;}}
+.kpi.green .val{{color:#5fb583;}}.kpi.amber .val{{color:#d99a2b;}}.kpi.red .val{{color:#d4495d;}}
+table{{width:100%;border-collapse:collapse;font-family:ui-monospace;font-size:11px;}}
+th,td{{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.04);text-align:left;vertical-align:top;}}
+th{{font-size:9px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;background:rgba(255,255,255,0.02);}}
+td.src{{color:#e9eef3;font-weight:600;}}
+td.url{{color:#6c7986;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}}
+td.n{{text-align:right;color:#aab5c0;font-variant-numeric:tabular-nums;}}
+td.date{{color:#6c7986;font-size:10px;}}
+tr:hover td{{background:rgba(106,169,201,0.04);}}
+.section{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:18px 22px;margin-bottom:14px;}}
+h2{{font-size:10px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid rgba(106,169,201,0.18);}}
+.footer{{font-size:9px;letter-spacing:1.5px;color:#3a4551;text-align:center;margin-top:30px;text-transform:uppercase;}}
+.cta{{display:inline-block;font-size:10px;letter-spacing:2px;color:#6aa9c9;border:1px solid #6aa9c9;padding:8px 14px;text-decoration:none;text-transform:uppercase;margin-right:6px;}}
+</style></head>
+<body>
+<div class="classbar"><span class="l">◆ OPEN SOURCE INTELLIGENCE · LEX EUROPE</span><span>CRAWLER STATUS · AS OF {esc(data['asof'][:10])}</span></div>
+<div class="page">
+  <h1>Crawler Source Status</h1>
+  <div class="sub">{data['configured']} configured sources · auto-disable after {SOURCE_MAX_FAILURES} consecutive failures · public visibility</div>
+
+  <div class="kpi-grid">
+    <div class="kpi"><div class="lbl">Configured</div><div class="val">{data['configured']}</div></div>
+    <div class="kpi green"><div class="lbl">Healthy</div><div class="val">{totals['healthy']}</div></div>
+    <div class="kpi amber"><div class="lbl">Degraded / Warning</div><div class="val">{totals['degraded']+totals['warning']}</div></div>
+    <div class="kpi red"><div class="lbl">Auto-Disabled</div><div class="val">{totals['disabled']}</div></div>
+    <div class="kpi"><div class="lbl">Untested</div><div class="val">{totals['untested']}</div></div>
+    <div class="kpi"><div class="lbl">Items in last run</div><div class="val">{data.get('items_today',0)}</div></div>
+  </div>
+
+  <div class="section">
+    <h2>All sources ({len(sources)} with crawl statistics)</h2>
+    <table>
+      <thead><tr><th>STATUS</th><th>SOURCE</th><th>URL</th><th>SUCC</th><th>ATTEMPTS</th><th>ITEMS</th><th>LAST SUCCESS</th><th>F-CHAIN</th></tr></thead>
+      <tbody>{rows_html}</tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <a class="cta" href="/api/public/sources">↗ JSON export</a>
+    <a class="cta" href="/en/dashboard">→ Dashboard</a>
+    <a class="cta" href="/">→ Map</a>
+    <a class="cta" href="/sources">→ Deutsch</a>
+  </div>
+
+  <div class="footer">LEX EUROPE · transparent crawler health · automatically updated</div>
+</div>
+</body></html>""")
 
 
 @app.get("/api/actors/cross-references")
