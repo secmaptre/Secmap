@@ -4736,6 +4736,206 @@ async def embed_headline():
     return HTMLResponse(f'<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0">{body}</body></html>')
 
 
+# ── BULK EXPORTS (für Researcher / Journalismus) ──────────────────
+@app.get("/api/incidents/export.csv")
+async def incidents_export_csv(
+    country: str = "", tier: str = "act", severity_min: int = 0,
+    date_from: str = "", date_to: str = "",
+):
+    """CSV-Export für tabellarische Weiterverarbeitung. Default tier=act
+    + alle Severities; mit ?tier=&severity_min=0 lassen sich auch T2/T3
+    abziehen. Header-Zeile inklusive."""
+    q = ("SELECT id,date,location,country,category,summary,description,"
+         "url,source,severity_score,actors,tier,target_type,"
+         "prosec_status,case_ref,evidence_sha,evidence_ts "
+         "FROM incidents WHERE 1=1")
+    p = []
+    if country:      q += " AND country=?";       p.append(country)
+    if tier:         q += " AND tier=?";          p.append(tier)
+    if severity_min: q += " AND severity_score>=?"; p.append(severity_min)
+    if date_from:    q += " AND date>=?";          p.append(date_from)
+    if date_to:      q += " AND date<=?";          p.append(date_to)
+    q += " ORDER BY date DESC"
+    rows = db.execute(q, p).fetchall()
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["id","date","location","country","category","summary",
+                 "description","url","source","severity_score","actors",
+                 "tier","target_type","prosec_status","case_ref",
+                 "evidence_sha","evidence_ts"])
+    for r in rows:
+        w.writerow([r[k] for k in (
+            "id","date","location","country","category","summary","description",
+            "url","source","severity_score","actors","tier","target_type",
+            "prosec_status","case_ref","evidence_sha","evidence_ts")])
+    return StreamingResponse(iter([buf.getvalue()]),
+                             media_type="text/csv; charset=utf-8",
+                             headers={"Content-Disposition":
+                                      f'attachment; filename="lex-europe-incidents-{datetime.now().date()}.csv"'})
+
+@app.get("/api/incidents/export.json")
+async def incidents_export_json(
+    country: str = "", tier: str = "act", severity_min: int = 0,
+):
+    """JSON-Bulk-Export — alle T1 mit Default-Filter. Researchers
+    können das ganze Dataset als single JSON in ihre Tools ziehen."""
+    q = ("SELECT id,date,location,country,category,summary,description,"
+         "url,source,severity_score,actors,tier,target_type,"
+         "prosec_status,case_ref,evidence_sha,evidence_ts,lat,lon "
+         "FROM incidents WHERE 1=1")
+    p = []
+    if country:      q += " AND country=?";       p.append(country)
+    if tier:         q += " AND tier=?";          p.append(tier)
+    if severity_min: q += " AND severity_score>=?"; p.append(severity_min)
+    q += " ORDER BY date DESC"
+    rows = [dict(r) for r in db.execute(q, p).fetchall()]
+    return JSONResponse({
+        "platform":   "LEX EUROPE",
+        "asof":       datetime.now().isoformat(timespec="seconds"),
+        "count":      len(rows),
+        "methodology":"https://lex-europe.org/methodology",
+        "incidents":  rows,
+    }, headers={"Content-Disposition":
+                f'attachment; filename="lex-europe-incidents-{datetime.now().date()}.json"'})
+
+
+@app.get("/api/target.rss")
+async def target_rss(request: Request, name: str = "", limit: int = 30):
+    """Per-Ziel-Klassen-RSS — Betreiber kritischer Infrastruktur können
+    gezielt ihren Sektor abonnieren (Schiene / Energie / Polizei / …)
+    statt den breiten /api/incidents.rss zu monitoren."""
+    if not name or name not in _TARGET_TYPE_ALLOWED:
+        return StreamingResponse(iter(["<?xml version='1.0'?><rss/>"]),
+                                 media_type="application/rss+xml")
+    rows = db.execute(
+        "SELECT id,date,location,country,category,summary,severity_score,"
+        "url,source FROM incidents WHERE tier='act' AND target_type=? "
+        "ORDER BY date DESC LIMIT ?", (name, min(max(limit, 1), 100))
+    ).fetchall()
+    base = str(request.base_url).rstrip("/")
+    items = []
+    for r in rows:
+        d = dict(r)
+        loc = _xml_esc(f"{d.get('location') or '—'}, {d.get('country') or '—'}")
+        cat = _xml_esc(d.get('category') or '—')
+        sev = d.get('severity_score') or 0
+        summ= _xml_esc((d.get('summary') or '')[:280])
+        url = _xml_esc(d.get('url') or f"{base}/")
+        items.append(
+            "<item>"
+            f"<title>[{cat} · S{sev}] {loc}</title>"
+            f"<link>{url}</link>"
+            f"<guid isPermaLink=\"false\">lex-tgt-{d.get('id')}</guid>"
+            f"<pubDate>{_rfc822(d.get('date'))}</pubDate>"
+            f"<category>{cat}</category>"
+            f"<description>{summ}</description>"
+            "</item>"
+        )
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+           '<rss version="2.0">\n<channel>\n'
+           f'<title>LEX EUROPE — Ziel-Klasse: {_xml_esc(name)}</title>\n'
+           f'<link>{base}/early-warning/{_xml_esc(name)}</link>\n'
+           f'<description>T1-Akte gegen Ziel-Klasse {_xml_esc(name)} (Säule 2).</description>\n'
+           '<language>de-DE</language>\n'
+           + "\n".join(items) +
+           '\n</channel>\n</rss>\n')
+    return StreamingResponse(iter([xml]), media_type="application/rss+xml; charset=utf-8")
+
+
+@app.get("/api/target-types")
+async def list_target_types():
+    """Listet alle bekannten Ziel-Klassen + Counts. Für UI-Drop-Downs
+    und API-Konsumenten, die Per-Target-RSS bauen wollen."""
+    rows = db.execute(
+        "SELECT target_type, COUNT(*) n FROM incidents "
+        "WHERE tier='act' AND target_type != '' "
+        "GROUP BY target_type ORDER BY n DESC"
+    ).fetchall()
+    return JSONResponse({
+        "target_types": [dict(r) for r in rows],
+        "allowed":      sorted(t for t in _TARGET_TYPE_ALLOWED if t),
+    })
+
+
+@app.get("/bookmarklet", response_class=HTMLResponse)
+async def public_bookmarklet():
+    """Browser-Bookmarklet-Generator. Admin oder Power-Nutzer ziehen
+    den Button in die Lesezeichenleiste; ein Klick auf einer beliebigen
+    Webseite öffnet einen Pre-Filled-Admin-Submit-Dialog mit der
+    aktuellen URL und dem Selektions-Text."""
+    # Bookmarklet code: read window.location + selection, post to
+    # /admin/api/add-incident-from-url. Da das Admin-Auth braucht,
+    # routet es eigentlich zu einem Quick-Submit-Endpoint.
+    bookmarklet_js = (
+        "javascript:(function(){"
+        "var u=encodeURIComponent(window.location.href);"
+        "var t=encodeURIComponent(document.title||'');"
+        "var s=encodeURIComponent(window.getSelection().toString().substring(0,500));"
+        "var w=window.open('https://lex-europe.org/admin/quick-submit?url='+u+'&title='+t+'&sel='+s,"
+        "'lexeurope','width=560,height=520');"
+        "})();"
+    )
+    return HTMLResponse(f"""<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><title>Browser-Bookmarklet — LEX EUROPE</title>
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:'Inter',system-ui,sans-serif;background:#080c12;color:#aab5c0;font-size:14px;line-height:1.7;}}
+.classbar{{background:#0a1219;border-bottom:1px solid rgba(255,255,255,0.06);padding:5px 18px;font-size:9px;letter-spacing:2.5px;color:#6c7986;font-family:ui-monospace,Menlo,monospace;text-transform:uppercase;display:flex;justify-content:space-between;}}
+.classbar .l{{color:#6aa9c9;}}
+.page{{max-width:720px;margin:0 auto;padding:32px 26px 60px;}}
+h1{{font-size:30px;font-weight:600;color:#e9eef3;margin-bottom:8px;}}
+.sub{{font-size:11px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;font-family:ui-monospace,Menlo,monospace;margin-bottom:30px;}}
+.section{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:22px 24px;margin-bottom:14px;}}
+h2{{font-size:11px;letter-spacing:2px;color:#6aa9c9;font-weight:700;text-transform:uppercase;margin-bottom:12px;font-family:ui-monospace,Menlo,monospace;}}
+.bookmark{{display:inline-block;padding:14px 26px;background:#6aa9c9;color:#080c12;
+  text-decoration:none;font-family:ui-monospace,Menlo,monospace;font-size:12px;
+  font-weight:700;letter-spacing:2px;text-transform:uppercase;border-radius:0;margin:14px 0;}}
+.bookmark:hover{{background:#5fb583;}}
+code{{font-family:ui-monospace,Menlo,monospace;background:rgba(106,169,201,0.10);padding:1px 5px;color:#e9eef3;font-size:12px;}}
+ol{{padding-left:22px;}}
+li{{margin-bottom:6px;}}
+.footer{{font-family:ui-monospace,Menlo,monospace;font-size:9px;letter-spacing:1.5px;color:#3a4551;text-align:center;margin-top:30px;text-transform:uppercase;}}
+</style></head>
+<body>
+<div class="classbar"><span class="l">◆ OPEN SOURCE INTELLIGENCE · LEX EUROPE</span><span>BOOKMARKLET</span></div>
+<div class="page">
+  <h1>Browser-Bookmarklet</h1>
+  <div class="sub">Ein-Klick-Submission beliebiger Web-Artikel an die Plattform</div>
+
+  <div class="section">
+    <h2>1 · Installation</h2>
+    <ol>
+      <li>Lesezeichenleiste sichtbar machen (Strg+Shift+B / Cmd+Shift+B).</li>
+      <li>Den <b>orangefarbenen Button</b> unten in die Lesezeichenleiste ziehen.</li>
+      <li>Auf einer beliebigen Webseite klicken → öffnet ein kleines Fenster
+          mit pre-gefülltem URL + Titel + Auswahl-Text.</li>
+    </ol>
+    <a class="bookmark" href="{bookmarklet_js}" onclick="alert('Bitte in die Lesezeichenleiste ziehen statt klicken.');return false;">◆ → LEX EUROPE</a>
+  </div>
+
+  <div class="section">
+    <h2>2 · Was es macht</h2>
+    <p>Liest beim Klick die aktuelle <code>window.location.href</code>,
+       <code>document.title</code> und die Text-Auswahl, öffnet ein
+       Popup-Fenster mit der Admin-Quick-Submit-URL als Query-String —
+       der Admin kann den Vorfall in 10 Sekunden vor-bewerten und
+       speichern. Keine Daten verlassen den Browser, bevor der Admin
+       sie absendet.</p>
+  </div>
+
+  <div class="section">
+    <h2>3 · Manueller Code (für Power-User)</h2>
+    <p>Falls Drag-and-Drop nicht geht (mobile / lockdown), kann der Code
+       direkt als Lesezeichen-Adresse hinterlegt werden:</p>
+    <pre style="background:#080c12;border:1px solid rgba(255,255,255,0.06);padding:14px;font-size:10px;color:#aab5c0;overflow-x:auto;white-space:pre-wrap;word-break:break-all">{bookmarklet_js}</pre>
+  </div>
+
+  <div class="footer">LEX EUROPE · Bookmarklet · für autorisierte Admin-Accounts</div>
+</div>
+</body></html>""")
+
+
 @app.get("/api/incidents.rss")
 async def incidents_rss(request: Request, country: str = "", tier: str = "act",
                         severity_min: int = 3, limit: int = 50):
@@ -4836,6 +5036,8 @@ async def sitemap_xml(request: Request):
     urls = [
         f"{base}/", f"{base}/dashboard", f"{base}/lagebericht",
         f"{base}/sources", f"{base}/press", f"{base}/methodology",
+        f"{base}/bookmarklet", f"{base}/api/incidents/export.csv",
+        f"{base}/api/incidents/export.json", f"{base}/api/target-types",
         f"{base}/api/incidents.rss", f"{base}/api/early-warning.rss",
         f"{base}/embed/counter", f"{base}/embed/headline",
         f"{base}/api/v1/docs",
