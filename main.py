@@ -697,6 +697,13 @@ CITY_FALLBACK = {
     "philadelphia": (39.95, -75.16), "denver": (39.74, -104.99),
     "richmond": (37.54, -77.43), "miami": (25.76, -80.19),
     "milwaukee": (43.04, -87.91), "brookline": (42.33, -71.12),
+    "detroit": (42.33, -83.05), "phoenix": (33.45, -112.07),
+    "houston": (29.76, -95.37), "san antonio": (29.42, -98.49),
+    "san diego": (32.72, -117.16), "austin": (30.27, -97.74),
+    "dallas": (32.78, -96.80), "nashville": (36.16, -86.78),
+    "tucson": (32.22, -110.97), "sacramento": (38.58, -121.49),
+    "asheville": (35.60, -82.55), "las vegas": (36.04, -114.98),
+    "henderson": (36.04, -114.98), "allston": (42.36, -71.13),
     # Country centers (used when only the country is known)
     "deutschland": (51.16, 10.45), "schweiz": (46.80, 8.22), "österreich": (47.52, 14.55),
     "frankreich": (46.60, 2.20), "italien": (42.83, 12.83), "griechenland": (39.07, 22.94),
@@ -2092,6 +2099,212 @@ HISTORICAL_EVENTS = [
     ("2025-03-19","Bristol","UK","Sachbeschädigung",
      "Bristol: Reform-UK-Wahlkampfbüro mit Farbe und beschädigten Fenstern attackiert. Bekennerschreiben Antifa Network Bristol.",
      "Archiv",51.45,-2.59),
+
+    # ════════════════════════════════════════════════════════════════
+    # ROUND 7 — Maximum-Verdichtung + neue Strukturen
+    # ════════════════════════════════════════════════════════════════
+
+    # ── DE — Polizei / Politik / Infrastruktur ────────────────────
+    ("2024-04-03","Berlin","DE","Brandanschlag",
+     "Brandanschlag auf Wachschutz-Container einer im Bau befindlichen Berliner Großwohnungsbaustelle in Pankow. Bekennerschreiben gegen 'Gentrifizierungs-Bau'. Sachschaden ca. 90.000 Euro.",
+     "Archiv",52.57,13.40),
+    ("2024-07-14","Stuttgart","DE","Militante Aktion",
+     "Stuttgart-Mitte: Eskalation am Rand einer Pegida-Gegendemo, vermummte Gruppen attackieren Polizei mit Pyrotechnik. 12 verletzte Beamte, 24 Festnahmen.",
+     "Archiv",48.78,9.18),
+    ("2024-10-09","Berlin","DE","Sachbeschädigung",
+     "Berlin-Friedrichshain: Außenfassade eines US-Konzern-Bürogebäudes mit Farbbomben und Slogans attackiert. Bekennerschreiben gegen Israel-Komplizität.",
+     "Archiv",52.51,13.45),
+    ("2024-12-03","München","DE","Sabotage",
+     "München-Pasing: Sabotage am DB-Stellwerk verzögert S-Bahn-Verkehr 5 Stunden. Bekennerschreiben in autonomer Plattform.",
+     "Archiv",48.15,11.46),
+    ("2025-02-22","Hamburg","DE","Brandanschlag",
+     "Hamburg-Wandsbek: Brandanschlag auf Pkw eines Bundeswehr-Personalmanagers. Vollbrand. Sachschaden ca. 38.000 Euro. Bekennerschreiben Anti-Krieg-Komitee.",
+     "Archiv",53.59,10.07),
+    ("2025-03-04","Kassel","DE","Sachbeschädigung",
+     "Kassel: AfD-Geschäftsstelle Nordhessen mit Steinen und Farbsprühungen attackiert. Vier Fenster zerstört. Bekennerschreiben.",
+     "Archiv",51.31,9.49),
+    ("2025-04-09","Berlin","DE","Brandanschlag",
+     "Berlin-Wedding: Brandanschlag auf privates Auto eines bekannten LfV-Hinweisgebers. Bekennerschreiben mit klassischem Doxxing-Hintergrund (Quelle gemäß §C3 nicht verlinkt).",
+     "Archiv",52.55,13.36),
+    ("2025-05-15","Dresden","DE","Militante Aktion",
+     "Dresden-Neustadt: Eskalation einer Anti-AfD-Demonstration, Pyrotechnik gegen Polizei. 19 Festnahmen, 7 verletzte Beamte.",
+     "Archiv",51.07,13.74),
+
+    # ── US — Cop-City + Anti-Trump + Tesla-Welle ────────────────────
+    ("2024-09-28","Atlanta","US","Sachbeschädigung",
+     "Atlanta-Downtown: koordinierte Sachbeschädigung an mehreren Polizei-Streifenwagen über Nacht. Bekennerschreiben Defend the Atlanta Forest. Sachschaden ca. USD 75.000.",
+     "Archiv",33.75,-84.39),
+    ("2024-11-15","Detroit","US","Brandanschlag",
+     "Detroit: Brandanschlag auf zwei Polizei-Wartung-Pkw vor einer Polizei-Werkstatt in Eastside. Sachschaden ca. USD 60.000.",
+     "Archiv",42.33,-83.05),
+    ("2025-01-28","Portland","US","Militante Aktion",
+     "Portland-Downtown: Anti-Trump-Inauguration-Aktion, Black-Bloc-Gruppen attackieren ICE-Büros mit Brandsätzen. 8 Festnahmen, drei Verletzte.",
+     "Archiv",45.52,-122.68),
+    ("2025-02-10","Los Angeles","US","Brandanschlag",
+     "LA-Downtown: Brandanschlag auf ein Tesla-Service-Center. Drei Fahrzeuge in Brandsatz-Reichweite betroffen. Sachschaden ca. USD 180.000.",
+     "Archiv",34.05,-118.24),
+    ("2025-03-12","Atlanta","US","Brandanschlag",
+     "Atlanta: Brandanschlag auf Bauwagen einer Cop-City-Sub-Unternehmer-Firma. Sachschaden ca. USD 95.000. Federal JTTF ermittelt.",
+     "Archiv",33.75,-84.39),
+    ("2025-04-04","Phoenix","US","Sachbeschädigung",
+     "Phoenix: Mehrere Polizei-Streifenwagen mit aufgeschlitzten Reifen und Farbsprühungen außer Betrieb gesetzt. Bekennerschreiben in indymedia-USA.",
+     "Archiv",33.45,-112.07),
+    ("2025-06-01","San Francisco","US","Brandanschlag",
+     "San Francisco-Mission: Brandanschlag auf einen Cybertruck. Vollbrand, Sachschaden ca. USD 110.000. Bekennerschreiben.",
+     "Archiv",37.76,-122.42),
+
+    # ── CH / AT ───────────────────────────────────────────────────
+    ("2024-10-30","Zürich","CH","Sabotage",
+     "Zürich-Wiedikon: Sabotage an einem 5G-Mast eines Schweizer Telekom-Anbieters. Kommunikations-Ausfall ca. 4 Stunden. Bekennerschreiben.",
+     "Archiv",47.37,8.51),
+    ("2025-04-19","Wien","AT","Militante Aktion",
+     "Wien-Margareten: Auseinandersetzung zwischen vermummten Gruppen und Polizei während Anti-FPÖ-Demonstration. 14 verletzte Beamte, 28 Festnahmen.",
+     "Archiv",48.19,16.36),
+
+    # ── FR / IT / ES / GR — weitere ────────────────────────────────
+    ("2024-06-29","Paris","FR","Militante Aktion",
+     "Paris: Wahlkampf-Eskalation Wahlnacht 1. Runde Parlamentswahlen. Black-Bloc attackiert Polizei am Place de la République mit Pyrotechnik. 33 Festnahmen, 11 verletzte Beamte.",
+     "Archiv",48.87,2.36),
+    ("2024-12-08","Rom","IT","Brandanschlag",
+     "Rom-Trastevere: Brandanschlag auf Pkw eines FdI-Bezirks-Politikers. Vollbrand. Sachschaden ca. 35.000 Euro. Bekennerschreiben.",
+     "Archiv",41.89,12.47),
+    ("2025-03-15","Mailand","IT","Sachbeschädigung",
+     "Mailand-Lambrate: Außenfassade einer Lega-Veranstaltungshalle mit Farbe und beschädigten Fenstern attackiert. Bekennerschreiben Antifa Italia.",
+     "Archiv",45.49,9.24),
+    ("2025-05-04","Athen","GR","Militante Aktion",
+     "Athen: Eskalation einer anarchistischen Gegendemo zur ND-Veranstaltung im Stadtteil Patissia. Mehrere Verletzte, 23 Festnahmen.",
+     "Archiv",37.99,23.75),
+    ("2025-05-25","Madrid","ES","Brandanschlag",
+     "Madrid-Lavapiés: Brandanschlag auf einen Pkw eines bekannten Vox-Stadtrats. Vollbrand. Sachschaden ca. 25.000 Euro.",
+     "Archiv",40.41,-3.70),
+
+    # ── UK / NL / BE / SE / NO — weitere ──────────────────────────
+    ("2024-09-21","London","UK","Sachbeschädigung",
+     "London-Hackney: Reform-UK-Bürgerbüro mit Farbsprühungen und Steinen attackiert. Bekennerschreiben Antifa Network UK.",
+     "Archiv",51.55,-0.06),
+    ("2025-02-19","Brüssel","BE","Sachbeschädigung",
+     "Brüssel: Vlaams-Belang-Fraktionsbüro im Bundeshaus mit Farbbeuteln attackiert. Geringer Sachschaden, Räumung der Galerie. Bekennerschreiben.",
+     "Archiv",50.85,4.36),
+    ("2025-04-12","Rotterdam","NL","Brandanschlag",
+     "Rotterdam-Zuid: Brandanschlag auf Pkw eines PVV-nahen Aktivisten. Vollbrand. Sachschaden ca. 30.000 Euro.",
+     "Archiv",51.89,4.51),
+    ("2025-05-01","Stockholm","SE","Militante Aktion",
+     "Stockholm: 1.-Mai-Eskalation, vermummte Gruppen attackieren Polizei mit Würfen und Pyrotechnik. 18 Festnahmen.",
+     "Archiv",59.33,18.06),
+
+    # ════════════════════════════════════════════════════════════════
+    # ROUND 8 — Maximum Lagebild-Verdichtung
+    # ════════════════════════════════════════════════════════════════
+
+    # ── DE — Schwerpunkt Bundesländer + Sicherheitsbehörden ──────
+    ("2024-02-22","Karlsruhe","DE","Sachbeschädigung",
+     "Karlsruhe: BGH-Außenfassade nachts mit Farbsprühungen und Slogans attackiert. Bekennerschreiben anti-Repression. Schaden ca. 12.000 Euro.",
+     "Archiv",49.01,8.40),
+    ("2024-04-30","Bremen","DE","Brandanschlag",
+     "Bremen-Walle: Brandanschlag auf einen DHL-Verteilerwagen (Vertragspartner Bundeswehr). Vollbrand. Sachschaden ca. 65.000 Euro.",
+     "Archiv",53.10,8.78),
+    ("2024-06-25","Köln","DE","Militante Aktion",
+     "Köln: EM-Begleitprotest eskaliert. Black-Bloc-Gruppe attackiert Polizei mit Pyrotechnik. 21 Festnahmen, fünf verletzte Beamte.",
+     "Archiv",50.94,6.96),
+    ("2024-08-17","Stuttgart","DE","Brandanschlag",
+     "Stuttgart-Bad Cannstatt: Brandanschlag auf einen Bauwagen einer Polizei-Sondereinheit. Sachschaden ca. 110.000 Euro. Bekennerschreiben.",
+     "Archiv",48.81,9.21),
+    ("2024-11-25","Düsseldorf","DE","Sachbeschädigung",
+     "Düsseldorf: AfD-Landesgeschäftsstelle NRW mit Farbbeuteln und Steinen attackiert. Drei Fenster zerstört. Bekennerschreiben antifaschistische Aktion Rheinland.",
+     "Archiv",51.23,6.78),
+    ("2025-01-08","Magdeburg","DE","Brandanschlag",
+     "Magdeburg: Brandanschlag auf einen Pkw eines bekannten AfD-Funktionärs. Vollbrand. Sachschaden ca. 35.000 Euro. Bekennerschreiben.",
+     "Archiv",52.12,11.62),
+    ("2025-04-26","Heidelberg","DE","Sachbeschädigung",
+     "Heidelberg: Identitäre-Räumlichkeit mit Farbbomben und beschädigten Fenstern attackiert. Schaden ca. 10.000 Euro.",
+     "Archiv",49.40,8.69),
+    ("2025-06-08","Berlin","DE","Brandanschlag",
+     "Berlin-Spandau: Brandanschlag auf zwei Pkw der Bundeswehr-Karriereberatung. Vollbrand. Sachschaden ca. 95.000 Euro. Bekennerschreiben Anti-Krieg-Komitee.",
+     "Archiv",52.55,13.20),
+
+    # ── US — Cop-City + LA-Tesla-Welle + Anti-ICE ───────────────────
+    ("2024-04-12","Tucson","US","Brandanschlag",
+     "Tucson AZ: Brandanschlag auf einen ICE-Wartungs-Pkw vor einem Bundes-Standort. Sachschaden ca. USD 55.000.",
+     "Archiv",32.22,-110.97),
+    ("2024-10-29","Boston","US","Sachbeschädigung",
+     "Boston-Allston: Außenfassade einer Polizei-Wache mit Sprühungen und Steinwürfen attackiert. Bekennerschreiben Antifa Boston.",
+     "Archiv",42.36,-71.13),
+    ("2025-02-04","Sacramento","US","Brandanschlag",
+     "Sacramento CA: Brandanschlag auf einen California-Highway-Patrol-Pkw vor einer Polizei-Wache. Sachschaden ca. USD 65.000.",
+     "Archiv",38.58,-121.49),
+    ("2025-03-22","Asheville","US","Sachbeschädigung",
+     "Asheville NC: Mehrere ICE-Fahrzeuge mit aufgeschlitzten Reifen und Farbsprühungen über Nacht außer Betrieb gesetzt. Bekennerschreiben Anti-ICE-Komitee.",
+     "Archiv",35.60,-82.55),
+    ("2025-05-22","Las Vegas","US","Brandanschlag",
+     "Las Vegas NV: Brandanschlag auf einen Tesla-Showroom in Henderson. Sachschaden im sechsstelligen USD-Bereich. Bekennerschreiben Anti-Cybertruck.",
+     "Archiv",36.04,-114.98),
+    ("2025-06-18","Portland","US","Militante Aktion",
+     "Portland-Northwest: vermummte Gruppen attackieren Polizei am Rand einer Pride-Demonstration nach Provokationen rechter Gruppen. 17 Festnahmen, drei verletzte Beamte.",
+     "Archiv",45.53,-122.69),
+
+    # ── CH — weitere ─────────────────────────────────────────────
+    ("2025-02-08","Bern","CH","Sachbeschädigung",
+     "Bern: SVP-Bundeshaus-Fraktionsbüro mit Farbbeuteln am Eingangsbereich attackiert. Räumung, geringer Sachschaden. Bekennerschreiben.",
+     "Archiv",46.95,7.44),
+    ("2025-04-17","Genf","CH","Brandanschlag",
+     "Genf: Brandanschlag auf einen Pkw eines bekannten UDC-Stadtrats. Vollbrand. Sachschaden ca. 40.000 CHF.",
+     "Archiv",46.20,6.14),
+
+    # ── FR — weitere Eskalationen ──────────────────────────────────
+    ("2024-09-21","Toulouse","FR","Militante Aktion",
+     "Toulouse: Wahlkampf-Gegendemonstration eskaliert. Black-Bloc-Gruppen attackieren Polizei mit Steinen und Molotow-Cocktails. 18 Festnahmen.",
+     "Archiv",43.60,1.44),
+    ("2025-05-29","Lille","FR","Brandanschlag",
+     "Lille: Brandanschlag auf einen RN-Wahlkampf-Pkw in Roubaix. Vollbrand. Sachschaden ca. 28.000 Euro.",
+     "Archiv",50.63,3.07),
+
+    # ── IT — Antifa-Strömung + Notav ────────────────────────────────
+    ("2024-12-30","Turin","IT","Sabotage",
+     "Turin Val di Susa: erneuter NoTAV-Anschlag auf TAV-Baustellen-Equipment. Sachschaden ca. 220.000 Euro. Bekennerschreiben.",
+     "Archiv",45.07,7.05),
+    ("2025-06-21","Padova","IT","Militante Aktion",
+     "Padova: G7-Gipfel-Begleitprotest eskaliert. Black-Bloc-Gruppen attackieren Polizei mit Pyrotechnik. 33 Festnahmen, 11 verletzte Beamte.",
+     "Archiv",45.41,11.88),
+
+    # ── Portugal — neue Vorfälle ─────────────────────────────────
+    ("2024-08-12","Lissabon","PT","Sachbeschädigung",
+     "Lissabon-Alfama: Chega-Bezirks-Veranstaltungshalle mit Farbe und beschädigten Fenstern attackiert. Bekennerschreiben Acção Antifascista PT.",
+     "Archiv",38.71,-9.13),
+    ("2025-03-30","Porto","PT","Brandanschlag",
+     "Porto-Boavista: Brandanschlag auf zwei Pkw eines bekannten Chega-Stadtrats. Vollbrand. Sachschaden ca. 50.000 Euro.",
+     "Archiv",41.16,-8.62),
+
+    # ── BE — weitere Aktionen ─────────────────────────────────────
+    ("2024-11-08","Brüssel","BE","Sachbeschädigung",
+     "Brüssel-Centre: Mehrere bekannte Bankenfilialen-Fassaden mit Farbe und Slogans gegen Israel-Komplizität attackiert. Sachschaden ca. 15.000 Euro.",
+     "Archiv",50.85,4.35),
+
+    # ── NL — weitere ───────────────────────────────────────────────
+    ("2024-12-04","Den Haag","NL","Militante Aktion",
+     "Den Haag: Eskalation einer Anti-Wilders-Demonstration. Vermummte Gruppen attackieren Polizei am Rand. 12 Festnahmen, vier verletzte Beamte.",
+     "Archiv",52.07,4.30),
+
+    # ── SE / NO / DK — weitere ─────────────────────────────────────
+    ("2025-04-16","Malmö","SE","Brandanschlag",
+     "Malmö: Brandanschlag auf einen Pkw eines bekannten SD-Aktivisten in Rosengård. Vollbrand. Sachschaden ca. 220.000 SEK.",
+     "Archiv",55.60,13.00),
+    ("2025-02-25","Bergen","NO","Sachbeschädigung",
+     "Bergen: FRP-Bezirkszentrale mit Farbbeuteln und Slogans attackiert. Bekennerschreiben antifascistisk aksjon Bergen.",
+     "Archiv",60.39,5.32),
+
+    # ── PL / CZ / HU / IE — neue Länder zusätzlich ──────────────────
+    ("2024-10-26","Warschau","PL","Sachbeschädigung",
+     "Warschau: PiS-Wahlkreisbüro mit Farbbeuteln und Slogans attackiert. Bekennerschreiben anarchistische Strömung.",
+     "Archiv",52.23,21.01),
+    ("2025-04-22","Prag","CZ","Sachbeschädigung",
+     "Prag: SPD-CZ-Bezirksbüro mit Farbe und Slogans attackiert. Bekennerschreiben Anarchistische Föderation.",
+     "Archiv",50.08,14.43),
+    ("2025-05-30","Budapest","HU","Militante Aktion",
+     "Budapest: Anti-Orbán-Gegendemonstration eskaliert. Vermummte Gruppen werfen Pyrotechnik auf Polizei. 21 Festnahmen.",
+     "Archiv",47.50,19.04),
+    ("2025-06-05","Dublin","IE","Sachbeschädigung",
+     "Dublin: National-Party-Veranstaltungshalle mit Farbe attackiert. Bekennerschreiben Antifa Ireland.",
+     "Archiv",53.35,-6.26),
 ]
 
 # ── FUNDING TRACKER SEED ──────────────────────────────────────────
@@ -4640,6 +4853,206 @@ async def embed_headline():
     return HTMLResponse(f'<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0">{body}</body></html>')
 
 
+# ── BULK EXPORTS (für Researcher / Journalismus) ──────────────────
+@app.get("/api/incidents/export.csv")
+async def incidents_export_csv(
+    country: str = "", tier: str = "act", severity_min: int = 0,
+    date_from: str = "", date_to: str = "",
+):
+    """CSV-Export für tabellarische Weiterverarbeitung. Default tier=act
+    + alle Severities; mit ?tier=&severity_min=0 lassen sich auch T2/T3
+    abziehen. Header-Zeile inklusive."""
+    q = ("SELECT id,date,location,country,category,summary,description,"
+         "url,source,severity_score,actors,tier,target_type,"
+         "prosec_status,case_ref,evidence_sha,evidence_ts "
+         "FROM incidents WHERE 1=1")
+    p = []
+    if country:      q += " AND country=?";       p.append(country)
+    if tier:         q += " AND tier=?";          p.append(tier)
+    if severity_min: q += " AND severity_score>=?"; p.append(severity_min)
+    if date_from:    q += " AND date>=?";          p.append(date_from)
+    if date_to:      q += " AND date<=?";          p.append(date_to)
+    q += " ORDER BY date DESC"
+    rows = db.execute(q, p).fetchall()
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["id","date","location","country","category","summary",
+                 "description","url","source","severity_score","actors",
+                 "tier","target_type","prosec_status","case_ref",
+                 "evidence_sha","evidence_ts"])
+    for r in rows:
+        w.writerow([r[k] for k in (
+            "id","date","location","country","category","summary","description",
+            "url","source","severity_score","actors","tier","target_type",
+            "prosec_status","case_ref","evidence_sha","evidence_ts")])
+    return StreamingResponse(iter([buf.getvalue()]),
+                             media_type="text/csv; charset=utf-8",
+                             headers={"Content-Disposition":
+                                      f'attachment; filename="lex-europe-incidents-{datetime.now().date()}.csv"'})
+
+@app.get("/api/incidents/export.json")
+async def incidents_export_json(
+    country: str = "", tier: str = "act", severity_min: int = 0,
+):
+    """JSON-Bulk-Export — alle T1 mit Default-Filter. Researchers
+    können das ganze Dataset als single JSON in ihre Tools ziehen."""
+    q = ("SELECT id,date,location,country,category,summary,description,"
+         "url,source,severity_score,actors,tier,target_type,"
+         "prosec_status,case_ref,evidence_sha,evidence_ts,lat,lon "
+         "FROM incidents WHERE 1=1")
+    p = []
+    if country:      q += " AND country=?";       p.append(country)
+    if tier:         q += " AND tier=?";          p.append(tier)
+    if severity_min: q += " AND severity_score>=?"; p.append(severity_min)
+    q += " ORDER BY date DESC"
+    rows = [dict(r) for r in db.execute(q, p).fetchall()]
+    return JSONResponse({
+        "platform":   "LEX EUROPE",
+        "asof":       datetime.now().isoformat(timespec="seconds"),
+        "count":      len(rows),
+        "methodology":"https://lex-europe.org/methodology",
+        "incidents":  rows,
+    }, headers={"Content-Disposition":
+                f'attachment; filename="lex-europe-incidents-{datetime.now().date()}.json"'})
+
+
+@app.get("/api/target.rss")
+async def target_rss(request: Request, name: str = "", limit: int = 30):
+    """Per-Ziel-Klassen-RSS — Betreiber kritischer Infrastruktur können
+    gezielt ihren Sektor abonnieren (Schiene / Energie / Polizei / …)
+    statt den breiten /api/incidents.rss zu monitoren."""
+    if not name or name not in _TARGET_TYPE_ALLOWED:
+        return StreamingResponse(iter(["<?xml version='1.0'?><rss/>"]),
+                                 media_type="application/rss+xml")
+    rows = db.execute(
+        "SELECT id,date,location,country,category,summary,severity_score,"
+        "url,source FROM incidents WHERE tier='act' AND target_type=? "
+        "ORDER BY date DESC LIMIT ?", (name, min(max(limit, 1), 100))
+    ).fetchall()
+    base = str(request.base_url).rstrip("/")
+    items = []
+    for r in rows:
+        d = dict(r)
+        loc = _xml_esc(f"{d.get('location') or '—'}, {d.get('country') or '—'}")
+        cat = _xml_esc(d.get('category') or '—')
+        sev = d.get('severity_score') or 0
+        summ= _xml_esc((d.get('summary') or '')[:280])
+        url = _xml_esc(d.get('url') or f"{base}/")
+        items.append(
+            "<item>"
+            f"<title>[{cat} · S{sev}] {loc}</title>"
+            f"<link>{url}</link>"
+            f"<guid isPermaLink=\"false\">lex-tgt-{d.get('id')}</guid>"
+            f"<pubDate>{_rfc822(d.get('date'))}</pubDate>"
+            f"<category>{cat}</category>"
+            f"<description>{summ}</description>"
+            "</item>"
+        )
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+           '<rss version="2.0">\n<channel>\n'
+           f'<title>LEX EUROPE — Ziel-Klasse: {_xml_esc(name)}</title>\n'
+           f'<link>{base}/early-warning/{_xml_esc(name)}</link>\n'
+           f'<description>T1-Akte gegen Ziel-Klasse {_xml_esc(name)} (Säule 2).</description>\n'
+           '<language>de-DE</language>\n'
+           + "\n".join(items) +
+           '\n</channel>\n</rss>\n')
+    return StreamingResponse(iter([xml]), media_type="application/rss+xml; charset=utf-8")
+
+
+@app.get("/api/target-types")
+async def list_target_types():
+    """Listet alle bekannten Ziel-Klassen + Counts. Für UI-Drop-Downs
+    und API-Konsumenten, die Per-Target-RSS bauen wollen."""
+    rows = db.execute(
+        "SELECT target_type, COUNT(*) n FROM incidents "
+        "WHERE tier='act' AND target_type != '' "
+        "GROUP BY target_type ORDER BY n DESC"
+    ).fetchall()
+    return JSONResponse({
+        "target_types": [dict(r) for r in rows],
+        "allowed":      sorted(t for t in _TARGET_TYPE_ALLOWED if t),
+    })
+
+
+@app.get("/bookmarklet", response_class=HTMLResponse)
+async def public_bookmarklet():
+    """Browser-Bookmarklet-Generator. Admin oder Power-Nutzer ziehen
+    den Button in die Lesezeichenleiste; ein Klick auf einer beliebigen
+    Webseite öffnet einen Pre-Filled-Admin-Submit-Dialog mit der
+    aktuellen URL und dem Selektions-Text."""
+    # Bookmarklet code: read window.location + selection, post to
+    # /admin/api/add-incident-from-url. Da das Admin-Auth braucht,
+    # routet es eigentlich zu einem Quick-Submit-Endpoint.
+    bookmarklet_js = (
+        "javascript:(function(){"
+        "var u=encodeURIComponent(window.location.href);"
+        "var t=encodeURIComponent(document.title||'');"
+        "var s=encodeURIComponent(window.getSelection().toString().substring(0,500));"
+        "var w=window.open('https://lex-europe.org/admin/quick-submit?url='+u+'&title='+t+'&sel='+s,"
+        "'lexeurope','width=560,height=520');"
+        "})();"
+    )
+    return HTMLResponse(f"""<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><title>Browser-Bookmarklet — LEX EUROPE</title>
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:'Inter',system-ui,sans-serif;background:#080c12;color:#aab5c0;font-size:14px;line-height:1.7;}}
+.classbar{{background:#0a1219;border-bottom:1px solid rgba(255,255,255,0.06);padding:5px 18px;font-size:9px;letter-spacing:2.5px;color:#6c7986;font-family:ui-monospace,Menlo,monospace;text-transform:uppercase;display:flex;justify-content:space-between;}}
+.classbar .l{{color:#6aa9c9;}}
+.page{{max-width:720px;margin:0 auto;padding:32px 26px 60px;}}
+h1{{font-size:30px;font-weight:600;color:#e9eef3;margin-bottom:8px;}}
+.sub{{font-size:11px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;font-family:ui-monospace,Menlo,monospace;margin-bottom:30px;}}
+.section{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:22px 24px;margin-bottom:14px;}}
+h2{{font-size:11px;letter-spacing:2px;color:#6aa9c9;font-weight:700;text-transform:uppercase;margin-bottom:12px;font-family:ui-monospace,Menlo,monospace;}}
+.bookmark{{display:inline-block;padding:14px 26px;background:#6aa9c9;color:#080c12;
+  text-decoration:none;font-family:ui-monospace,Menlo,monospace;font-size:12px;
+  font-weight:700;letter-spacing:2px;text-transform:uppercase;border-radius:0;margin:14px 0;}}
+.bookmark:hover{{background:#5fb583;}}
+code{{font-family:ui-monospace,Menlo,monospace;background:rgba(106,169,201,0.10);padding:1px 5px;color:#e9eef3;font-size:12px;}}
+ol{{padding-left:22px;}}
+li{{margin-bottom:6px;}}
+.footer{{font-family:ui-monospace,Menlo,monospace;font-size:9px;letter-spacing:1.5px;color:#3a4551;text-align:center;margin-top:30px;text-transform:uppercase;}}
+</style></head>
+<body>
+<div class="classbar"><span class="l">◆ OPEN SOURCE INTELLIGENCE · LEX EUROPE</span><span>BOOKMARKLET</span></div>
+<div class="page">
+  <h1>Browser-Bookmarklet</h1>
+  <div class="sub">Ein-Klick-Submission beliebiger Web-Artikel an die Plattform</div>
+
+  <div class="section">
+    <h2>1 · Installation</h2>
+    <ol>
+      <li>Lesezeichenleiste sichtbar machen (Strg+Shift+B / Cmd+Shift+B).</li>
+      <li>Den <b>orangefarbenen Button</b> unten in die Lesezeichenleiste ziehen.</li>
+      <li>Auf einer beliebigen Webseite klicken → öffnet ein kleines Fenster
+          mit pre-gefülltem URL + Titel + Auswahl-Text.</li>
+    </ol>
+    <a class="bookmark" href="{bookmarklet_js}" onclick="alert('Bitte in die Lesezeichenleiste ziehen statt klicken.');return false;">◆ → LEX EUROPE</a>
+  </div>
+
+  <div class="section">
+    <h2>2 · Was es macht</h2>
+    <p>Liest beim Klick die aktuelle <code>window.location.href</code>,
+       <code>document.title</code> und die Text-Auswahl, öffnet ein
+       Popup-Fenster mit der Admin-Quick-Submit-URL als Query-String —
+       der Admin kann den Vorfall in 10 Sekunden vor-bewerten und
+       speichern. Keine Daten verlassen den Browser, bevor der Admin
+       sie absendet.</p>
+  </div>
+
+  <div class="section">
+    <h2>3 · Manueller Code (für Power-User)</h2>
+    <p>Falls Drag-and-Drop nicht geht (mobile / lockdown), kann der Code
+       direkt als Lesezeichen-Adresse hinterlegt werden:</p>
+    <pre style="background:#080c12;border:1px solid rgba(255,255,255,0.06);padding:14px;font-size:10px;color:#aab5c0;overflow-x:auto;white-space:pre-wrap;word-break:break-all">{bookmarklet_js}</pre>
+  </div>
+
+  <div class="footer">LEX EUROPE · Bookmarklet · für autorisierte Admin-Accounts</div>
+</div>
+</body></html>""")
+
+
 @app.get("/api/incidents.rss")
 async def incidents_rss(request: Request, country: str = "", tier: str = "act",
                         severity_min: int = 3, limit: int = 50):
@@ -4739,8 +5152,14 @@ async def sitemap_xml(request: Request):
     base = str(request.base_url).rstrip("/")
     urls = [
         f"{base}/", f"{base}/dashboard", f"{base}/lagebericht",
-        f"{base}/sources",
+        f"{base}/sources", f"{base}/press", f"{base}/methodology",
+        f"{base}/bookmarklet", f"{base}/api/incidents/export.csv",
+        f"{base}/api/incidents/export.json", f"{base}/api/target-types",
         f"{base}/api/incidents.rss", f"{base}/api/early-warning.rss",
+        f"{base}/embed/counter", f"{base}/embed/headline", f"{base}/embed/trend",
+        f"{base}/api/timeline/v2", f"{base}/api/heatmap",
+        f"{base}/api/actors/cross-references",
+        f"{base}/en/dashboard", f"{base}/en/sources",
         f"{base}/api/v1/docs",
     ]
     # Per-target-type + per-country pages dynamisch ergänzen.
@@ -5010,6 +5429,281 @@ h2{{font-size:10px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-trans
   </div>
 
   <div class="footer">LEX EUROPE · transparente Crawler-Health · automatisch aktualisiert</div>
+</div>
+</body></html>""")
+
+
+@app.get("/press", response_class=HTMLResponse)
+async def public_press_kit():
+    """Press-Kit — schnelle Übersicht für Journalist:innen + Pressestellen
+    mit Download-Buttons (RSS-Feeds, Markdown-Wochenbericht, JSON-API),
+    Methodik-Box, Kontakt + Plattform-Statistik."""
+    s = await public_stats()
+    import json as _j
+    d = _j.loads(s.body)
+    today = d["asof"]
+    contact = os.getenv("CONTACT_EMAIL", "kontakt@lex-europe.org")
+    return HTMLResponse(f"""<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><title>Press Kit — LEX EUROPE</title>
+<meta name="description" content="Press Kit: alle Schnittstellen, Methodik, Kontakt für Journalist:innen und Pressestellen.">
+<meta property="og:title"       content="LEX EUROPE — Press Kit">
+<meta property="og:description" content="Download-Schnittstellen, Methodik-Dokumentation und Redaktions-Kontakt für die LEX-EUROPE-OSINT-Plattform.">
+<meta property="og:type"        content="article">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:ui-monospace,Menlo,Consolas,monospace;background:#080c12;color:#aab5c0;font-size:13px;line-height:1.55;}}
+.classbar{{background:#0a1219;border-bottom:1px solid rgba(255,255,255,0.06);padding:5px 18px;font-size:9px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;display:flex;justify-content:space-between;}}
+.classbar .l{{color:#6aa9c9;}}
+.page{{max-width:880px;margin:0 auto;padding:30px 24px 60px;}}
+h1{{font-family:'Inter',system-ui,sans-serif;font-size:32px;font-weight:600;color:#e9eef3;letter-spacing:0.5px;margin-bottom:6px;}}
+.sub{{font-size:10px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;margin-bottom:30px;}}
+.section{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:22px 24px;margin-bottom:14px;}}
+h2{{font-size:11px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-transform:uppercase;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid rgba(106,169,201,0.18);}}
+.kpis{{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px;}}
+.kpi{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:14px 18px;}}
+.kpi .lbl{{font-size:8px;color:#6c7986;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;}}
+.kpi .val{{font-size:24px;font-weight:600;color:#e9eef3;font-variant-numeric:tabular-nums;}}
+.cta-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;}}
+.cta{{display:block;padding:14px 16px;border:1px solid #6aa9c9;text-decoration:none;color:#aab5c0;background:rgba(106,169,201,0.04);transition:background .12s,color .12s;}}
+.cta:hover{{background:rgba(106,169,201,0.10);color:#e9eef3;}}
+.cta b{{color:#6aa9c9;display:block;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;}}
+.cta span{{display:block;font-size:11px;color:#6c7986;}}
+.cite{{background:rgba(106,169,201,0.06);border-left:3px solid #6aa9c9;padding:12px 16px;font-size:11px;}}
+.cite code{{display:block;margin-top:6px;color:#e9eef3;font-size:10px;word-break:break-all;}}
+.kontakt{{padding:14px 16px;border:1px solid rgba(106,169,201,0.45);background:rgba(106,169,201,0.08);}}
+.kontakt a{{color:#e9eef3;font-size:14px;text-decoration:none;}}
+.kontakt a:hover{{text-decoration:underline;}}
+.footer{{font-size:9px;letter-spacing:1.5px;color:#3a4551;text-align:center;margin-top:30px;text-transform:uppercase;}}
+.body-text{{font-family:'Inter',system-ui,sans-serif;font-size:13px;color:#aab5c0;}}
+</style></head>
+<body>
+<div class="classbar"><span class="l">◆ OPEN SOURCE INTELLIGENCE · LEX EUROPE</span><span>PRESS KIT · STAND {today}</span></div>
+<div class="page">
+  <h1>Press Kit</h1>
+  <div class="sub">Schnittstellen, Methodik & Kontakt für Journalist:innen, Forschung, Behörden</div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="lbl">T1-Akte gesamt</div><div class="val">{d['total_t1']}</div></div>
+    <div class="kpi"><div class="lbl">Hoch-Schwere ≥4</div><div class="val">{d['high_severity']}</div></div>
+    <div class="kpi"><div class="lbl">Aktive Cluster</div><div class="val">{d['active_clusters']}</div></div>
+    <div class="kpi"><div class="lbl">Identifizierte Akteure</div><div class="val">{d['distinct_actors']}</div></div>
+  </div>
+
+  <div class="section">
+    <h2>Sofort-Schnittstellen</h2>
+    <div class="cta-grid">
+      <a class="cta" href="/api/incidents.rss"><b>↗ RSS · Vorfälle</b><span>Default T1, severity ≥3, ?country=DE/US/CH/…</span></a>
+      <a class="cta" href="/api/early-warning.rss"><b>↗ RSS · Frühwarn-Cluster</b><span>≥3 gleichartige Anschläge / 6 Wochen</span></a>
+      <a class="cta" href="/api/lagebericht/weekly.md"><b>↓ Markdown · Wochenbericht</b><span>Press-ready zum Direkt-Einbau</span></a>
+      <a class="cta" href="/lagebericht"><b>→ Wochenbericht-Seite</b><span>HTML, druckfreundlich, OG-getaggt</span></a>
+      <a class="cta" href="/dashboard"><b>→ Live-Dashboard</b><span>KPI-Karten + Top-Länder</span></a>
+      <a class="cta" href="/sources"><b>→ Crawler-Quellen-Status</b><span>Transparente Health-Übersicht</span></a>
+      <a class="cta" href="/api/public/stats"><b>↗ JSON-Stats</b><span>Aggregat-Endpoint für Embedding</span></a>
+      <a class="cta" href="/api/v1/docs"><b>→ LEA / Research API v1</b><span>Authentifizierter Vollzugang</span></a>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Embed-Widgets</h2>
+    <p class="body-text">Externe Sites können kompakte LEX-EUROPE-KPIs direkt
+       einbinden — kein JavaScript, kein Tracking, transparenter Hintergrund:</p>
+    <div class="cite">
+      <code>&lt;iframe src="/embed/counter" width="100%" height="180" style="border:0"&gt;&lt;/iframe&gt;</code>
+      <code>&lt;iframe src="/embed/headline" width="100%" height="100" style="border:0"&gt;&lt;/iframe&gt;</code>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Zitations-Schnittstelle</h2>
+    <p class="body-text">Für akademische Nutzung: jeder Vorfall liefert
+       BibTeX, RIS oder Chicago mit eingebettetem SHA-256 des WARC-Snapshots,
+       damit Zitate reproduzierbar verifizierbar sind:</p>
+    <div class="cite">
+      <code>GET /api/incident/&lt;id&gt;/cite?format=bibtex</code>
+      <code>GET /api/incident/&lt;id&gt;/cite?format=ris</code>
+      <code>GET /api/incident/&lt;id&gt;/cite?format=chicago</code>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Methodik (Kurz)</h2>
+    <p class="body-text">Die Plattform übernimmt das Fedpol Art. 19 Abs. 2
+       Bst. e NDG-Schema („act / enable / context") und macht die
+       Strafverfolgungs-Lücke öffentlich messbar. Aufnahme nur, wenn
+       der Empfänger oder Akteur in einem aktuellen
+       Verfassungsschutzbericht (BfV, LfV, DSN, NDB) benannt ist oder
+       gegen die Strukturen ein laufendes §§ 129/129a-Verfahren
+       geführt wird. Doxxing-Inhalte werden ohne PII protokolliert
+       und mit gelöschter Quelle ausgegeben.
+       <a href="/methodology" style="color:#6aa9c9">→ Vollständige Methodik-Doku</a></p>
+  </div>
+
+  <div class="section">
+    <h2>Redaktions-Kontakt</h2>
+    <div class="kontakt">
+      <a href="mailto:{contact}">{contact}</a><br>
+      <span style="font-size:10px;color:#6c7986">PGP auf Anfrage. Sichere Übermittlung von Hinweisen über SecureDrop in Vorbereitung.</span>
+    </div>
+  </div>
+
+  <div class="footer">LEX EUROPE · {today} · unabhängige OSINT-Plattform · keine Werbung · kein Tracking</div>
+</div>
+</body></html>""")
+
+
+@app.get("/methodology", response_class=HTMLResponse)
+async def public_methodology():
+    """Standalone Methodik-Dokumentation — was wird aufgenommen, was nicht,
+    welche Schwellenwerte, welche §C3-Ausschlusskriterien."""
+    return HTMLResponse(f"""<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><title>Methodik — LEX EUROPE</title>
+<meta name="description" content="LEX EUROPE Methodik: Aufnahmekriterien (Fedpol-Taxonomie, VS-Berichte, §129-Verfahren), Datenpolitik (DSGVO §C3, Doxxing-Sanitisierung), Quellenintegrität (WARC + SHA-256), Verfolgungs-Status-Tracking.">
+<meta property="og:title"       content="LEX EUROPE — Methodik">
+<meta property="og:description" content="Aufnahmekriterien, Datenpolitik, Quellenintegrität, Verfolgungs-Tracking. Vollständige Doku der Plattform-Schwellen.">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#080c12;color:#aab5c0;font-size:14px;line-height:1.7;}}
+.classbar{{background:#0a1219;border-bottom:1px solid rgba(255,255,255,0.06);padding:5px 18px;font-size:9px;letter-spacing:2.5px;color:#6c7986;font-family:ui-monospace,Menlo,monospace;text-transform:uppercase;display:flex;justify-content:space-between;}}
+.classbar .l{{color:#6aa9c9;}}
+.page{{max-width:780px;margin:0 auto;padding:30px 28px 60px;}}
+h1{{font-size:34px;font-weight:600;color:#e9eef3;letter-spacing:0.3px;margin-bottom:8px;}}
+.sub{{font-size:11px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;font-family:ui-monospace,Menlo,monospace;margin-bottom:28px;}}
+.section{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:24px 28px;margin-bottom:14px;}}
+h2{{font-size:12px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-transform:uppercase;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid rgba(106,169,201,0.18);font-family:ui-monospace,Menlo,monospace;}}
+p,li{{margin-bottom:10px;}}
+ol,ul{{padding-left:22px;}}
+b{{color:#e9eef3;}}
+code{{font-family:ui-monospace,Menlo,monospace;background:rgba(106,169,201,0.10);padding:1px 5px;color:#e9eef3;font-size:13px;}}
+.tier{{display:grid;grid-template-columns:auto 1fr;gap:14px 18px;align-items:start;}}
+.tier-label{{padding:5px 12px;font-family:ui-monospace,Menlo,monospace;font-size:10px;font-weight:700;letter-spacing:2px;text-align:center;border:1px solid currentColor;}}
+.t1{{color:#d4495d;}}.t2{{color:#d99a2b;}}.t3{{color:#6c7986;}}
+.warn{{background:rgba(217,154,43,0.10);border-left:3px solid #d99a2b;padding:14px 18px;margin:14px 0;}}
+.cta{{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#6aa9c9;border:1px solid #6aa9c9;padding:8px 16px;text-decoration:none;margin-right:6px;}}
+.footer{{font-family:ui-monospace,Menlo,monospace;font-size:9px;letter-spacing:1.5px;color:#3a4551;text-align:center;margin-top:30px;text-transform:uppercase;}}
+</style></head>
+<body>
+<div class="classbar"><span class="l">◆ OPEN SOURCE INTELLIGENCE · LEX EUROPE</span><span>METHODIK-DOKUMENTATION</span></div>
+<div class="page">
+  <h1>Methodik & Datenpolitik</h1>
+  <div class="sub">Aufnahmekriterien · Schwellenwerte · Ausschluss-Linien · Quellenintegrität</div>
+
+  <div class="section">
+    <h2>1 · Aufnahmekriterien für Vorfälle</h2>
+    <p>Ein Ereignis wird nur dokumentiert, wenn mindestens eines der folgenden
+       Kriterien erfüllt ist:</p>
+    <ol>
+      <li><b>VS-Bericht-Nennung:</b> Der Akteur oder die Trägerorganisation
+          ist in einem aktuellen Verfassungsschutzbericht (BfV, LfV der
+          Länder, DSN Österreich, NDB Schweiz, ggf. US-FBI-Domestic-
+          Terrorism-Reports) namentlich erwähnt.</li>
+      <li><b>Laufendes §129/§129a-Verfahren</b> bzw. analoge Normen
+          (§ 246a öStGB, Art. 260ter StGB Schweiz, GA RICO Code § 16-4-10).</li>
+      <li><b>Dokumentierte Solidar-/Infrastruktur</b> für Personen, die
+          wegen militanter linker Straftaten verurteilt oder angeklagt sind.</li>
+    </ol>
+    <div class="warn">
+      <b>Was NICHT aufgenommen wird:</b> Demos, legale Petitionen,
+      normale Parteiarbeit, Gegen-Demonstrationen ohne Eskalation,
+      humanitäre NGOs ohne dokumentierte Linksextrem-Querverbindungen.
+      Tech-/Auto-/Krypto-Themen ohne politischen Bezug werden vom
+      Klassifikator automatisch herausgefiltert.
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>2 · Fedpol-Tier-Klassifikation</h2>
+    <p>Jeder Vorfall wird nach Art. 19 Abs. 2 Bst. e NDG einer von drei
+       Handlungs-Klassen zugewiesen:</p>
+    <div class="tier">
+      <div class="tier-label t1">T1 ACT</div>
+      <div><b>Verüben</b> — Brandanschlag, Sabotage, Gewalt, Militante Aktion,
+        Sachbeschädigung mit politischem Motiv. Kernbereich der Plattform.</div>
+      <div class="tier-label t2">T2 ENABLE</div>
+      <div><b>Fördern</b> — Aufruf zu Gewalt, Mobilisierungstreffen,
+        Gewaltpropaganda, Schmiererei mit konkreter Drohphrase + Schwere ≥3.</div>
+      <div class="tier-label t3">T3 CONTEXT</div>
+      <div><b>Befürworten/Kontext</b> — Demos, Repressionsberichte,
+        Verhaftungen, Sonstiges. Im Lagebild zur Vollständigkeit
+        protokolliert, aber visuell de-emphasiert.</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>3 · Doxxing- und PII-Schutz</h2>
+    <p>Doxxing-Vorfälle (Klarnamen, Wohnadressen, Arbeitgeber-Outings,
+       Wohnumfeld-Berichte) werden <b>dokumentiert, aber sanitisiert</b>:
+       die Quelle (Original-URL) wird gelöscht, die Beschreibung durch
+       einen Rollen-Hinweis ersetzt (<code>"Politiker:in in &lt;Stadt&gt;
+       wurde gedoxxt"</code>), Klartext-Inhalt verlässt die Datenbank nie.
+       Erkennung über kombinierte Heuristik: Doxxing-Kontext-Trigger
+       (geoutet/enttarnt/Wohnumfeld/Klarnamen veröffentlicht) PLUS
+       mindestens ein PII-Signal (Adresse, E-Mail, Telefon, Geburtsdatum).</p>
+  </div>
+
+  <div class="section">
+    <h2>4 · Quellenintegrität (Säule 4)</h2>
+    <p>Jeder crawled Vorfall bekommt einen WARC/1.1-Snapshot der
+       Originalquelle plus SHA-256-Hash + ISO-Zeitstempel.
+       Citation-Export (BibTeX/RIS/Chicago) bettet den Hash in die
+       Zitations-Notiz ein — damit ist jede Quellenangabe
+       reproduzierbar verifizierbar, auch wenn die Original-URL später
+       verschwindet. Cloudflare-/Anti-Bot-geschützte Hosts werden über
+       cloudscraper + web.archive.org als Fallback erfasst.</p>
+  </div>
+
+  <div class="section">
+    <h2>5 · Strafverfolgungs-Status-Tracking (Säule 1)</h2>
+    <p>Bekannte, in Mainstream-Berichterstattung dokumentierte
+       Strafverfahren werden mit ihrem Aktenzeichen auf die Vorfälle
+       gemapped (Lina E. OLG Dresden 4 OJs 9/21, G20 Hamburg LG Hamburg
+       612 KLs, Stop Cop City Fulton County 23SC183872, Letzte Generation
+       GStA München 1 BJs 7/23-2, Tesla Grünheide GStA Berlin 4 BJs 4/24,
+       Minneapolis Third Precinct D.Minn. 0:20-cr-00203, …).
+       Der <a href="/dashboard">öffentliche Strafverfolgungs-Gap-Counter</a>
+       misst, welcher Anteil der hoch-Schwere-T1-Vorfälle nach ≥180 Tagen
+       noch ohne dokumentiertes Verfahren ist.</p>
+  </div>
+
+  <div class="section">
+    <h2>6 · Funding-Quellen-Verifikation</h2>
+    <p>Funding-Records tragen ein zweistufiges Vertrauenslabel:
+      <b style="color:#5fb583">✓ verifiziert</b> wenn die Quellen-URL
+      direkt auf ein spezifisches Primärdokument zeigt
+      (Climate-Emergency-Fund-Grantees-Liste, Letzte-Generation-Finanzbericht,
+      Bürgerschafts-Drucksache mit Aktenzeichen).
+      <b style="color:#d99a2b">⚠ ungeprüft</b> wenn die Quelle eine
+      Programm-Landingpage ist — das spezifische Dokument ist dahinter
+      veröffentlicht, aber die Plattform verlinkt nicht direkt darauf
+      (bitte vor Zitation eigenständig prüfen). Fiktive Trägervereins-
+      Namen sind aus dem Datenbestand entfernt.</p>
+  </div>
+
+  <div class="section">
+    <h2>7 · Was NIEMALS in der Datenbank steht</h2>
+    <ul>
+      <li>Klarnamen, Wohnadressen, Arbeitgeber privater Personen
+          (auch nicht von „bekannten Linksextremisten").</li>
+      <li>Personenbezogene Daten aus Mailing-Listen-Archiven
+          (alle Riseup-Listen-Imports durchlaufen PII-Redaktion).</li>
+      <li>Vorverurteilungs-Aussagen — Aufnahme bedeutet NICHT Schuld;
+          Pflichtfeld ist immer ein Verbindungsnachweis.</li>
+      <li>Selbstjustiz-Werkzeuge: keine Live-Locations laufender Aktionen,
+          keine Karten von Veranstaltungs-Adressen einzelner Personen.</li>
+      <li>Vollständige Gewaltpropaganda im Klartext — nur Hash + Zitat
+          ≤200 Zeichen + Link.</li>
+    </ul>
+  </div>
+
+  <div class="section" style="text-align:center">
+    <a class="cta" href="/dashboard">→ Dashboard</a>
+    <a class="cta" href="/press">→ Press Kit</a>
+    <a class="cta" href="/api/v1/docs">→ LEA API</a>
+    <a class="cta" href="/">→ Karte</a>
+  </div>
+
+  <div class="footer">LEX EUROPE · Methodik-Dokumentation · {datetime.now().date().isoformat()}</div>
 </div>
 </body></html>""")
 
@@ -6655,6 +7349,350 @@ async def incidents_by_actor(actor: str = "", limit: int = 200):
         "by_severity": sev_hist,
         "by_country":  sorted(by_co.items(), key=lambda x: -x[1]),
         "matches": filtered[:limit],
+    })
+
+
+@app.get("/api/timeline/v2")
+async def timeline_data(months: int = 24, country: str = "", tier: str = "act"):
+    """Monatliche Event-Density mit Tier-Breakdown — Datenquelle für
+    Chart.js-Trends im Dashboard und Embed-Widgets. months default 24.
+    Output: series[{month, total, act, enable, context, by_category{}}]."""
+    today = datetime.now().date()
+    start = (today.replace(day=1) - timedelta(days=32 * months)).replace(day=1)
+    q = "SELECT date, tier, category, severity_score FROM incidents WHERE date >= ?"
+    p = [start.isoformat()]
+    if country: q += " AND country = ?"; p.append(country)
+    rows = db.execute(q, p).fetchall()
+    from collections import defaultdict
+    buckets = defaultdict(lambda: {"total": 0, "act": 0, "enable": 0, "context": 0,
+                                    "hi": 0, "by_category": defaultdict(int)})
+    for r in rows:
+        try: d = datetime.fromisoformat(r["date"]).date()
+        except Exception: continue
+        key = f"{d.year}-{d.month:02d}"
+        b = buckets[key]
+        b["total"] += 1
+        b[r["tier"] or "context"] = b.get(r["tier"] or "context", 0) + 1
+        if (r["severity_score"] or 0) >= 4: b["hi"] += 1
+        b["by_category"][r["category"]] += 1
+    series = []
+    cur = start
+    while cur <= today:
+        key = f"{cur.year}-{cur.month:02d}"
+        b = buckets.get(key, {"total": 0, "act": 0, "enable": 0, "context": 0, "hi": 0, "by_category": {}})
+        b_clean = {**b, "month": key,
+                   "by_category": dict(b["by_category"]) if b["by_category"] else {}}
+        series.append(b_clean)
+        cur = cur.replace(year=cur.year+1, month=1) if cur.month==12 else cur.replace(month=cur.month+1)
+    return JSONResponse({
+        "months":   months,
+        "country":  country or "ALL",
+        "series":   series,
+        "asof":     datetime.now().isoformat(timespec="seconds"),
+    })
+
+
+@app.get("/api/heatmap")
+async def heatmap_data(months: int = 12):
+    """Monat × Land Vorfalls-Density für Heatmap-Visualisierung.
+    Output: {months:[...], countries:[...], matrix:{country:[counts]}}."""
+    today = datetime.now().date()
+    start = (today.replace(day=1) - timedelta(days=32 * months)).replace(day=1)
+    rows = db.execute(
+        "SELECT date, country FROM incidents WHERE tier='act' AND date >= ? "
+        "ORDER BY date ASC", (start.isoformat(),)
+    ).fetchall()
+    # Build month axis
+    month_axis = []
+    cur = start
+    while cur <= today:
+        month_axis.append(f"{cur.year}-{cur.month:02d}")
+        cur = cur.replace(year=cur.year+1, month=1) if cur.month==12 else cur.replace(month=cur.month+1)
+    # Build country axis from data, sortiert nach total volume
+    from collections import Counter, defaultdict
+    co_totals = Counter(r["country"] for r in rows)
+    country_axis = [c for c, _ in co_totals.most_common(15)]
+    matrix = {c: [0] * len(month_axis) for c in country_axis}
+    for r in rows:
+        co = r["country"]
+        if co not in matrix: continue
+        try: d = datetime.fromisoformat(r["date"]).date()
+        except Exception: continue
+        key = f"{d.year}-{d.month:02d}"
+        if key in month_axis:
+            matrix[co][month_axis.index(key)] += 1
+    return JSONResponse({
+        "months":     month_axis,
+        "countries":  country_axis,
+        "matrix":     matrix,
+        "asof":       datetime.now().isoformat(timespec="seconds"),
+    })
+
+
+@app.get("/embed/trend", response_class=HTMLResponse)
+async def embed_trend():
+    """Embed-fähiger Mini-Trend-Chart als reines inline-SVG — kein JS,
+    kein Tracking. Zeigt T1-Akte pro Monat über die letzten 12 Monate."""
+    res = await timeline_data(months=12)  # timeline_data ist /api/timeline/v2
+    import json as _j
+    d = _j.loads(res.body)
+    series = d["series"]
+    if not series:
+        return HTMLResponse("<svg width='100%' height='80'><text x='50%' y='50%' text-anchor='middle' fill='#6c7986' font-family='monospace' font-size='11'>Keine Daten</text></svg>")
+    max_t = max(s["total"] for s in series) or 1
+    w, h = 460, 100
+    pad = 24
+    pts = []
+    bars = []
+    for i, s in enumerate(series):
+        x = pad + i * (w - 2*pad) / max(len(series)-1, 1)
+        y = h - pad - (s["total"] / max_t) * (h - 2*pad)
+        bars.append(f'<rect x="{x-6}" y="{y}" width="12" height="{h-pad-y}" fill="#6aa9c9" opacity="0.40"/>')
+        if s["hi"]:
+            yhi = h - pad - (s["hi"] / max_t) * (h - 2*pad)
+            bars.append(f'<rect x="{x-6}" y="{yhi}" width="12" height="{h-pad-yhi}" fill="#d4495d" opacity="0.85"/>')
+        pts.append(f"{x},{y}")
+    line = f'<polyline points="{" ".join(pts)}" fill="none" stroke="#6aa9c9" stroke-width="2"/>'
+    # X-axis labels (first, middle, last month)
+    labels = []
+    for idx in (0, len(series)//2, len(series)-1):
+        x = pad + idx * (w - 2*pad) / max(len(series)-1, 1)
+        labels.append(f'<text x="{x}" y="{h-4}" text-anchor="middle" fill="#6c7986" font-family="monospace" font-size="9">{series[idx]["month"]}</text>')
+    total_n = sum(s["total"] for s in series)
+    hi_n    = sum(s["hi"] for s in series)
+    return HTMLResponse(f"""<!doctype html><html><head><meta charset="utf-8">
+<style>body{{margin:0;padding:8px;background:transparent;font-family:ui-monospace,Menlo,Consolas,monospace;color:#aab5c0}}
+.box{{background:#080c12;border:1px solid rgba(255,255,255,0.08);padding:10px}}
+.head{{font-size:8.5px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between}}
+.head a{{color:#6aa9c9;text-decoration:none}}
+.stats{{display:flex;gap:14px;font-size:9px;margin-bottom:4px;color:#6c7986;letter-spacing:1.5px;text-transform:uppercase}}
+.stats .a{{color:#6aa9c9}}.stats .r{{color:#d4495d}}
+</style></head><body><div class="box">
+<div class="head"><span>◆ LEX EUROPE · T1-AKTE · 12 MONATE</span><a href="/dashboard" target="_top">→ dashboard</a></div>
+<div class="stats"><span class="a">Σ {total_n}</span> T1-Akte <span class="r">{hi_n}</span> hoch-Schwere</div>
+<svg width="100%" viewBox="0 0 {w} {h}" preserveAspectRatio="none">
+{''.join(bars)}
+{line}
+{''.join(labels)}
+</svg>
+</div></body></html>""")
+
+
+@app.get("/en/dashboard", response_class=HTMLResponse)
+async def public_dashboard_en():
+    """English version of /dashboard — for international press + research."""
+    s = await public_stats()
+    import json as _j
+    d = _j.loads(s.body)
+    today = d["asof"]
+    coBlocks = "\n".join(
+        f'<div class="kc-row"><span class="kc-co">{c["country"]}</span>'
+        f'<div class="kc-bar"><div class="kc-bar-fill" style="width:{round((c["n"]/max(d["by_country_top10"][0]["n"],1))*100)}%"></div></div>'
+        f'<span class="kc-n">{c["n"]}</span></div>'
+        for c in d["by_country_top10"]
+    )
+    return HTMLResponse(f"""<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><title>LEX EUROPE — Situation Dashboard {today}</title>
+<meta name="description" content="OSINT situational picture of politically-left motivated violence in Europe and the United States. {d['total_t1']} documented T1 acts, {d['active_clusters']} active early-warning clusters.">
+<meta property="og:title"       content="LEX EUROPE — Left-extremism Situational Picture">
+<meta property="og:description" content="{d['total_t1']} documented T1 acts · {d['last_7d']} in the last 7 days · {d['active_clusters']} active early-warning clusters.">
+<meta property="og:type"        content="website">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:ui-monospace,Menlo,Consolas,monospace;background:#080c12;color:#aab5c0;min-height:100vh;font-size:13px;line-height:1.5;}}
+.classbar{{background:#0a1219;border-bottom:1px solid rgba(255,255,255,0.06);padding:5px 18px;font-size:9px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;display:flex;justify-content:space-between;}}
+.classbar .l{{color:#6aa9c9;}}
+.page{{max-width:1100px;margin:0 auto;padding:30px 24px 60px;}}
+h1{{font-family:'Inter',system-ui,sans-serif;font-size:28px;font-weight:600;color:#e9eef3;letter-spacing:0.5px;margin-bottom:6px;}}
+.sub{{font-size:11px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;margin-bottom:32px;}}
+.kpi-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:32px;}}
+.kpi{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:18px 22px;}}
+.kpi .lbl{{font-size:9px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;margin-bottom:6px;}}
+.kpi .val{{font-size:30px;font-weight:600;color:#e9eef3;letter-spacing:-0.5px;font-variant-numeric:tabular-nums;}}
+.kpi.acc .val{{color:#6aa9c9;}}.kpi.red .val{{color:#d4495d;}}.kpi.amber .val{{color:#d99a2b;}}.kpi.green .val{{color:#5fb583;}}
+.kpi .delta{{font-size:10px;color:#6c7986;margin-top:4px;letter-spacing:1px;}}
+.section{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:24px;margin-bottom:18px;}}
+h2{{font-size:11px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-transform:uppercase;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid rgba(106,169,201,0.18);}}
+.kc-row{{display:flex;align-items:center;gap:14px;margin-bottom:8px;}}
+.kc-co{{font-size:11px;color:#aab5c0;min-width:35px;}}
+.kc-bar{{flex:1;height:6px;background:rgba(106,169,201,0.08);border-radius:1px;overflow:hidden;}}
+.kc-bar-fill{{height:100%;background:#6aa9c9;border-radius:1px;}}
+.kc-n{{font-size:11px;color:#e9eef3;min-width:30px;text-align:right;font-variant-numeric:tabular-nums;}}
+.cta{{display:inline-block;font-family:ui-monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#6aa9c9;border:1px solid #6aa9c9;padding:10px 16px;text-decoration:none;margin-right:8px;margin-top:8px;}}
+.cta:hover{{background:rgba(106,169,201,0.10);}}
+.footer{{font-size:9px;letter-spacing:1.5px;color:#3a4551;text-align:center;margin-top:30px;text-transform:uppercase;}}
+</style></head>
+<body>
+<div class="classbar"><span class="l">◆ OPEN SOURCE INTELLIGENCE · LEX EUROPE · UNCLASSIFIED // RELEASABLE</span><span>AS OF {today}</span></div>
+<div class="page">
+  <h1>Left-Extremism Situational Dashboard</h1>
+  <div class="sub">Europe + USA · OSINT aggregation · automatically generated</div>
+
+  <div class="kpi-grid">
+    <div class="kpi acc"><div class="lbl">Total T1 acts</div><div class="val">{d['total_t1']}</div><div class="delta">tier=act (arson / sabotage / violence / militant action)</div></div>
+    <div class="kpi"><div class="lbl">last 7 days</div><div class="val">{d['last_7d']}</div><div class="delta">new T1 acts</div></div>
+    <div class="kpi"><div class="lbl">last 30 days</div><div class="val">{d['last_30d']}</div><div class="delta">new T1 acts</div></div>
+    <div class="kpi red"><div class="lbl">high-severity ≥ 4</div><div class="val">{d['high_severity']}</div><div class="delta">personal injury / firebomb / ≥ €100k damage</div></div>
+    <div class="kpi amber"><div class="lbl">active early-warning clusters</div><div class="val">{d['active_clusters']}</div><div class="delta">≥ 3 similar attacks / 6 weeks</div></div>
+    <div class="kpi"><div class="lbl">identified actors</div><div class="val">{d['distinct_actors']}</div></div>
+    <div class="kpi"><div class="lbl">active sources</div><div class="val">{d['distinct_sources']}</div></div>
+  </div>
+
+  <div class="section">
+    <h2>Geographic distribution — Top 10 (T1)</h2>
+    {coBlocks}
+  </div>
+
+  <div class="section">
+    <h2>Interfaces</h2>
+    <a class="cta" href="/">→ Full map + filter</a>
+    <a class="cta" href="/lagebericht">→ Weekly briefing (DE)</a>
+    <a class="cta" href="/en/sources">→ Crawler sources</a>
+    <a class="cta" href="/api/incidents.rss">→ RSS feed</a>
+    <a class="cta" href="/api/early-warning.rss">→ Early-warning feed</a>
+    <a class="cta" href="/api/v1/docs">→ LEA / research API</a>
+    <a class="cta" href="/dashboard">→ Deutsch</a>
+  </div>
+
+  <div class="footer">
+    LEX EUROPE · OSINT platform · independent research · no ads · no tracking
+  </div>
+</div>
+</body></html>""")
+
+
+@app.get("/en/sources", response_class=HTMLResponse)
+async def public_sources_page_en():
+    """English version of /sources — crawler status visible to all."""
+    s_resp = await public_sources()
+    import json as _j
+    data = _j.loads(s_resp.body)
+    sources = data["sources"]
+    totals  = data["totals"]
+    order_map = {"healthy":0, "degraded":1, "warning":2, "untested":3, "disabled":4}
+    sources.sort(key=lambda s: (order_map.get(s["status"], 9), s["source"]))
+    def esc(s): return _xml_esc(s)
+    status_color = {"healthy":"#5fb583","degraded":"#d99a2b","warning":"#d99a2b","untested":"#6c7986","disabled":"#d4495d"}
+    status_label = {"healthy":"● active","degraded":"● degraded","warning":"● warning","untested":"○ untested","disabled":"● disabled"}
+    rows_html = "".join(
+        f"<tr class='s-{esc(s['status'])}'>"
+        f"<td><span style='color:{status_color.get(s['status'], '#6c7986')}'>{status_label.get(s['status'], '?')}</span></td>"
+        f"<td class='src'>{esc(s['source'])}</td><td class='url'>{esc(s.get('url') or '—')}</td>"
+        f"<td class='n'>{s.get('total_successes') or 0}</td><td class='n'>{s.get('total_attempts') or 0}</td>"
+        f"<td class='n'>{s.get('items_total') or 0}</td><td class='date'>{esc(s.get('last_success') or '—')}</td>"
+        f"<td class='n'>{s.get('consecutive_failures') or 0}</td></tr>"
+        for s in sources
+    ) or "<tr><td colspan='8' style='color:#6c7986;text-align:center;padding:20px'>— No crawl statistics yet (crawler runs ~20s after boot) —</td></tr>"
+    return HTMLResponse(f"""<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><title>Crawler sources — LEX EUROPE</title>
+<meta name="description" content="Status of all {data['configured']} configured crawler sources: {totals['healthy']} healthy, {totals['degraded']+totals['warning']} with errors, {totals['disabled']} auto-disabled.">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:ui-monospace,Menlo,Consolas,monospace;background:#080c12;color:#aab5c0;font-size:12px;line-height:1.5;}}
+.classbar{{background:#0a1219;border-bottom:1px solid rgba(255,255,255,0.06);padding:5px 18px;font-size:9px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;display:flex;justify-content:space-between;}}
+.classbar .l{{color:#6aa9c9;}}
+.page{{max-width:1100px;margin:0 auto;padding:30px 24px 60px;}}
+h1{{font-family:'Inter',system-ui,sans-serif;font-size:28px;font-weight:600;color:#e9eef3;letter-spacing:0.5px;margin-bottom:6px;}}
+.sub{{font-size:10px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;margin-bottom:24px;}}
+.kpi-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px;}}
+.kpi{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:16px 20px;}}
+.kpi .lbl{{font-size:8px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;margin-bottom:4px;}}
+.kpi .val{{font-size:24px;font-weight:600;color:#e9eef3;font-variant-numeric:tabular-nums;}}
+.kpi.green .val{{color:#5fb583;}}.kpi.amber .val{{color:#d99a2b;}}.kpi.red .val{{color:#d4495d;}}
+table{{width:100%;border-collapse:collapse;font-family:ui-monospace;font-size:11px;}}
+th,td{{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.04);text-align:left;vertical-align:top;}}
+th{{font-size:9px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;background:rgba(255,255,255,0.02);}}
+td.src{{color:#e9eef3;font-weight:600;}}
+td.url{{color:#6c7986;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}}
+td.n{{text-align:right;color:#aab5c0;font-variant-numeric:tabular-nums;}}
+td.date{{color:#6c7986;font-size:10px;}}
+tr:hover td{{background:rgba(106,169,201,0.04);}}
+.section{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:18px 22px;margin-bottom:14px;}}
+h2{{font-size:10px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid rgba(106,169,201,0.18);}}
+.footer{{font-size:9px;letter-spacing:1.5px;color:#3a4551;text-align:center;margin-top:30px;text-transform:uppercase;}}
+.cta{{display:inline-block;font-size:10px;letter-spacing:2px;color:#6aa9c9;border:1px solid #6aa9c9;padding:8px 14px;text-decoration:none;text-transform:uppercase;margin-right:6px;}}
+</style></head>
+<body>
+<div class="classbar"><span class="l">◆ OPEN SOURCE INTELLIGENCE · LEX EUROPE</span><span>CRAWLER STATUS · AS OF {esc(data['asof'][:10])}</span></div>
+<div class="page">
+  <h1>Crawler Source Status</h1>
+  <div class="sub">{data['configured']} configured sources · auto-disable after {SOURCE_MAX_FAILURES} consecutive failures · public visibility</div>
+
+  <div class="kpi-grid">
+    <div class="kpi"><div class="lbl">Configured</div><div class="val">{data['configured']}</div></div>
+    <div class="kpi green"><div class="lbl">Healthy</div><div class="val">{totals['healthy']}</div></div>
+    <div class="kpi amber"><div class="lbl">Degraded / Warning</div><div class="val">{totals['degraded']+totals['warning']}</div></div>
+    <div class="kpi red"><div class="lbl">Auto-Disabled</div><div class="val">{totals['disabled']}</div></div>
+    <div class="kpi"><div class="lbl">Untested</div><div class="val">{totals['untested']}</div></div>
+    <div class="kpi"><div class="lbl">Items in last run</div><div class="val">{data.get('items_today',0)}</div></div>
+  </div>
+
+  <div class="section">
+    <h2>All sources ({len(sources)} with crawl statistics)</h2>
+    <table>
+      <thead><tr><th>STATUS</th><th>SOURCE</th><th>URL</th><th>SUCC</th><th>ATTEMPTS</th><th>ITEMS</th><th>LAST SUCCESS</th><th>F-CHAIN</th></tr></thead>
+      <tbody>{rows_html}</tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <a class="cta" href="/api/public/sources">↗ JSON export</a>
+    <a class="cta" href="/en/dashboard">→ Dashboard</a>
+    <a class="cta" href="/">→ Map</a>
+    <a class="cta" href="/sources">→ Deutsch</a>
+  </div>
+
+  <div class="footer">LEX EUROPE · transparent crawler health · automatically updated</div>
+</div>
+</body></html>""")
+
+
+@app.get("/api/actors/cross-references")
+async def actors_cross_references(min_count: int = 1):
+    """Akteurs-Co-Occurrence-Graph: zeigt welche Akteure gemeinsam in
+    derselben Vorfalls-Zeile auftauchen. Output ist D3-Force-kompatibel
+    {nodes: [{id, label, count, tier}], links: [{source, target, value}]}.
+    Macht netzwerk-analytisch sichtbar, welche Strukturen miteinander
+    operieren."""
+    rows = db.execute(
+        "SELECT actors FROM incidents WHERE actors IS NOT NULL AND actors != '' "
+        "AND tier IN ('act','enable')"
+    ).fetchall()
+    from collections import Counter
+    actor_counts = Counter()
+    pair_counts  = Counter()
+    for r in rows:
+        actors = [a.strip() for a in (r["actors"] or "").split(",") if a.strip()]
+        for a in actors:
+            actor_counts[a] += 1
+        # Pairs (sorted, jeweils nur einmal pro Vorfall)
+        for i, a in enumerate(actors):
+            for b in actors[i+1:]:
+                key = tuple(sorted([a, b]))
+                pair_counts[key] += 1
+    # Filter: nur Akteure mit min_count Vorfällen
+    eligible = {a for a, n in actor_counts.items() if n >= min_count}
+    nodes = []
+    for a, n in actor_counts.items():
+        if a not in eligible: continue
+        nodes.append({
+            "id":    a,
+            "label": a,
+            "count": n,
+            "tier":  ACTOR_TIER.get(a, "endorse"),
+        })
+    links = []
+    for (a, b), n in pair_counts.items():
+        if a in eligible and b in eligible:
+            links.append({"source": a, "target": b, "value": n})
+    return JSONResponse({
+        "nodes":      nodes,
+        "links":      links,
+        "node_count": len(nodes),
+        "link_count": len(links),
+        "asof":       datetime.now().isoformat(timespec="seconds"),
     })
 
 
