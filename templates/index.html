@@ -822,12 +822,13 @@ body.mod-funding #mod-funding-view{display:grid !important;}
   <div class="chip hide-mob"><span data-i18n="chip.sync">SYNC</span> <b id="ts">—</b></div>
   <div class="tb-sp"></div>
   <span class="tb-version hide-mob" data-i18n="brand.version">v2025.5 — Open Research</span>
-  <!-- LANGUAGE SWITCHER (DE / EN / FR / IT) -->
+  <!-- LANGUAGE SWITCHER (DE / EN / FR / IT / ES) -->
   <div class="tb-lang" id="tb-lang" role="group" aria-label="Sprache">
     <button id="lang-de" data-lang="de" onclick="setLang('de')" title="Deutsch">DE</button>
     <button id="lang-en" data-lang="en" onclick="setLang('en')" title="English">EN</button>
     <button id="lang-fr" data-lang="fr" onclick="setLang('fr')" title="Français">FR</button>
     <button id="lang-it" data-lang="it" onclick="setLang('it')" title="Italiano">IT</button>
+    <button id="lang-es" data-lang="es" onclick="setLang('es')" title="Español">ES</button>
   </div>
   <div class="tb-acts">
     <button class="gbtn hide-mob mod-inc-only" onclick="cmdOpen()" title="Suche (Strg+K)" data-i18n="topbar.search">Suche</button>
@@ -1429,6 +1430,10 @@ body.mod-funding #mod-funding-view{display:grid !important;}
     <span class="sv eff eff-evidence" id="eff-evidence">—</span>
   </div>
   <div class="si"><span class="sk">CRAWLER</span><span class="sv" id="s-cr">—</span></div>
+  <a class="si" href="/sources" title="Crawler-Quellen-Status (öffentlich)" style="text-decoration:none">
+    <span class="sk">QUELLEN</span>
+    <span class="sv eff" id="s-sources">—</span>
+  </a>
   <div id="thr-lvl"></div>
 </footer>
 
@@ -1529,7 +1534,7 @@ const SEV_BG={1:'rgba(58,85,112,0.18)',2:'rgba(90,122,146,0.18)',3:'rgba(240,165
 // Strings live in /i18n/<lang>.json (served as static assets). On first
 // visit we honour the browser's preferred language; the user can override
 // via the topbar switcher and the choice is persisted in localStorage.
-const I18N_LANGS = ['de','en','fr','it'];
+const I18N_LANGS = ['de','en','fr','it','es'];
 let I18N = {};                 // current language dict (key → string)
 let I18N_LANG = 'de';
 function detectLang(){
@@ -2558,19 +2563,28 @@ function setEff(id, value, pending){
 async function loadEffectiveness(){
   try{
     const d = await fetch('/api/effectiveness').then(r=>r.json());
-    // Strafverfolgungs-Lücke
     if(d.prosec_gap_base > 0){
       setEff('eff-gap', `${d.prosec_gap_pct}% (${d.prosec_gap_n}/${d.prosec_gap_base})`, false);
     }else{
       setEff('eff-gap', '—', true);
     }
-    // Cluster (MS-3 pending → -1)
     setEff('eff-cluster', d.cluster_active < 0 ? '—' : String(d.cluster_active), d.cluster_active < 0);
-    // Funding (current year)
     setEff('eff-funding', '€' + formatEur(d.funding_year_eur) + ' · ' + d.funding_year, false);
-    // Evidence (MS-5 pending → -1)
     setEff('eff-evidence', d.evidence_pct < 0 ? '—' : (d.evidence_pct + '%'), d.evidence_pct < 0);
   }catch(e){ /* keep last values */ }
+  // Crawler-Quellen-Counter (öffentliche Visibility): X aktiv / Y konfiguriert
+  try{
+    const s = await fetch('/api/public/sources').then(r=>r.json());
+    const t = s.totals || {};
+    const active = t.active_count || 0;
+    const conf = s.configured || 0;
+    const el = document.getElementById('s-sources');
+    if(el){
+      el.textContent = `${active}/${conf}`;
+      el.title = `${t.healthy||0} healthy · ${(t.degraded||0)+(t.warning||0)} degraded · ${t.disabled||0} disabled · ${t.untested||0} ungetestet · ${s.items_today||0} items im letzten Run`;
+      el.style.color = (t.disabled||0) > 0 ? 'var(--amber)' : 'var(--green)';
+    }
+  }catch(_){ /* keep last */ }
 }
 
 // ── ACCOUNTABILITY (Säule 1 — Strafverfolgungs-Druck) ─────────────

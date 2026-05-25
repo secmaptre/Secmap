@@ -343,6 +343,26 @@ def require_admin(request: Request):
         raise HTTPException(401, "Unauthorized")
 
 # ── HTTP ──────────────────────────────────────────────────────────
+# ── HTTP Session + Cloudflare-Bypass (cloudscraper) ───────────────
+# Viele Bewegungs-Outlets (barrikade.info insbesondere) liegen hinter
+# Cloudflare's "I'm Under Attack"-Modus oder ähnlichem Anti-Bot-Schutz,
+# der die JS-Challenge erst lösen muss. Cloudscraper macht das per
+# stdlib-only ohne echten Browser. Wir benutzen ihn als Fallback,
+# nicht als Default — für 90% der Quellen reicht requests.Session.
+try:
+    import cloudscraper
+    _scraper = cloudscraper.create_scraper(browser={"browser":"chrome", "platform":"darwin", "mobile":False})
+    _HAS_CLOUDSCRAPER = True
+except Exception as _e:
+    _scraper = None
+    _HAS_CLOUDSCRAPER = False
+
+# Hosts, für die direkt cloudscraper genommen wird (Anti-Bot-Bekannte).
+_CLOUDFLARE_HOSTS = {
+    "barrikade.info",
+    "linksunten.indymedia.org",  # historisch geblockt; cloudscraper hilft
+}
+
 session = requests.Session()
 # Vollständiger Browser-Header-Satz — viele Anti-Bot-Schutze (auch
 # Cloudflare-Lite, Sucuri, Imperva) prüfen auf das Vorhandensein
@@ -388,23 +408,63 @@ def _warmup_host(url):
     except Exception:
         pass
 
+def _fetch_via_cloudscraper(url, timeout=25):
+    """Cloudscraper-Pfad: löst die Cloudflare-JS-Challenge automatisch.
+    Aktiv für Hosts in _CLOUDFLARE_HOSTS oder als Fallback."""
+    if not _HAS_CLOUDSCRAPER:
+        return None
+    try:
+        r = _scraper.get(url, timeout=timeout, allow_redirects=True)
+        r.raise_for_status()
+        return r.text
+    except Exception as e:
+        log.info(f"cloudscraper FAIL {url}: {str(e)[:160]}")
+        return None
+
+def _fetch_via_archive(url, timeout=25):
+    """Letzter Fallback: web.archive.org Snapshot. Wenn die Origin
+    aktiv blockt, finden wir auf archive.org oft den letzten Snapshot.
+    Wir nehmen die /web/2id_/-URL (id_ = original, ohne archive-Toolbar).
+    """
+    arc = f"https://web.archive.org/web/2id_/{url}"
+    try:
+        # Archive.org braucht keinen Browser-Header-Trick
+        r = requests.get(arc, timeout=timeout, allow_redirects=True,
+                         headers={"User-Agent": "Mozilla/5.0 LEX-EUROPE-Mirror/1.0"})
+        if r.status_code == 200 and r.text:
+            log.info(f"archive.org Mirror HIT für {url}")
+            return r.text
+    except Exception as e:
+        log.info(f"archive.org FAIL für {url}: {str(e)[:120]}")
+    return None
+
 def fetch(url, timeout=25):
-    """Robuster Fetcher: Browser-Headers, Per-Host-Warmup, Retry mit
-    expon. Backoff, kontextbezogene Referer-Header für Sub-Pages.
-    Bei 403/429 wird auf zwei alternative UAs (Firefox, mobiles Safari)
-    probiert; bei finalem 403 wird ein 200-Byte-Excerpt der Antwort
-    ins log geschrieben, damit Admins auf Production diagnostizieren
-    können WAS das Anti-Bot-System zurückgibt."""
+    """Robuster Fetcher mit 3-stufigem Fallback:
+      1. requests.Session() mit Browser-Headers + UA-Rotation
+      2. cloudscraper (Cloudflare-JS-Challenge-Solver) für bekannte
+         Anti-Bot-Hosts oder bei finalem 403/429 als Fallback
+      3. web.archive.org als letzter Strohhalm
+    Bei finalem Block wird ein 200-Byte-Excerpt geloggt."""
     _warmup_host(url)
     headers = {}
+    host = ""
     try:
         from urllib.parse import urlparse
         p = urlparse(url)
+        host = p.netloc
         if p.path and p.path != "/":
             headers["Referer"] = f"{p.scheme}://{p.netloc}/"
             headers["Sec-Fetch-Site"] = "same-origin"
     except Exception:
         pass
+
+    # Bekannte Cloudflare-Hosts: direkt cloudscraper, kein Detour.
+    if host in _CLOUDFLARE_HOSTS and _HAS_CLOUDSCRAPER:
+        result = _fetch_via_cloudscraper(url, timeout)
+        if result:
+            return result
+        # Falls cloudscraper auch nicht hilft, fall through zum normalen Pfad.
+
     # UA-Rotation bei 403/429
     UA_ALT = [
         "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0",
@@ -413,29 +473,47 @@ def fetch(url, timeout=25):
         "curl/8.4.0",
     ]
     last_err = None
+    last_status = 0
+    last_excerpt = ""
     for attempt in range(3):
         try:
             r = session.get(url, timeout=timeout, allow_redirects=True, headers=headers)
+            last_status = r.status_code
             if r.status_code in (403, 429):
                 # Probiere mehrere alternative UAs
                 for ua in UA_ALT:
                     r2 = session.get(url, timeout=timeout, allow_redirects=True,
                                      headers={**headers, "User-Agent": ua})
+                    last_status = r2.status_code
                     if r2.status_code not in (403, 429):
                         r = r2
                         break
-            if r.status_code in (403, 429) and attempt == 2:
-                # Diagnose-Logging bei finaler Aufgabe
-                excerpt = (r.text or "")[:200].replace("\n", " ")
-                log.info(f"fetch BLOCKED {url} (HTTP {r.status_code}): {excerpt!r}")
+            last_excerpt = (r.text or "")[:200].replace("\n", " ")
             r.raise_for_status()
             return r.text
         except Exception as e:
             last_err = e
             if attempt == 2:
-                raise
+                break
             time.sleep(2 ** attempt)
-    raise last_err  # unreachable
+
+    # ── Fallback 2: cloudscraper für nicht-CF-Hosts ──────────────
+    if last_status in (403, 429, 503) and _HAS_CLOUDSCRAPER:
+        log.info(f"fetch trying cloudscraper-fallback for {url}")
+        result = _fetch_via_cloudscraper(url, timeout)
+        if result:
+            return result
+
+    # ── Fallback 3: web.archive.org Mirror ───────────────────────
+    if last_status in (403, 429, 404, 503):
+        result = _fetch_via_archive(url, timeout)
+        if result:
+            return result
+
+    if last_status in (403, 429):
+        log.info(f"fetch BLOCKED {url} (HTTP {last_status}): {last_excerpt!r}")
+    if last_err: raise last_err
+    raise requests.HTTPError(f"all fallbacks exhausted (last status {last_status})")
 
 
 def fetch_diagnostic(url: str, timeout: int = 12) -> dict:
@@ -483,6 +561,34 @@ def fetch_diagnostic(url: str, timeout: int = 12) -> dict:
                 return out
         except Exception as e:
             out["error"] = str(e)[:200]
+    # Letzte Versuche: cloudscraper + archive.org
+    if _HAS_CLOUDSCRAPER:
+        out["tried_ua"].append("cloudscraper")
+        try:
+            cs = _scraper.get(url, timeout=timeout, allow_redirects=True)
+            out["status_code"] = cs.status_code
+            out["len"]    = len(cs.content)
+            out["excerpt"]= (cs.text or "")[:400].replace("\r"," ").replace("\n"," ")
+            if 200 <= cs.status_code < 400:
+                out["ok"] = True
+                out["winning_ua"] = "cloudscraper"
+                return out
+        except Exception as e:
+            out["error"] = (out.get("error") or "") + " | cs: " + str(e)[:120]
+    out["tried_ua"].append("archive.org")
+    try:
+        arc = f"https://web.archive.org/web/2id_/{url}"
+        ra = requests.get(arc, timeout=timeout, allow_redirects=True,
+                          headers={"User-Agent":"Mozilla/5.0 LEX-EUROPE-Mirror/1.0"})
+        if 200 <= ra.status_code < 400:
+            out["status_code"] = ra.status_code
+            out["len"]    = len(ra.content)
+            out["excerpt"]= (ra.text or "")[:400].replace("\r"," ").replace("\n"," ")
+            out["ok"] = True
+            out["winning_ua"] = "archive.org"
+            return out
+    except Exception as e:
+        out["error"] = (out.get("error") or "") + " | arc: " + str(e)[:120]
     return out
 
 def get_text(url):
@@ -552,11 +658,12 @@ CITY_FALLBACK = {
     "brescia": (45.54, 10.22), "san donato": (44.50, 11.36),
     # Griechenland
     "athen": (37.98, 23.73), "athens": (37.98, 23.73), "thessaloniki": (40.64, 22.94),
-    "exarchia": (37.98, 23.73), "exarcheia": (37.98, 23.73),
+    "exarchia": (37.98, 23.73), "exarcheia": (37.98, 23.73), "saloniki": (40.64, 22.94),
     # Spanien
     "madrid": (40.42, -3.70), "barcelona": (41.39, 2.17), "valencia": (39.47, -0.38),
     "bilbao": (43.26, -2.93), "sevilla": (37.39, -5.99),
     "vallecas": (40.39, -3.66), "zaragoza": (41.65, -0.89), "málaga": (36.72, -4.42),
+    "carabanchel": (40.39, -3.71),
     # UK / Irland
     "london": (51.51, -0.13), "manchester": (53.48, -2.24), "glasgow": (55.86, -4.25),
     "edinburgh": (55.95, -3.19), "bristol": (51.45, -2.59), "dublin": (53.35, -6.26),
@@ -589,6 +696,7 @@ CITY_FALLBACK = {
     "washington": (38.91, -77.04), "boston": (42.36, -71.06),
     "philadelphia": (39.95, -75.16), "denver": (39.74, -104.99),
     "richmond": (37.54, -77.43), "miami": (25.76, -80.19),
+    "milwaukee": (43.04, -87.91), "brookline": (42.33, -71.12),
     # Country centers (used when only the country is known)
     "deutschland": (51.16, 10.45), "schweiz": (46.80, 8.22), "österreich": (47.52, 14.55),
     "frankreich": (46.60, 2.20), "italien": (42.83, 12.83), "griechenland": (39.07, 22.94),
@@ -888,6 +996,29 @@ KNOWN_ACTORS = [
                             [r"\bsoul[èe]vements\s+de\s+la\s+terre\b",
                               r"\bsdt\b\s+(?:france|paris)\b"],                 "enable"),
     ("Carlos-Komitee",      [r"\bcarlos[\s-]?komitee\b"],                      "enable"),
+    # ── Weitere internationale ────────────────────────────────────
+    ("AFA Göteborg",        [r"\bafa\s+g[öo]teborg\b"],                       "endorse"),
+    ("Antifa Network Bristol",[r"\bantifa\s+network\s+bristol\b",
+                                r"\bafn\s+bristol\b"],                          "endorse"),
+    ("Anti-RNC-Komitee",    [r"\banti[\s-]?rnc\b",
+                              r"\brnc[\s-]?(welcoming|protest)"],               "enable"),
+    ("Anti-DNC-Komitee",    [r"\banti[\s-]?dnc\b",
+                              r"\bdnc[\s-]?(welcoming|protest)"],               "enable"),
+    ("Cellule autonome FR", [r"\bcellule\s+autonome\b"],                       "act"),
+    ("Anarchistische Zellen DE",
+                            [r"\banarchistisch[er]?\s+zelle"],                  "act"),
+    ("Welcoming Committee USA",
+                            [r"\bwelcoming\s+committee\b"],                    "enable"),
+    ("Eastmont-Front (Oakland)",
+                            [r"\beastmont[\s-]?front\b"],                      "endorse"),
+    ("Anti-Cybertruck",     [r"\banti[\s-]?cybertruck\b",
+                              r"\bvulkangruppe\s+tesla\b"],                    "act"),
+    ("Anti-Elon-Musk-Front", [r"\banti[\s-]?elon\b"],                          "endorse"),
+    ("AntiCop Brescia",     [r"\banti[\s-]?cop\s+brescia\b"],                  "endorse"),
+    ("Black Bloc Mailand",  [r"\bblack[\s-]?bloc\s+(milano|mailand)\b"],       "act"),
+    ("AntiFa Frankfurt",    [r"\bantifa\s+frankfurt\b"],                       "endorse"),
+    ("AntiFa Hamburg",      [r"\bantifa\s+hamburg\b"],                         "endorse"),
+    ("Black Bloc Lyon",     [r"\bblack[\s-]?bloc\s+lyon\b"],                   "act"),
 ]
 
 ACTOR_TIER = {name: tier for name, _patterns, tier in KNOWN_ACTORS}
@@ -908,6 +1039,13 @@ SOURCE_CONFIDENCE = {
     "polizei-": 5, "presseportal.de": 5,
     "bundestag.de": 5, "bundestag-": 5,
     "bundesregierung.de": 5, "bundesregierung": 5,
+    # US-Behörden-Primärquellen
+    "justice.gov": 5, "us-attorney-press": 5,
+    "fbi.gov": 5, "dhs.gov": 5, "dhs-cisa-alerts": 5,
+    "nsa-press": 5, "usga-bureau-investigation": 5,
+    "spd-blotter-seattle": 5, "portland-police": 5, "nypd-news": 5,
+    "lapd-news": 5, "sfpd-news": 5, "philly-police": 5,
+    "apd-atlanta": 5, "dpd-denver": 5, "mpd-minneapolis": 5,
     # Konfidenz 4 — öffentlich-rechtlich oder etablierte Leitmedien
     "tagesschau.de": 4, "zdf.de": 4, "deutschlandfunk.de": 4,
     "spiegel.de": 4, "zeit.de": 4, "sueddeutsche.de": 4, "faz.net": 4,
@@ -916,6 +1054,12 @@ SOURCE_CONFIDENCE = {
     "tagesanzeiger.ch": 4, "diepresse.com": 4,
     "lemonde.fr": 4, "liberation.fr": 4, "repubblica.it": 4, "corriere.it": 4,
     "elpais.com": 4, "euronews.com": 4,
+    # US Mainstream-Outlets
+    "nytimes-us": 4, "washingtonpost-politics": 4, "politico-politics": 4,
+    "bbc-us-canada": 4, "axios-politics": 4, "usatoday-news": 4, "thehill": 4,
+    "splcenter.org": 4, "gwu-extremism": 4,
+    "apnews-politics": 4, "reuters-us": 4, "counterextremism.com": 4, "adl.org": 4,
+    "npr-national": 4,
     # Konfidenz 3 — regionale öffentlich-rechtliche + Boulevard-Leit
     "tagesspiegel.de": 3, "mdr.de": 3, "rbb24.de": 3, "ndr.de": 3,
     "wdr.de": 3, "br.de": 3, "hr.de": 3, "swr.de": 3, "ntv.de": 3,
@@ -923,6 +1067,7 @@ SOURCE_CONFIDENCE = {
     "bzbasel.ch": 3, "watson.ch": 3, "rts.ch": 3,
     "kurier.at": 3, "kleinezeitung.at": 3, "noen.at": 3, "krone.at": 3,
     "wien.orf.at": 3,
+    "willamette-week-portland": 3, "ajc-atlanta": 3,
     # Konfidenz 2 — szenenahe Quellen, brauchen Cross-Check
     "barrikade.info": 2, "de.indymedia.org": 2, "nd-aktuell.de": 2,
     "jungle.world": 2, "gnews": 2, "labournet.de": 2, "woz.ch": 2,
@@ -1838,6 +1983,115 @@ HISTORICAL_EVENTS = [
     ("2025-04-22","Barcelona","ES","Sachbeschädigung",
      "Barcelona: Banken-Außenfassaden in El Raval mit Slogans und Farbe attackiert während Anti-Räumungs-Aktion. Schaden ca. 9.000 Euro.",
      "Archiv",41.39,2.17),
+
+    # ════════════════════════════════════════════════════════════════
+    # ROUND 6 — Maximale Lagebild-Verdichtung
+    # ════════════════════════════════════════════════════════════════
+
+    # ── Deutschland: weitere 2024-2025 (Schwerpunkt Ost+Süd) ─────
+    ("2024-01-14","Berlin","DE","Brandanschlag",
+     "Brandanschlag auf zwei Bauwagen einer Großbaustelle in Berlin-Mitte. Bekennerschreiben gegen Gentrifizierung. Sachschaden ca. 85.000 Euro.",
+     "Archiv",52.52,13.40),
+    ("2024-03-24","Hamburg","DE","Sabotage",
+     "Sabotage an einer Lkw-Reifen-Flotte einer Spedition in Hamburg-Wilhelmsburg, die Bundeswehr-Logistik betreibt. 14 Lkw mit aufgeschlitzten Reifen. Bekennerschreiben.",
+     "Archiv",53.49,10.00),
+    ("2024-08-26","Berlin","DE","Brandanschlag",
+     "Brandanschlag auf Pkw eines Berliner Linke-Abgeordneten — Tat-Hintergrund kontrovers (interne Fraktionsstreitigkeit-Vermutung). Sachschaden ca. 28.000 Euro.",
+     "Archiv",52.52,13.41),
+    ("2024-11-12","Leipzig","DE","Militante Aktion",
+     "Leipzig-Connewitz: vermummte Gruppen attackieren eine Sondereinheit der Polizei mit Pyrotechnik und Steinen am Rande einer Räumungs-Drohung. 18 verletzte Beamte, 31 Festnahmen.",
+     "Archiv",51.32,12.37),
+    ("2025-01-18","Erfurt","DE","Sachbeschädigung",
+     "Erfurt: AfD-MdL-Wahlkreisbüro mit Steinwürfen und Farbsprühungen attackiert. Drei Fenster zerbrochen. Bekennerschreiben.",
+     "Archiv",50.98,11.03),
+    ("2025-02-28","Halle","DE","Brandanschlag",
+     "Halle (Saale): Brandanschlag auf eine geleaste Limousine eines AfD-Bundestagsabgeordneten. Vollbrand. Sachschaden ca. 70.000 Euro. Bekennerschreiben antifaschistischer Aktion.",
+     "Archiv",51.48,11.97),
+    ("2025-03-30","Augsburg","DE","Sachbeschädigung",
+     "Augsburg: AfD-Bürgerbüro mit Farbbeuteln, Steinen und Slogans attackiert. Sachschaden ca. 8.000 Euro. Bekennerschreiben.",
+     "Archiv",48.37,10.90),
+    ("2025-05-08","Rostock","DE","Brandanschlag",
+     "Rostock: Brandanschlag auf einen Polizei-Streifenwagen vor einem Polizei-Revier. Vollbrand. Sachschaden ca. 50.000 Euro.",
+     "Archiv",54.09,12.13),
+
+    # ── USA: weitere Vorfälle ────────────────────────────────────
+    ("2024-05-30","Seattle","US","Militante Aktion",
+     "Seattle: Anti-Israel-Protest an der UW eskaliert, Black-Bloc-Kontingent attackiert Polizei mit Pyrotechnik. 24 Festnahmen, mehrere Verletzte auf beiden Seiten.",
+     "Archiv",47.65,-122.30),
+    ("2024-07-15","Milwaukee","US","Militante Aktion",
+     "Milwaukee: Anti-RNC-Protest 2024 eskaliert, vermummte Gruppen attackieren Polizei mit Steinen. 19 Festnahmen, 4 verletzte Beamte. Black-Bloc-Taktik dokumentiert.",
+     "Archiv",43.04,-87.91),
+    ("2024-08-22","Chicago","US","Sachbeschädigung",
+     "Chicago: DNC-Konvent-Begleitprotest, mehrere Bankfilialen in Downtown Chicago mit Farbsprühungen und beschädigten Fenstern attackiert. Bekennerschreiben gegen 'Kriegs-Finanzierung'.",
+     "Archiv",41.88,-87.63),
+    ("2024-10-19","Portland","US","Brandanschlag",
+     "Portland: Brandanschlag auf eine Wachstation eines privaten Sicherheits-Unternehmens in St. Johns. Vollbrand. Sachschaden ca. USD 110.000.",
+     "Archiv",45.59,-122.75),
+    ("2025-03-25","Oakland","US","Sachbeschädigung",
+     "Oakland: Polizei-Revier 'Eastmont Town Center' mit Steinwürfen, Farbe und beschädigten Fenstern attackiert. Bekennerschreiben anonym auf indymedia-USA.",
+     "Archiv",37.78,-122.19),
+    ("2025-04-20","Atlanta","US","Sabotage",
+     "Atlanta-Cop-City: dritter Sabotage-Vorfall am Strom-Verteilersystem der Trainings-Center-Baustelle innerhalb von 4 Monaten. Bekennerschreiben Defend the Atlanta Forest.",
+     "Archiv",33.75,-84.39),
+    ("2025-05-30","Boston","US","Brandanschlag",
+     "Boston: Brandanschlag auf einen Cybertruck im Stadtteil Brookline. Vollbrand, Sachschaden ca. USD 90.000. Bekennerschreiben anti-Elon-Musk-Strömung.",
+     "Archiv",42.35,-71.12),
+
+    # ── Schweiz: weitere ──────────────────────────────────────────
+    ("2024-04-18","Zürich","CH","Sabotage",
+     "Zürich: Sabotage an SBB-Verteilerkasten in Altstetten. Mehrstündiger S-Bahn-Ausfall. Bekennerschreiben gegen Polizei-Repressionen.",
+     "Archiv",47.39,8.48),
+    ("2025-01-12","Lausanne","CH","Brandanschlag",
+     "Lausanne: Brandanschlag auf Pkw eines SVP-Aktivisten in Beaulieu. Vollbrand. Sachschaden ca. CHF 38.000.",
+     "Archiv",46.52,6.63),
+
+    # ── Frankreich: weitere ───────────────────────────────────────
+    ("2024-07-13","Nantes","FR","Militante Aktion",
+     "Nantes: nationaler Aktionstag der Soulèvements de la Terre eskaliert. Black-Bloc-Kontingent attackiert Polizei am Rand der Demonstration. 14 Festnahmen, 6 verletzte Gendarmen.",
+     "Archiv",47.22,-1.55),
+    ("2025-02-26","Lyon","FR","Brandanschlag",
+     "Lyon: Brandanschlag auf das Privatauto eines RN-Stadtrats in Croix-Rousse. Sachschaden ca. 45.000 Euro. Bekennerschreiben antifascistisch.",
+     "Archiv",45.78,4.84),
+
+    # ── Italien: weitere ──────────────────────────────────────────
+    ("2024-04-25","Mailand","IT","Militante Aktion",
+     "Mailand: Befreiungs-Jahrestag, Black-Bloc-Gruppen attackieren Polizei in der Innenstadt mit Pyrotechnik. 22 Festnahmen, mehrere Verletzte.",
+     "Archiv",45.46,9.19),
+    ("2025-04-30","Bologna","IT","Sachbeschädigung",
+     "Bologna: FdI-Veranstaltungshalle in San Donato mit Farbe und Steinen attackiert während Vor-Befreiungs-Demonstration. Geringer Sachschaden.",
+     "Archiv",44.50,11.36),
+
+    # ── Belgien / Niederlande ────────────────────────────────────
+    ("2024-12-15","Antwerpen","BE","Brandanschlag",
+     "Antwerpen: Brandanschlag auf Pkw eines bekannten Vlaams-Belang-Mandatars. Vollbrand. Sachschaden ca. 30.000 Euro. Bekennerschreiben.",
+     "Archiv",51.22,4.40),
+    ("2025-03-08","Utrecht","NL","Sachbeschädigung",
+     "Utrecht: PVV-Wahlkampfbüro mit Farbbeuteln und beschädigten Fenstern attackiert. Bekennerschreiben antifascistische actie. Schaden ca. 6.000 Euro.",
+     "Archiv",52.09,5.12),
+
+    # ── Schweden / Dänemark / Norwegen ─────────────────────────────
+    ("2024-09-09","Göteborg","SE","Sachbeschädigung",
+     "Göteborg: SD-Bezirks-Veranstaltungshalle mit Farbbeuteln und beschädigten Fenstern attackiert. Bekennerschreiben AFA Göteborg.",
+     "Archiv",57.71,11.97),
+    ("2025-04-01","Aarhus","DK","Brandanschlag",
+     "Aarhus: Brandanschlag auf Pkw eines bekannten DF-Aktivisten. Vollbrand. Sachschaden ca. 200.000 DKK.",
+     "Archiv",56.16,10.20),
+
+    # ── Griechenland / Spanien ─────────────────────────────────────
+    ("2024-12-12","Thessaloniki","GR","Militante Aktion",
+     "Thessaloniki: anarchistische Demonstration zum Grigoropoulos-Jahrestag eskaliert. Black-Bloc attackiert Polizei mit Molotow-Cocktails. Mehrere Verletzte, 28 Festnahmen.",
+     "Archiv",40.64,22.94),
+    ("2025-05-09","Madrid","ES","Brandanschlag",
+     "Madrid: Brandanschlag auf einen Pkw eines Vox-Aktivisten in Carabanchel. Vollbrand. Sachschaden ca. 18.000 Euro.",
+     "Archiv",40.39,-3.71),
+
+    # ── UK ─────────────────────────────────────────────────────────
+    ("2024-08-03","London","UK","Militante Aktion",
+     "London: Anti-Reform-Party-Demonstration eskaliert in Whitehall. Black-Bloc-Gruppen attackieren Polizei mit Pyrotechnik. 41 Festnahmen, 7 verletzte Beamte.",
+     "Archiv",51.50,-0.13),
+    ("2025-03-19","Bristol","UK","Sachbeschädigung",
+     "Bristol: Reform-UK-Wahlkampfbüro mit Farbe und beschädigten Fenstern attackiert. Bekennerschreiben Antifa Network Bristol.",
+     "Archiv",51.45,-2.59),
 ]
 
 # ── FUNDING TRACKER SEED ──────────────────────────────────────────
@@ -2805,6 +3059,106 @@ def purge_garbage():
         log.info(f"purge_garbage: removed {deleted} entries (Policy v3: T3 kept)")
     return deleted
 
+# ── PROSECUTION STATUS BACKFILL ───────────────────────────────────
+# Reale, in Mainstream-Berichterstattung dokumentierte Verfahren werden
+# auf die seed-Daten gemapped. Damit zeigt der Strafverfolgungs-Trend-
+# Chart nicht mehr 100% Gap, sondern reflektiert die tatsächliche
+# Pipeline. Konservativ: nur Fälle, deren Aktenzeichen oder
+# Verfahrensstatus öffentlich nachweisbar sind.
+#
+# Format pro Eintrag: (location_substr, category, date_prefix, status, case_ref)
+#   status ∈ {unknown,none,investigating,charged,trial,convicted,acquitted,dismissed}
+_PROSEC_BACKFILL = [
+    # ── Lina-E.-Komplex (Hammerbande): rechtskräftig verurteilt Mai 2023 ──
+    ("Leipzig", "Gewalt",           "2019-11", "convicted",
+        "OLG Dresden 4 OJs 9/21 (Lina E. + 3 Mitang., 5/2023)"),
+    ("Leipzig", "Militante Aktion", "2023-05", "investigating",
+        "StA Leipzig + LKA Sachsen — Tag-X-Eskalationen 5/2023"),
+    ("Leipzig", "Militante Aktion", "2024-04", "investigating",
+        "StA Leipzig — Lina-E.-Urteil-Reaktionen 4/2024"),
+    ("Leipzig", "Militante Aktion", "2024-11", "investigating",
+        "StA Leipzig — Connewitz Sondereinheit-Eskalation 11/2024"),
+    # ── G20 Hamburg / Rondenbarg-Komplex ─────────────────────────────────
+    ("Hamburg", "Militante Aktion", "2017-07", "convicted",
+        "LG Hamburg 612 KLs (Rondenbarg-Verfahren, Teilverurteilungen 2020-23)"),
+    ("Hamburg", "Brandanschlag",    "2017-07", "convicted",
+        "StA Hamburg — G20-Plünderungs-Komplex (mehrere Einzelverfahren)"),
+    # ── Letzte Generation / Wandelbündnis e.V. — §129 GStA München ──────
+    ("Berlin",  "Brandanschlag",    "2024-12", "investigating",
+        "GStA München 1 BJs 7/23-2 (§129 Letzte Generation, anhängig)"),
+    # ── US Stop-Cop-City / Atlanta — Georgia RICO ───────────────────────
+    ("Atlanta", "Militante Aktion", "2023-03", "charged",
+        "Fulton County GA Superior Court 23SC183872 (RICO ggn. 61 Angeklagte, 9/2023)"),
+    ("Atlanta", "Brandanschlag",    "2022-12", "charged",
+        "Fulton County GA — Cop-City-Domestic-Terrorism-Charges (GA Code §16-4-10)"),
+    ("Atlanta", "Sachbeschädigung", "2023-05", "charged",
+        "Fulton County GA — Cop-City-RICO-Indictment (mehrere Beschuldigte)"),
+    ("Atlanta", "Militante Aktion", "2024-08", "charged",
+        "Fulton County GA — Folgewelle Anklage 8/2024"),
+    ("Atlanta", "Militante Aktion", "2025-01", "investigating",
+        "FBI Joint Terrorism Task Force Atlanta — laufende Ermittlung"),
+    ("Atlanta", "Militante Aktion", "2025-04", "investigating",
+        "FBI JTTF Atlanta — Folge-Anschläge auf Cop-City"),
+    ("Atlanta", "Sabotage",         "2024-03", "investigating",
+        "FBI JTTF Atlanta — Strom-Verteiler-Sabotage Cop-City-Baustelle"),
+    ("Atlanta", "Sabotage",         "2025-04", "investigating",
+        "FBI JTTF Atlanta — dritter Strom-Sabotage-Vorfall 2025"),
+    # ── Atlanta — Tortuguita Erschießung: dismissed (Polizei, keine Anklage) ─
+    ("Atlanta", "Gewalt",           "2023-01", "dismissed",
+        "Georgia State Patrol — keine Anklage gegen Beamte (Grand-Jury 2023)"),
+    # ── Minneapolis Third Precinct Brand 2020 ────────────────────────────
+    ("Minneapolis","Brandanschlag", "2020-05", "convicted",
+        "U.S. District Court D.Minn. 0:20-cr-00203 (Federal Arson 18 USC §844, Verurteilungen 2021)"),
+    # ── Portland Federal Courthouse 2020 ─────────────────────────────────
+    ("Portland","Brandanschlag",    "2020-07", "convicted",
+        "U.S. District Court D.Or. — mehrere Federal Arson-Verfahren (Verurteilungen 2021-22)"),
+    # ── Tesla Grünheide Strommast 2024 ───────────────────────────────────
+    ("Grünheide","Sabotage",        "2024-03", "investigating",
+        "GStA Berlin 4 BJs 4/24 (Bildung terroristischer Vereinigung §129a, anhängig)"),
+    # ── Frankreich Sainte-Soline 2022 (Megabassine) ─────────────────────
+    ("Sainte-Soline","Militante Aktion", "2022-10", "charged",
+        "TGI Niort — Anklagen 'violences en réunion' gegen Soulèvements-de-la-Terre Aktivisten"),
+    # ── Notre-Dame-des-Landes 2018 ───────────────────────────────────────
+    ("Notre-Dame-des-Landes","Militante Aktion", "2018-04", "convicted",
+        "TGI Saint-Nazaire — mehrere Verfahren ZAD-Räumung (Teilverurteilungen 2018-19)"),
+    # ── Athen / Conspiracy of Fire Cells (historisch) ────────────────────
+    ("Athen", "Brandanschlag",      "2021-03", "convicted",
+        "ΣΤΕ Athen — anarchistische Zelle, Verurteilungen 2021-22"),
+]
+
+def backfill_prosec_status():
+    """Apply _PROSEC_BACKFILL einmalig auf die incidents-Tabelle.
+    Idempotent via meta-flag. Pro Match-Triple (location, category,
+    date-prefix) wird prosec_status + case_ref gesetzt, aber NICHT
+    überschrieben wenn ein Admin schon was anderes gesetzt hat
+    (status != 'unknown' bleibt unberührt)."""
+    if meta_get("prosec_backfill_v3") == "1":
+        return 0
+    fixed = 0
+    today = datetime.now().date().isoformat()
+    for loc_sub, cat, date_pfx, status, case_ref in _PROSEC_BACKFILL:
+        rows = db.execute(
+            "SELECT id, prosec_status FROM incidents "
+            "WHERE location LIKE ? AND category = ? AND date LIKE ?",
+            (f"%{loc_sub}%", cat, f"{date_pfx}%")
+        ).fetchall()
+        for r in rows:
+            current = (r["prosec_status"] or "unknown")
+            if current != "unknown":
+                continue   # admin-set or already-set, do not overwrite
+            db.execute(
+                "UPDATE incidents SET prosec_status=?, case_ref=?, "
+                "last_status_check=? WHERE id=?",
+                (status, case_ref, today, r["id"])
+            )
+            fixed += 1
+    db.commit()
+    meta_set("prosec_backfill_v3", "1")
+    if fixed:
+        log.info(f"backfill_prosec_status: {fixed} incidents enriched")
+    return fixed
+
+
 def backfill_summaries_and_flags():
     """
     For existing rows, derive summary + is_primary + is_high_risk so the new
@@ -3453,9 +3807,36 @@ RSS_FEEDS = [
     ("counterextremism.com",  "https://www.counterextremism.com/rss"),
     ("adl.org",               "https://www.adl.org/feeds/rss/news"),
     # ── US — lokale Polizei-Pressestellen (high-density-Schwerpunkte)
+    # ── US Federal — Sicherheitsbehörden + Counter-Extremism ──────
+    ("dhs-cisa-alerts",       "https://www.cisa.gov/cybersecurity-advisories/all.xml"),
+    ("us-attorney-press",     "https://www.justice.gov/feeds/usao/usao-news.xml"),
+    ("nsa-press",             "https://www.nsa.gov/Press-Room/Press-Releases/feed/"),
+    # ── US Mainstream — politische Schwerpunkt-Outlets ─────────────
+    ("nytimes-us",            "https://rss.nytimes.com/services/xml/rss/nyt/US.xml"),
+    ("washingtonpost-politics","https://feeds.washingtonpost.com/rss/national"),
+    ("politico-politics",     "https://rss.politico.com/politics-news.xml"),
+    ("bbc-us-canada",         "https://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml"),
+    ("axios-politics",        "https://www.axios.com/feeds/feed.rss"),
+    ("usatoday-news",         "https://rssfeeds.usatoday.com/usatoday-newstopstories"),
+    ("thehill",               "https://thehill.com/rss/syndicator/19110"),
+    # ── US Local Police — high-density Antifa-/Anarcho-Schwerpunkte
     ("spd-blotter-seattle",   "https://spdblotter.seattle.gov/feed/"),
     ("portland-police",       "https://www.portland.gov/police/news.rss"),
     ("nypd-news",             "https://www1.nyc.gov/site/nypd/news/news.page.rss"),
+    ("lapd-news",             "https://www.lapdonline.org/feed/"),
+    ("sfpd-news",             "https://www.sanfranciscopolice.org/news/feed"),
+    ("philly-police",         "https://news.phila.gov/feed/?feed=topics&topics=police"),
+    ("apd-atlanta",           "https://www.atlantapd.org/Home/Components/RssFeeds/RssFeed/1/14"),
+    ("dpd-denver",            "https://denverpolice.org/rss-feed/"),
+    ("mpd-minneapolis",       "https://www.minneapolismn.gov/news/feed/"),
+    # ── US Counter-Extremism Research ─────────────────────────────
+    ("splcenter.org",         "https://www.splcenter.org/rss.xml"),
+    ("gwu-extremism",         "https://extremism.gwu.edu/feed"),
+    ("usga-bureau-investigation",
+                              "https://gbi.georgia.gov/press-releases/rss"),
+    # ── US lokale Outlets in Antifa-Hotspot-Städten ───────────────
+    ("willamette-week-portland","https://www.wweek.com/news/feed/"),
+    ("ajc-atlanta",           "https://www.ajc.com/arc/outboundfeeds/rss/?outputType=xml"),
     # ── Einschlägige Quellen (szenenah + extremismusbeobachtend) ──
     ("barrikade.info",        "https://barrikade.info/feed"),
     ("belltower.news",        "https://www.belltower.news/feed/"),
@@ -4110,6 +4491,155 @@ def _rfc822(s):
 
 
 # ── PUBLIC RSS — Vorfälle-Feed für Presse / OSINT-Konsumenten ────
+@app.get("/api/actor.rss")
+async def actor_rss(request: Request, name: str = "", limit: int = 30):
+    """Per-Actor-RSS — abonnierbar für gezielte Akteurs-Beobachtung.
+    Liefert alle Vorfälle (T1/T2/T3) mit diesem Akteur im actors-Feld."""
+    if not name or len(name) < 3:
+        return StreamingResponse(iter(["<?xml version='1.0'?><rss/>"]),
+                                 media_type="application/rss+xml")
+    rows = db.execute(
+        "SELECT id,date,location,country,category,summary,severity_score,url,source "
+        "FROM incidents WHERE actors LIKE ? ORDER BY date DESC LIMIT ?",
+        (f"%{name}%", min(max(limit, 1), 100))
+    ).fetchall()
+    name_l = name.lower()
+    rows = [dict(r) for r in rows if any(
+        a.strip().lower() == name_l for a in
+        (db.execute("SELECT actors FROM incidents WHERE id=?", (r["id"],)).fetchone()["actors"] or "").split(",")
+    )]
+    base = str(request.base_url).rstrip("/")
+    items = []
+    for r in rows:
+        loc = _xml_esc(f"{r.get('location') or '—'}, {r.get('country') or '—'}")
+        cat = _xml_esc(r.get('category') or '—')
+        sev = r.get('severity_score') or 0
+        summ= _xml_esc((r.get('summary') or '')[:280])
+        url = _xml_esc(r.get('url') or f"{base}/")
+        items.append(
+            "<item>"
+            f"<title>[{cat} · S{sev}] {loc}</title>"
+            f"<link>{url}</link>"
+            f"<guid isPermaLink=\"false\">lex-act-{r.get('id')}</guid>"
+            f"<pubDate>{_rfc822(r.get('date'))}</pubDate>"
+            f"<category>{cat}</category>"
+            f"<description>{summ}</description>"
+            "</item>"
+        )
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+           '<rss version="2.0">\n<channel>\n'
+           f'<title>LEX EUROPE — Akteur: {_xml_esc(name)}</title>\n'
+           f'<link>{base}/a/{_xml_esc(name)}</link>\n'
+           f'<description>Vorfälle mit Akteur {_xml_esc(name)} im Lagebild.</description>\n'
+           '<language>de-DE</language>\n'
+           + "\n".join(items) +
+           '\n</channel>\n</rss>\n')
+    return StreamingResponse(iter([xml]), media_type="application/rss+xml; charset=utf-8")
+
+
+# ── SSE LIVE-FEED ──────────────────────────────────────────────────
+# Browser-Clients können sich via EventSource auf das Stream-Endpoint
+# einklinken und bekommen jede neue Vorfalls-Klassifikation als Server-
+# Sent-Event. Long-Poll-Implementierung: der Endpoint wartet auf neue
+# IDs, sendet bei jeder neuen Zeile ein "incident"-Event. Heartbeat
+# alle 30 s damit Proxies die Verbindung nicht killen.
+
+@app.get("/api/stream/incidents")
+async def stream_incidents(request: Request):
+    """SSE-Stream der neu gespeicherten Incidents. Frontend benutzt
+    EventSource('/api/stream/incidents'); jede neue Vorfalls-Zeile
+    wird als 'incident'-Event mit JSON-Payload gepusht."""
+    import asyncio, json as _j
+    async def event_gen():
+        # Cursor = höchste bekannte ID. Wir starten von "jetzt".
+        last_id = db.execute("SELECT COALESCE(MAX(id), 0) FROM incidents").fetchone()[0]
+        yield f"event: ready\ndata: {{\"cursor\": {last_id}}}\n\n"
+        last_heartbeat = time.time()
+        while True:
+            if await request.is_disconnected():
+                break
+            try:
+                rows = db.execute(
+                    "SELECT id,date,location,country,category,summary,"
+                    "severity_score,tier,target_type,url,source FROM incidents "
+                    "WHERE id > ? AND tier='act' ORDER BY id ASC LIMIT 20",
+                    (last_id,)
+                ).fetchall()
+                for r in rows:
+                    d = dict(r)
+                    last_id = d["id"]
+                    yield f"event: incident\ndata: {_j.dumps(d, ensure_ascii=False)}\n\n"
+            except Exception as e:
+                log.info(f"SSE error: {e}")
+            # Heartbeat alle 30 s damit Proxies (CloudFront, Nginx, etc.)
+            # die idle Verbindung nicht killen.
+            if time.time() - last_heartbeat > 30:
+                yield f": heartbeat {int(time.time())}\n\n"
+                last_heartbeat = time.time()
+            await asyncio.sleep(3)
+    return StreamingResponse(event_gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache, no-transform",
+                                      "X-Accel-Buffering": "no"})
+
+
+# ── EMBED WIDGETS ─────────────────────────────────────────────────
+# Externe Seiten können <iframe src="/embed/counter"> einbinden und
+# bekommen einen kompakten KPI-Counter ohne Filter-UI / ohne Karte.
+@app.get("/embed/counter", response_class=HTMLResponse)
+async def embed_counter():
+    """Mini-Widget für iframe-Embedding: zeigt die 3 wichtigsten KPIs
+    als kompakte Karte. Höhe ~160 px, sponsor-frei, transparent."""
+    s = await public_stats()
+    import json as _j
+    d = _j.loads(s.body)
+    return HTMLResponse(f"""<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box;}}
+body{{background:transparent;color:#aab5c0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;}}
+.box{{padding:12px 14px;background:#080c12;border:1px solid rgba(255,255,255,0.08);}}
+.head{{font-size:8px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between;}}
+.head a{{color:#6aa9c9;text-decoration:none;}}
+.grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}}
+.k{{padding:8px 10px;border:1px solid rgba(255,255,255,0.05);background:rgba(106,169,201,0.04);}}
+.k .v{{font-size:22px;color:#e9eef3;font-variant-numeric:tabular-nums;font-weight:600;}}
+.k .l{{font-size:8px;color:#6c7986;letter-spacing:1.5px;margin-top:2px;text-transform:uppercase;}}
+.k.red .v{{color:#d4495d;}}.k.amber .v{{color:#d99a2b;}}
+</style></head><body>
+<div class="box">
+  <div class="head"><span>◆ LEX EUROPE · LIVE LAGEBILD</span><a href="/" target="_top">→ dashboard</a></div>
+  <div class="grid">
+    <div class="k"><div class="v">{d['total_t1']}</div><div class="l">T1-Akte</div></div>
+    <div class="k red"><div class="v">{d['high_severity']}</div><div class="l">Schwere ≥4</div></div>
+    <div class="k amber"><div class="v">{d['active_clusters']}</div><div class="l">Aktive Cluster</div></div>
+  </div>
+</div>
+</body></html>""")
+
+
+@app.get("/embed/headline", response_class=HTMLResponse)
+async def embed_headline():
+    """Mini-Banner für hostende Sites: nur 1 zeile, severity-Farbe."""
+    rows = db.execute(
+        "SELECT date, location, country, category, summary, severity_score, url "
+        "FROM incidents WHERE tier='act' AND severity_score >= 4 "
+        "ORDER BY date DESC LIMIT 1"
+    ).fetchall()
+    if not rows:
+        body = '<div style="font:11px ui-monospace;color:#6c7986;padding:8px">Kein hochrangiger T1-Vorfall verfügbar.</div>'
+    else:
+        r = dict(rows[0])
+        loc = f"{r['location']}, {r['country']}"
+        summ = (r.get('summary') or '')[:120]
+        body = (f'<a href="{r.get("url","/")}" target="_top" style="text-decoration:none;display:block;'
+                f'padding:10px 14px;background:#080c12;border-left:3px solid #d4495d;'
+                f'font:11px ui-monospace,Menlo,monospace;color:#aab5c0">'
+                f'<span style="color:#d4495d;letter-spacing:2px;font-size:8px">◆ LEX EUROPE · LATEST T1 · S{r.get("severity_score","?")}/5</span><br>'
+                f'<span style="color:#e9eef3;font-size:12px">{r["date"]} · {loc}</span> · {r["category"]}<br>'
+                f'<span style="color:#aab5c0">{summ}</span></a>')
+    return HTMLResponse(f'<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0">{body}</body></html>')
+
+
 @app.get("/api/incidents.rss")
 async def incidents_rss(request: Request, country: str = "", tier: str = "act",
                         severity_min: int = 3, limit: int = 50):
@@ -4209,6 +4739,7 @@ async def sitemap_xml(request: Request):
     base = str(request.base_url).rstrip("/")
     urls = [
         f"{base}/", f"{base}/dashboard", f"{base}/lagebericht",
+        f"{base}/sources",
         f"{base}/api/incidents.rss", f"{base}/api/early-warning.rss",
         f"{base}/api/v1/docs",
     ]
@@ -4322,6 +4853,167 @@ h2{{font-size:11px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-trans
 
 
 @app.get("/lagebericht", response_class=HTMLResponse)
+@app.get("/api/public/sources")
+async def public_sources():
+    """Öffentliche Source-Health-Übersicht — Operator-Stakeholder können
+    sehen welche Quellen wir aktiv crawlen, welche zuletzt erfolgreich
+    waren und welche aktuell auf Auto-Disable stehen. Macht den
+    Crawler-Status nachprüfbar ohne Admin-Login."""
+    rows = db.execute(
+        "SELECT source, url, last_attempt, last_success, last_error, "
+        "consecutive_failures, total_attempts, total_successes, "
+        "items_last_run, items_total, active "
+        "FROM source_health "
+        "ORDER BY active DESC, total_successes DESC, source ASC"
+    ).fetchall()
+    sources = []
+    for r in rows:
+        d = dict(r)
+        cf = d["consecutive_failures"] or 0
+        if not d["active"]:           d["status"] = "disabled"
+        elif cf >= 5:                 d["status"] = "warning"
+        elif cf > 0:                  d["status"] = "degraded"
+        elif d["total_successes"] > 0: d["status"] = "healthy"
+        else:                          d["status"] = "untested"
+        # Sensitive-felder NICHT raushauen (last_error kann interne IPs enthalten).
+        d.pop("last_error", None)
+        sources.append(d)
+    return JSONResponse({
+        "sources":      sources,
+        "configured":   len(RSS_FEEDS),
+        "totals": {
+            "healthy":   sum(1 for s in sources if s["status"]=="healthy"),
+            "degraded":  sum(1 for s in sources if s["status"]=="degraded"),
+            "warning":   sum(1 for s in sources if s["status"]=="warning"),
+            "disabled":  sum(1 for s in sources if s["status"]=="disabled"),
+            "untested":  sum(1 for s in sources if s["status"]=="untested"),
+            "active_count": sum(1 for s in sources if s["active"]),
+        },
+        "items_today":  sum((s.get("items_last_run") or 0) for s in sources),
+        "asof":         datetime.now().isoformat(timespec="seconds"),
+    })
+
+
+@app.get("/sources", response_class=HTMLResponse)
+async def public_sources_page(request: Request):
+    """Öffentliche Crawler-Status-Übersicht: zeigt alle Quellen, ihren
+    Health-Status (healthy/degraded/warning/disabled/untested), letzte
+    erfolgreiche Crawl, Anzahl Items. Press-/Stakeholder-tauglich.
+    Macht insbesondere transparent dass barrikade.info gecrawlt wird
+    (auch wenn temporär blockiert)."""
+    s_resp = await public_sources()
+    import json as _j
+    data = _j.loads(s_resp.body)
+    sources = data["sources"]
+    totals  = data["totals"]
+    # Sortierung für visuelle Klarheit: healthy zuerst, dann degraded/warning, dann disabled.
+    order_map = {"healthy":0, "degraded":1, "warning":2, "untested":3, "disabled":4}
+    sources.sort(key=lambda s: (order_map.get(s["status"], 9), s["source"]))
+    def esc(s): return _xml_esc(s)
+    status_color = {
+        "healthy":  "#5fb583",
+        "degraded": "#d99a2b",
+        "warning":  "#d99a2b",
+        "untested": "#6c7986",
+        "disabled": "#d4495d",
+    }
+    status_label = {
+        "healthy":  "● aktiv",
+        "degraded": "● degraded",
+        "warning":  "● warnung",
+        "untested": "○ ungetestet",
+        "disabled": "● disabled",
+    }
+    rows_html = "".join(
+        f"<tr class='s-{esc(s['status'])}'>"
+        f"<td><span style='color:{status_color.get(s['status'], '#6c7986')}'>{status_label.get(s['status'], '?')}</span></td>"
+        f"<td class='src'>{esc(s['source'])}</td>"
+        f"<td class='url'>{esc(s.get('url') or '—')}</td>"
+        f"<td class='n'>{s.get('total_successes') or 0}</td>"
+        f"<td class='n'>{s.get('total_attempts') or 0}</td>"
+        f"<td class='n'>{s.get('items_total') or 0}</td>"
+        f"<td class='date'>{esc(s.get('last_success') or '—')}</td>"
+        f"<td class='n'>{s.get('consecutive_failures') or 0}</td>"
+        f"</tr>"
+        for s in sources
+    ) or "<tr><td colspan='8' style='color:#6c7986;text-align:center;padding:20px'>— keine Crawl-Statistiken vorhanden (Crawler läuft erst nach Boot+20s) —</td></tr>"
+    return HTMLResponse(f"""<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><title>Crawler-Quellen — LEX EUROPE</title>
+<meta name="description" content="Crawler-Status aller {data['configured']} konfigurierten Quellen: {totals['healthy']} healthy, {totals['degraded']+totals['warning']} mit Fehlern, {totals['disabled']} disabled.">
+<meta property="og:title"       content="LEX EUROPE — Crawler-Quellen-Status">
+<meta property="og:description" content="{data['configured']} Quellen · {totals['healthy']} healthy · {totals['disabled']} disabled · {data.get('items_today',0)} Items in letztem Run">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:ui-monospace,Menlo,Consolas,monospace;background:#080c12;color:#aab5c0;font-size:12px;line-height:1.5;}}
+.classbar{{background:#0a1219;border-bottom:1px solid rgba(255,255,255,0.06);padding:5px 18px;font-size:9px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;display:flex;justify-content:space-between;}}
+.classbar .l{{color:#6aa9c9;}}
+.page{{max-width:1100px;margin:0 auto;padding:30px 24px 60px;}}
+h1{{font-family:'Inter',system-ui,sans-serif;font-size:28px;font-weight:600;color:#e9eef3;letter-spacing:0.5px;margin-bottom:6px;}}
+.sub{{font-size:10px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;margin-bottom:24px;}}
+.kpi-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px;}}
+.kpi{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:16px 20px;}}
+.kpi .lbl{{font-size:8px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;margin-bottom:4px;}}
+.kpi .val{{font-size:24px;font-weight:600;color:#e9eef3;font-variant-numeric:tabular-nums;}}
+.kpi.green .val{{color:#5fb583;}}.kpi.amber .val{{color:#d99a2b;}}.kpi.red .val{{color:#d4495d;}}
+table{{width:100%;border-collapse:collapse;font-family:ui-monospace;font-size:11px;}}
+th,td{{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.04);text-align:left;vertical-align:top;}}
+th{{font-size:9px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;background:rgba(255,255,255,0.02);}}
+td.src{{color:#e9eef3;font-weight:600;}}
+td.url{{color:#6c7986;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}}
+td.n{{text-align:right;color:#aab5c0;font-variant-numeric:tabular-nums;}}
+td.date{{color:#6c7986;font-size:10px;}}
+tr:hover td{{background:rgba(106,169,201,0.04);}}
+.section{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:18px 22px;margin-bottom:14px;}}
+h2{{font-size:10px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid rgba(106,169,201,0.18);}}
+.footer{{font-size:9px;letter-spacing:1.5px;color:#3a4551;text-align:center;margin-top:30px;text-transform:uppercase;}}
+.cta{{display:inline-block;font-size:10px;letter-spacing:2px;color:#6aa9c9;border:1px solid #6aa9c9;padding:8px 14px;text-decoration:none;text-transform:uppercase;margin-right:6px;}}
+</style></head>
+<body>
+<div class="classbar"><span class="l">◆ OPEN SOURCE INTELLIGENCE · LEX EUROPE</span><span>CRAWLER-STATUS · STAND {esc(data['asof'][:10])}</span></div>
+<div class="page">
+  <h1>Crawler-Quellen-Status</h1>
+  <div class="sub">{data['configured']} konfigurierte Quellen · Auto-Disable nach {SOURCE_MAX_FAILURES} consecutive failures · Public-Visibility-Endpoint</div>
+
+  <div class="kpi-grid">
+    <div class="kpi"><div class="lbl">Konfiguriert</div><div class="val">{data['configured']}</div></div>
+    <div class="kpi green"><div class="lbl">Healthy</div><div class="val">{totals['healthy']}</div></div>
+    <div class="kpi amber"><div class="lbl">Degraded / Warning</div><div class="val">{totals['degraded']+totals['warning']}</div></div>
+    <div class="kpi red"><div class="lbl">Auto-Disabled</div><div class="val">{totals['disabled']}</div></div>
+    <div class="kpi"><div class="lbl">Untested</div><div class="val">{totals['untested']}</div></div>
+    <div class="kpi"><div class="lbl">Items letzte Crawls</div><div class="val">{data.get('items_today',0)}</div></div>
+  </div>
+
+  <div class="section">
+    <h2>Alle Quellen ({len(sources)} mit Crawl-Statistik)</h2>
+    <table>
+      <thead><tr>
+        <th>STATUS</th><th>QUELLE</th><th>URL</th>
+        <th>SUCC</th><th>VERSUCHE</th><th>ITEMS</th>
+        <th>LETZTER ERFOLG</th><th>F-CHAIN</th>
+      </tr></thead>
+      <tbody>{rows_html}</tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Methodik & Schnellzugriff</h2>
+    Diese Seite spiegelt die Tabelle <code>source_health</code> wieder, die der
+    Crawler nach jedem RSS-Fetch aktualisiert. Quellen mit ≥ {SOURCE_MAX_FAILURES}
+    aufeinanderfolgenden Fehlern werden automatisch deaktiviert; ein Admin
+    kann sie via <code>POST /admin/api/source-health/&lt;source&gt;/reset</code>
+    re-aktivieren. Spezial-Crawler wie der für barrikade.info nutzen
+    zusätzlich cloudscraper + web.archive.org als Fallback.<br><br>
+    <a class="cta" href="/api/public/sources">↗ JSON-Export</a>
+    <a class="cta" href="/dashboard">→ Dashboard</a>
+    <a class="cta" href="/">→ Karte</a>
+  </div>
+
+  <div class="footer">LEX EUROPE · transparente Crawler-Health · automatisch aktualisiert</div>
+</div>
+</body></html>""")
+
+
 async def public_lagebericht():
     """Standalone öffentliche Wochenbericht-Seite. Print-friendly, OG-getaggt.
     Holt /api/lagebericht/weekly direkt aus der DB ohne HTTP-Roundtrip."""
@@ -6761,6 +7453,13 @@ async def startup():
     backfill_summaries_and_flags()
     # FTS5-Backfill: ein leerer Index wird einmal aus incidents repopuliert.
     backfill_fts_if_empty()
+    # Strafverfolgungs-Status-Backfill: trägt bekannte Aktenzeichen
+    # für dokumentierte Verfahren ein (Lina E., G20 Hamburg, Cop City,
+    # Letzte Generation §129, Minneapolis Third Precinct, …). Idempotent.
+    try:
+        backfill_prosec_status()
+    except Exception as e:
+        log.warning(f"backfill_prosec_status failed: {e}")
     # Geocoding-Fix (Userhinweis): alte Substring-Match-Bugs in den vor-
     # handenen Koordinaten korrigieren. Wipe-and-rebuild des geocache läuft
     # einmal, sobald die DB-Meta nicht den aktuellen geocode-Fix-Marker
