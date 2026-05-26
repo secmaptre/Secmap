@@ -235,8 +235,9 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
       <button class="btn" onclick="stopCrawl()">■ STOPPEN</button>
       <button class="btn btn-accent" onclick="seedData()" id="btn-seed">↓ HISTORISCHE DATEN</button>
       <button class="btn" onclick="testGrok()">⚡ GROK TESTEN</button>
-      <button class="btn" onclick="testBarrikadeAuth()" title="publish.barrikade.info SPIP-Login testen">⚡ BARRIKADE-AUTH</button>
-      <button class="btn" onclick="crawlBarrikadeAuth()" title="Authentifizierten Crawl auf publish.barrikade.info starten">▶ BARRIKADE-CRAWL</button>
+      <button class="btn" onclick="testBarrikadeAuth()" title="Alle 5 Discovery-Strategien parallel testen">⚡ BARRIKADE-AUTH</button>
+      <button class="btn" onclick="crawlBarrikadeAuth()" title="Auth-Crawl + auto Wayback-Fallback bei 0 Inserts">▶ BARRIKADE-CRAWL</button>
+      <button class="btn btn-green" onclick="crawlBarrikadeWayback()" title="Direkt Wayback-Only Crawl — funktioniert immer (archive.org ist nicht hinter Cloudflare)">▶ WAYBACK-CRAWL</button>
       <button class="btn" onclick="reGeo()">⊕ GEOCODING WIEDERHOLEN</button>
       <button class="btn" onclick="refreshStatus()">↺ STATUS</button>
       <button class="btn btn-red" onclick="clearDB()">✕ DB LÖSCHEN</button>
@@ -659,6 +660,39 @@ async function testBarrikadeAuth(){
       toast('Barrikade: ALLE Strategien fehlgeschlagen');
     }
   }catch(e){ log('Fehler: '+e.message); toast('Test-Fehler'); }
+}
+
+async function crawlBarrikadeWayback(){
+  log('▶ WAYBACK-CRAWL — fetcht direkt aus archive.org (kann ~2-4min dauern bei 80 URLs)…');
+  try{
+    const d = await apiFetch('/admin/api/barrikade-wayback', {method:'POST'});
+    if(d.status === 'error'){
+      log('✗ FEHLER: '+d.error);
+      toast('Wayback-Crawl: '+d.error.substring(0,40));
+      return;
+    }
+    log('═══════════════════════════════════════════════');
+    log('Pfad: WAYBACK-ONLY (archive.org CDX + Snapshots)');
+    log(`Discovery: ${d.discovered_total} URLs aus CDX, ${d.tried_urls} versucht`);
+    log(`✓ INSERTED: ${d.inserted}`);
+    log(`Strategien-Counter: ${JSON.stringify(d.strategy_counter||{})}`);
+    if(d.reason) log(`reason: ${d.reason}`);
+    log('───── Per-URL Detail ─────');
+    const items = (d.url_results||[]);
+    const showMax = items.length > 40 ? 40 : items.length;
+    items.slice(0, showMax).forEach(r => {
+      const u = (r.url||'').replace('https://barrikade.info/','b:').replace('https://web.archive.org/','wb:');
+      if(r.ok){
+        log(`  ✓ ${u} → ${r.category||''} (${r.len||0}b)`);
+      } else {
+        log(`  ◇ ${u} → ${r.reason||r.exc||'übersprungen'}`);
+      }
+    });
+    if(items.length > showMax) log(`  … +${items.length - showMax} weitere`);
+    log('═══════════════════════════════════════════════');
+    toast(`Wayback: +${d.inserted} neue Vorfälle`);
+    setTimeout(refreshStatus, 1500);
+  }catch(e){ log('Exception: '+e.message); toast('Wayback-Crawl-Fehler'); }
 }
 
 async function crawlBarrikadeAuth(){
