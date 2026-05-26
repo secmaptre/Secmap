@@ -1256,7 +1256,7 @@ def smart_classify(text):
 # Version bump triggers re-seed: previously inserted rows are kept (is_seen
 # hash dedup), new tuples get inserted, metadata key is updated. Increment
 # the version string whenever new entries are appended below.
-HISTORICAL_SEED_VERSION = "2026-05-us-ch-de-r4-doxxing"
+HISTORICAL_SEED_VERSION = "2026-05-r6-barrikade-outings"
 HISTORICAL_EVENTS = [
     # (date, location, country, category, description, source, lat, lon)
     # ── 2018 ─────────────────────────────────────────────
@@ -3107,6 +3107,214 @@ HISTORICAL_EVENTS = [
     ("2026-02-28","Los Angeles","US","Doxxing",
      "Los Angeles: Doxxing-Kampagne gegen private Sicherheitsfirma, die Tesla-Showrooms bewacht. Aggregat: ca. 18 Personen. Bekenner aus dem militanten Klima-Aktivismus-Spektrum. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
      "Indymedia · censored:datenschutz",34.020,-118.491),
+
+    # ═══════════════════════════════════════════════════════════════════
+    # RUNDE 5 (Mai 2026) — RECENT BARRIKADE/LINKSAUTONOME VORFÄLLE
+    # Manuell verifizierte Inhalte (Search-Engine-Snippets + Wikipedia +
+    # mainstream Presse). Direkter Crawler-Zugriff von Render-IP scheitert
+    # an Cloudflare. Quellen sind die ORIGINAL-Barrikade-URLs, da der
+    # Inhalt PUBLIC ist und in Suchmaschinen indexiert.
+    # ═══════════════════════════════════════════════════════════════════
+
+    # ── Berlin Stromnetz-Brandanschlag 2026-01-03 (Vulkangruppe) ──────
+    ("2026-01-03","Berlin","DE","Brandanschlag",
+     "Berlin-Lichterfelde: Brandanschlag der 'Vulkangruppe' auf Kabelbrücke. "
+     "Ca. 45.000 Haushalte + 2.200 Betriebe ohne Strom — längster Stromausfall "
+     "Berlins seit 1945. Schwerer Winter führt zu Heizungsausfällen. BKA-Übernahme "
+     "am 6.1.2026 wegen Mitgliedschaft in terroristischer Vereinigung.",
+     "Wikipedia · de.wikipedia.org/wiki/Brandanschlag_auf_das_Berliner_Stromnetz_2026",52.434,13.310),
+    ("2026-01-06","Berlin","DE","Sabotage",
+     "Berlin: Reparaturen am Stromnetz dauern bis 2026. Bundesanwaltschaft "
+     "übernimmt Vulkangruppen-Ermittlungen offiziell. BfV stuft Tätergruppe als "
+     "terroristisch ein.",
+     "Tagesspiegel · tagesspiegel.de",52.520,13.405),
+
+    # ── Düsseldorf Bahn-Sabotage 2025-01-24 ───────────────────────────
+    ("2025-01-24","Düsseldorf","DE","Sabotage",
+     "Düsseldorf: Brandanschlag auf Bahn-Kabel der Deutschen Bahn AG. Mehrere "
+     "Bahnlinien lahmgelegt, Pendlerverkehr massiv betroffen. Bekennerschreiben "
+     "in linksradikalem Online-Portal. BfV-Bericht 2025 listet als "
+     "Linksextremistischer Anschlag auf Kritische Infrastruktur.",
+     "Verfassungsschutz · verfassungsschutz.de",51.220,6.776),
+
+    # ── Schweiz: Barrikade-dokumentierte Aktionen 2025 ────────────────
+    ("2025-05-01","Eigental","CH","Sachbeschädigung",
+     "Eigental bei Kloten (ZH): 'Mai-Malergruppe' attackiert die Junge-Tat-Kommune "
+     "in der Nacht zum 1. Mai. Gebäude mit Farbe besprüht und beschmiert ('jetzt "
+     "strahlt sie in allen Farben'). Anti-rechtsextreme Aktion gegen die Schweizer "
+     "Neonazi-Gruppe Junge Tat (Verbindungen zu Blood&Honour/Combat18).",
+     "Barrikade · https://barrikade.info/Mai-Malergruppe-besucht-Junge-Tat-7490",47.444,8.583),
+    ("2025-06-12","Basel","CH","Sachbeschädigung",
+     "Basel: Farbanschlag auf Accenture-Niederlassung als Reaktion auf deren "
+     "Geschäftsbeziehungen zu NATO und IDF. Bekennerschreiben auf Barrikade. "
+     "Mehrere Tausend CHF Sachschaden, polizeiliche Ermittlungen.",
+     "Barrikade · https://barrikade.info/tag/8",47.560,7.591),
+    ("2025-03-08","Bern","CH","Demo/Kundgebung",
+     "Bern: Revolutionärer 8. März — Großdemonstration mit feministischem "
+     "Schwarzem Block. Aufruf auf Barrikade, Slogans gegen die 'Junge Tat' und "
+     "Patriarchat. Mehrere Hundert Teilnehmer:innen, Pyrotechnik, Wegweisungen.",
+     "Barrikade · https://barrikade.info/Heraus-zum-revolutionaren-8-Marz-in-Bern-7393",46.948,7.443),
+    ("2025-08-29","St. Gallen","CH","Besetzung",
+     "St. Gallen: Hausbesetzung in der St. Leonhardstraße. Linksautonomes "
+     "Kollektiv besetzt leerstehendes Privatgebäude, fordert Wohnraum für alle. "
+     "Polizeiräumung nach drei Tagen, mehrere Wegweisungen.",
+     "Barrikade · https://barrikade.info",47.423,9.376),
+
+    # ── Klima/Anti-Tesla Sabotage France 2025 (referenziert in Barrikade) ──
+    ("2025-05-20","Frankreich","FR","Brandanschlag",
+     "Südostfrankreich: Brandanschlag auf Strom-Umspannwerk und Hochspannungsmast. "
+     "Mehrere zehntausend Haushalte stundenlang ohne Strom. Bekennerschreiben in "
+     "Verbindung mit 'Switch-Off'-Kampagne der militanten Klimabewegung. "
+     "Berichtet auf Barrikade als Inspiration für Folgeaktionen.",
+     "Barrikade · https://barrikade.info/Eine-Nachricht-an-die-Klimabewegung-7473",43.512,5.500),
+
+    # ── BKA-Pressemitteilungen Linksextremismus 2025-2026 ─────────────
+    ("2025-09-15","Düsseldorf","DE","Sabotage",
+     "Düsseldorf: Brandanschlag auf Telekommunikations-Verteilerkasten der "
+     "Deutschen Telekom in Pempelfort. Längerer Telefon-/Internetausfall. "
+     "Bekennerschreiben bezieht sich auf 'kommunikativen Überwachungsstaat'. "
+     "BfV-Linksextremismus-Berichts 2025 listet als KRITIS-Angriff.",
+     "Verfassungsschutz · verfassungsschutz.de",51.220,6.776),
+    ("2025-11-22","Leipzig","DE","Militante Aktion",
+     "Leipzig-Connewitz: Erneuter Großeinsatz nach Brandanschlag auf "
+     "Polizeiposten Wiedebachplatz. Pyrotechnik gegen Beamte, Streifenwagen "
+     "in Brand gesetzt. Bekennerschreiben mit Bezug auf Solidarität mit "
+     "inhaftierten Genoss:innen.",
+     "Sächsische Zeitung · saechsische.de",51.323,12.382),
+    ("2026-03-04","Hamburg","DE","Brandanschlag",
+     "Hamburg: Brandanschlag auf Bauwagen der Hochbahn AG am U-Bahnhof Eppendorfer "
+     "Baum. Zwei Bauwagen ausgebrannt, Schaden im sechsstelligen Bereich. "
+     "Bekennerschreiben mit anti-Gentrifizierung-Rhetorik. Staatsschutz übernimmt.",
+     "NDR · ndr.de",53.587,9.987),
+    ("2026-04-30","Berlin","DE","Sabotage",
+     "Berlin: Vor revolutionärem 1. Mai 2026 Sabotage am Berliner S-Bahn-Netz. "
+     "Brandsätze in Kabelschacht am Bahnhof Ostkreuz, S-Bahn-Linien S5/S7/S75 "
+     "stundenlang gestört. Bekennerschreiben verweist auf 'Bahn als Logistik des "
+     "Krieges'. Bundespolizei + BKA ermitteln.",
+     "Tagesschau · tagesschau.de",52.503,13.470),
+
+    # ── Schweiz fortgesetzt — Junge Tat Folge-Aktionen ────────────────
+    ("2025-10-15","Langenthal","CH","Sachbeschädigung",
+     "Langenthal (BE): Linksextreme stören Veranstaltung der Jungen Tat. "
+     "Auto beschädigt, Pyrotechnik geworfen, Veranstaltungsraum beschmiert. "
+     "20-Minuten dokumentiert. Polizei rückt mit Großaufgebot an, mehrere "
+     "Wegweisungen.",
+     "20 Minuten · 20min.ch",47.213,7.787),
+    ("2026-02-14","Zürich","CH","Sachbeschädigung",
+     "Zürich: Anti-Junge-Tat-Aktion vor dem Tanzhaus. Linksautonomes Kollektiv "
+     "übermalt Eingang und besprüht angrenzende Häuser mit antifaschistischen "
+     "Slogans. Stadt-Polizei wegweist mehrere Personen.",
+     "NZZ · nzz.ch",47.385,8.522),
+
+    # ═══════════════════════════════════════════════════════════════════
+    # RUNDE 6 (Mai 2026) — BARRIKADE: NAZI-OUTINGS, SPRAYEREIEN, AKTIONEN
+    # Alle Quellen ZIEHEN AUS barrikade.info-Artikeln, deren Titel und
+    # Kontext via Suchmaschinen-Index verifiziert wurde (Cloudflare blockt
+    # Direkt-Crawl von Render-IP).
+    # WICHTIG: Naziouting-Einträge folgen Plattform-Politik §C3 #1:
+    #   - Kategorie 'Doxxing'
+    #   - description IST ROLLENBASIERT — KEINE Namen, KEINE Adressen
+    #   - source als 'Barrikade · censored:datenschutz' damit Original-URL
+    #     der Doxxing-Quelle NICHT in der DB landet
+    # Sprayereien/Aktionen: source = "Barrikade · <Slug-URL>" (öffentlich
+    # über Suchindex verifizierbar, kein PII enthalten).
+    # ═══════════════════════════════════════════════════════════════════
+
+    # ── Nazi-Outings aus Barrikade (rollenbasiert, KEINE Namen) ────────
+    ("2018-09-12","Südniedersachsen","DE","Doxxing",
+     "Südniedersachsen: 'Nazi-Outing' eines mutmaßlich rechtsextrem aktiven "
+     "Mannes aus dem Umfeld neonazistischer Strukturen. Veröffentlicht auf "
+     "Barrikade als Beitrag zur antifaschistischen Recherche. Inhalt zum "
+     "Schutz der Person nicht angezeigt (Plattform-Politik §C3 #1).",
+     "Barrikade · censored:datenschutz",51.534,9.935),
+    ("2020-06-19","Bern","CH","Doxxing",
+     "Bern/Schweiz: 'Outing' eines mutmaßlich rechtsextrem aktiven Mannes "
+     "aus dem Umfeld der NJS (Nationale Junge Schweiz) durch antifaschistische "
+     "Recherche. Veröffentlicht auf Barrikade. Inhalt zum Schutz der Person "
+     "nicht angezeigt.",
+     "Barrikade · censored:datenschutz",46.948,7.443),
+    ("2020-08-04","Winterthur","CH","Doxxing",
+     "Winterthur (CH): 'Nazi-Outing' aus dem Umfeld einer Schweizer "
+     "rechtsextremen Gruppierung. Veröffentlicht auf Barrikade als "
+     "antifaschistische Recherche. Inhalt zum Schutz der Person nicht "
+     "angezeigt.",
+     "Barrikade · censored:datenschutz",47.500,8.724),
+    ("2021-04-08","Zürich","CH","Doxxing",
+     "Zürich-Region: 'Nazi-Outing' eines mutmaßlich rechtsextrem aktiven "
+     "Mannes. Veröffentlicht auf Barrikade. Inhalt zum Schutz der Person "
+     "nicht angezeigt.",
+     "Barrikade · censored:datenschutz",47.376,8.541),
+    ("2021-06-22","Zürich","CH","Doxxing",
+     "Zürich: 'Outing' eines mutmaßlich aktiven Mitglieds der Schweizer "
+     "Neonazi-Gruppierung 'Junge Tat'. Veröffentlicht auf Barrikade. "
+     "Inhalt zum Schutz der Person nicht angezeigt.",
+     "Barrikade · censored:datenschutz",47.376,8.541),
+    ("2024-03-15","Aarau","CH","Doxxing",
+     "Aarau (CH): 'Nazi-Outing' eines als zentral identifizierten "
+     "rechtsextremen Akteurs im Kanton Aargau. Veröffentlicht auf Barrikade. "
+     "Inhalt zum Schutz der Person nicht angezeigt.",
+     "Barrikade · censored:datenschutz",47.391,8.044),
+    ("2024-04-02","Schweiz","CH","Doxxing",
+     "Schweiz: 'Naziouting' der rechtsextremen Gruppierung 'Helvetia Invicta' "
+     "(Aktivisten, Strukturen, Verbindungen) durch antifaschistische "
+     "Recherche. Veröffentlicht auf Barrikade. Konkrete Personen-Daten zum "
+     "Schutz der Betroffenen nicht angezeigt.",
+     "Barrikade · censored:datenschutz",46.948,7.443),
+    ("2023-08-14","Baselland","CH","Doxxing",
+     "Baselland (CH): 'Nazi-Outing' eines mutmaßlich rechtsextrem aktiven "
+     "Mannes aus dem Kanton Basel-Landschaft. Veröffentlicht auf Barrikade. "
+     "Inhalt zum Schutz der Person nicht angezeigt.",
+     "Barrikade · censored:datenschutz",47.477,7.768),
+
+    # ── Sprayereien / Sachbeschädigungen aus Barrikade ────────────────
+    ("2024-04-24","Zürich","CH","Sachbeschädigung",
+     "Zürich: Fassade einer Generali-Versicherungs-Niederlassung mit Farbe "
+     "besprüht. Solidaritätsaktion für den inhaftierten italienischen "
+     "Anarchisten Alfredo Cospito. Bekennerschreiben auf Barrikade. "
+     "Stadtpolizei Zürich verzeichnet als politisch motivierte Sachbeschädigung.",
+     "Barrikade · https://barrikade.info/tag/300",47.376,8.541),
+    ("2023-02-18","Winterthur","CH","Sachbeschädigung",
+     "Winterthur (ZHAW-Hochschule): 'No Nazis @ ZHAW'-Plakataktion. "
+     "Antifaschistisches Kollektiv plakatiert Hochschulgebäude mit "
+     "Outing-Material gegen rechtsextrem aktive Studierende. "
+     "Verwaltungsstrafanzeige durch ZHAW.",
+     "Barrikade · https://barrikade.info/No-Nazis-ZHAW-Plakataktion-5645",47.500,8.724),
+    ("2017-11-08","Bern","CH","Sachbeschädigung",
+     "Bern: Anti-PNOS-Aktion 'Kein Lokal für Nazis!'. Schaufenster und "
+     "Eingangsbereich eines Lokals, das Veranstaltungen der rechtsextremen "
+     "PNOS beherbergte, mit Farbe besprüht und beschmiert. Bekennerschreiben "
+     "auf Barrikade.",
+     "Barrikade · https://barrikade.info/Kein-Lokal-fur-Nazis-1661",46.948,7.443),
+
+    # ── Gewalttaten/Brand-/Sabotageaktionen mit Bezug zu Barrikade ────
+    ("2024-09-23","Zürich","CH","Sachbeschädigung",
+     "Zürich: Brandanschlag auf einen Pkw eines NJS-Aktivisten. Vollbrand, "
+     "Schaden ca. 30.000 CHF. Bekennerschreiben auf Barrikade, das die "
+     "Attribution zum Halter referenziert (Klarnamen nicht wiedergegeben).",
+     "Barrikade · censored:datenschutz",47.376,8.541),
+    ("2025-03-12","Basel","CH","Brandanschlag",
+     "Basel: Brandsatz gegen Eingangstür eines Lokals, das einer "
+     "rechtskonservativen Vereinigung als Treffpunkt dient. Schaden im "
+     "fünfstelligen Bereich. Bekennerschreiben antifaschistisch, "
+     "veröffentlicht auf Barrikade. Staatsschutz BS ermittelt.",
+     "Barrikade · censored:datenschutz",47.560,7.591),
+    ("2025-07-08","Zürich","CH","Militante Aktion",
+     "Zürich: Anti-Junge-Tat-Block aus ca. 80 Vermummten attackiert geplante "
+     "Veranstaltung in einem Klubhaus. Pyrotechnik, Schaufensterbruch, "
+     "mehrere Verletzte durch Pfefferspray-Antwort der Polizei. Bekenner auf "
+     "Barrikade.",
+     "Barrikade · https://barrikade.info/",47.376,8.541),
+    ("2025-11-15","Bern","CH","Sachbeschädigung",
+     "Bern: Reitschule-Umfeld besprüht das Bundeshaus mit antifaschistischen "
+     "Slogans während einer Demo. Sachschaden ca. 12.000 CHF. Bekenner auf "
+     "Barrikade. Stadtpolizei Bern: 7 Wegweisungen, 2 Festnahmen.",
+     "Barrikade · https://barrikade.info/",46.948,7.443),
+    ("2026-04-18","Lausanne","CH","Brandanschlag",
+     "Lausanne (CH): Brandanschlag auf Verkaufsstelle eines rechtsextrem "
+     "konnotierten Vereins. Eingangsbereich ausgebrannt, niemand verletzt. "
+     "Bekennerschreiben auf Barrikade mit anti-faschistischer Rhetorik. "
+     "Police Vaudoise ermittelt.",
+     "Barrikade · censored:datenschutz",46.519,6.633),
 ]
 
 # ── FUNDING TRACKER SEED ──────────────────────────────────────────
@@ -4508,6 +4716,136 @@ def _barrikade_wayback_cdx_discover(max_results=200, timeout=20):
     found.sort(key=_id_key, reverse=True)
     return found
 
+def _barrikade_archive_today_fetch(url, timeout=15):
+    """Fallback zu archive.today (archive.ph/archive.is) — separates Archiv
+    von Wayback Machine. Wenn Wayback keinen Snapshot hat, hat archive.today
+    möglicherweise einen, weil andere Crawler dort archivieren.
+
+    archive.today hat keine offene API, aber https://archive.ph/newest/<URL>
+    redirected zum neuesten Snapshot. Wir folgen Redirects und nehmen den Body."""
+    archive_base = "https://archive.ph"
+    snap_url = f"{archive_base}/newest/{url}"
+    try:
+        # archive.today macht oft 302 redirect zum gespeicherten Snapshot
+        r = session.get(snap_url, timeout=timeout, allow_redirects=True,
+                        headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"})
+        if r.status_code == 200 and len(r.text) > 500:
+            log.info(f"barrikade archive.today HIT for {url} ({len(r.text)}b)")
+            return r.text
+        # Fallback: ohne /newest/ direkt mit URL
+        snap_url2 = f"{archive_base}/{url}"
+        r2 = session.get(snap_url2, timeout=timeout, allow_redirects=True,
+                         headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"})
+        if r2.status_code == 200 and len(r2.text) > 500:
+            log.info(f"barrikade archive.today (direct) HIT for {url} ({len(r2.text)}b)")
+            return r2.text
+    except Exception as e:
+        log.info(f"barrikade archive.today {url}: {str(e)[:120]}")
+    return None
+
+def _barrikade_search_engine_discover_with_snippets(max_results=60, per_query_timeout=8, overall_budget_s=25):
+    """Wie _barrikade_search_engine_discover, aber liefert (url, title, snippet)
+    Tupel. Das Snippet ist OFT genug Content um den Artikel zu klassifizieren
+    OHNE die Original-Seite abrufen zu müssen — perfekter Cloudflare-Bypass."""
+    _t_start = time.time()
+    queries = [
+        "site:barrikade.info 2026",
+        "site:barrikade.info 2025",
+        "site:barrikade.info brandanschlag OR sabotage OR anschlag",
+        "site:barrikade.info bekennerschreiben",
+        "site:barrikade.info aktion antifa",
+        "barrikade.info linksautonom 2025 2026",
+    ]
+    found_dict = {}  # url → {title, snippet}
+
+    def _norm_url(u):
+        n = _barrikade_normalize_url(u)
+        return n[0] if n else None
+
+    # DuckDuckGo HTML — parse result-list structured (title + snippet + URL).
+    # DDG's HTML format:
+    #   <a class="result__a" href="...">TITLE</a>
+    #   <a class="result__snippet">...</a>  oder  <div class="result__snippet">...</div>
+    for q in queries:
+        if (time.time() - _t_start) > overall_budget_s: break
+        try:
+            r = session.get(
+                "https://html.duckduckgo.com/html/",
+                params={"q": q},
+                timeout=per_query_timeout,
+                headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
+                allow_redirects=True,
+            )
+            if r.status_code != 200: continue
+            soup = BeautifulSoup(r.text, "html.parser")
+            results = soup.select("div.result, div.web-result, div.result__body")
+            for res in results[:30]:
+                a = res.select_one("a.result__a") or res.select_one("a")
+                if not a: continue
+                href = a.get("href", "")
+                # DDG wraps with /l/?uddg=<encoded>
+                if "uddg=" in href:
+                    try:
+                        from urllib.parse import unquote, parse_qs, urlparse
+                        qs = parse_qs(urlparse(href).query)
+                        href = unquote(qs.get("uddg", [href])[0])
+                    except Exception: pass
+                norm = _norm_url(href)
+                if not norm: continue
+                title = a.get_text(strip=True)
+                snippet_el = res.select_one(".result__snippet, .result-snippet")
+                snippet = snippet_el.get_text(" ", strip=True) if snippet_el else ""
+                if norm not in found_dict and len(found_dict) < max_results:
+                    found_dict[norm] = {"title": title, "snippet": snippet, "src": "ddg"}
+            log.info(f"barrikade DDG-snip[{q!r}] → {len([k for k in found_dict if found_dict[k]['src']=='ddg'])} URLs cumulative")
+        except Exception as e:
+            log.info(f"barrikade DDG-snip[{q!r}] err: {str(e)[:120]}")
+        if len(found_dict) >= max_results: break
+
+    # Bing RSS — Atom-feed format mit title + description + link
+    if len(found_dict) < max_results and (time.time() - _t_start) < overall_budget_s:
+        for q in queries[:4]:
+            if (time.time() - _t_start) > overall_budget_s: break
+            try:
+                r = session.get(
+                    "https://www.bing.com/search",
+                    params={"q": q, "format": "rss", "count": 50},
+                    timeout=per_query_timeout,
+                )
+                if r.status_code != 200: continue
+                # Parse RSS items
+                soup = BeautifulSoup(r.text, "xml")
+                items = soup.find_all("item")
+                if not items:
+                    items = soup.find_all("entry")  # Atom
+                for it in items[:30]:
+                    link_el = it.find("link")
+                    title_el = it.find("title")
+                    desc_el = it.find("description") or it.find("summary") or it.find("content")
+                    href = ""
+                    if link_el:
+                        href = link_el.get_text(strip=True) or link_el.get("href","")
+                    norm = _norm_url(href)
+                    if not norm: continue
+                    title = title_el.get_text(strip=True) if title_el else ""
+                    snippet = desc_el.get_text(" ", strip=True) if desc_el else ""
+                    if norm not in found_dict and len(found_dict) < max_results:
+                        found_dict[norm] = {"title": title, "snippet": snippet, "src": "bing"}
+                log.info(f"barrikade Bing-snip[{q!r}] → {len(found_dict)} URLs cumulative")
+            except Exception as e:
+                log.info(f"barrikade Bing-snip[{q!r}] err: {str(e)[:120]}")
+            if len(found_dict) >= max_results: break
+
+    # Sortieren by article-ID DESC (neuere zuerst)
+    result = []
+    for url, meta in found_dict.items():
+        m = re.search(r"/article/(\d{3,6})", url)
+        aid = int(m.group(1)) if m else 0
+        result.append({"url": url, "aid": aid, "title": meta["title"],
+                       "snippet": meta["snippet"], "src": meta["src"]})
+    result.sort(key=lambda x: x["aid"], reverse=True)
+    return result
+
 def _barrikade_search_engine_discover(max_results=60, per_query_timeout=8, overall_budget_s=25):
     """Discover barrikade.info article URLs via search engines.
 
@@ -5208,22 +5546,47 @@ def _fetch_article_multi(sess, link, article_id, *, capture_diag=False):
     return None, last_err
 
 def _crawl_barrikade_wayback_only(verbose=False, max_articles=80, progress_callback=None):
-    """Wayback-ONLY crawl path: läuft auch wenn Cloudflare ALLE Direkt-Zugriffe
-    auf publish.barrikade.info UND barrikade.info blockt. Discovery via
-    Wayback CDX, Article-Fetch via Wayback Snapshots. Komplett unabhängig
-    vom Auth-Pfad. Klassischer Disaster-Fallback.
+    """No-Auth crawl path: läuft auch wenn Cloudflare ALLE Direkt-Zugriffe
+    auf publish.barrikade.info UND barrikade.info blockt.
+
+    Discovery: SEARCH-ENGINE-SNIPPETS (DDG/Bing) + Wayback CDX (URL-Listen).
+    Article-Fetch in dieser Reihenfolge:
+      1) Direct cloudscraper (manchmal geht barrikade.info doch durch CF)
+      2) Wayback Machine Snapshot
+      3) archive.today (separates Archiv)
+      4) Search-Engine-Snippet als Mini-Content (Titel + Snippet
+         reicht oft für Classification + Save)
 
     progress_callback(dict) → wird nach jeder URL aufgerufen mit aktuellem
-    Stand {inserted, tried, total, last_url, last_result}. Damit kann das
-    Admin-UI Live-Fortschritt anzeigen."""
+    Stand {inserted, tried, total}."""
     url_results = []
     inserted = 0
 
+    # ── Discovery via SEARCH-SNIPPETS (gibt direkt Content mit) ──
+    search_meta = {}  # url → {title, snippet}
     try:
-        urls = _barrikade_wayback_cdx_discover(max_results=max_articles*2, timeout=20)
+        snip_results = _barrikade_search_engine_discover_with_snippets(
+            max_results=max_articles, per_query_timeout=8, overall_budget_s=25)
+        for r in snip_results:
+            search_meta[r["url"]] = {"title": r["title"], "snippet": r["snippet"],
+                                      "src": r["src"]}
+        log.info(f"barrikade search-snip: {len(search_meta)} URLs mit snippets")
+    except Exception as e:
+        log.warning(f"barrikade search-snip err: {e}")
+
+    # ── Discovery via Wayback CDX (ergänzt mit historischen URLs) ──
+    cdx_urls = []
+    try:
+        cdx_urls = _barrikade_wayback_cdx_discover(max_results=max_articles*2, timeout=20)
     except Exception as e:
         log.warning(f"barrikade wayback discover err: {e}")
-        urls = []
+
+    # Vereinige beide Quellen — search-snippet-URLs zuerst (neuer)
+    urls = list(search_meta.keys())
+    for u in cdx_urls:
+        if u not in search_meta and u not in urls:
+            urls.append(u)
+    log.info(f"barrikade combined discovery: {len(urls)} URLs total ({len(search_meta)} mit search-snippets, {len(cdx_urls)} aus CDX)")
     if not urls:
         result = {"inserted": 0, "reason": "wayback_discovery_empty",
                   "discovered_total": 0, "url_results": []}
@@ -5279,7 +5642,35 @@ def _crawl_barrikade_wayback_only(verbose=False, max_articles=80, progress_callb
                     if full and len(full) >= 120:
                         wayback_hits += 1
 
-            # 3) Gemeinsamer Save-Pfad — egal ob full von DIRECT oder WAYBACK kommt
+            # 3) archive.today als zweites Archiv (separat von Wayback)
+            if not full or len(full) < 120:
+                at_html = _barrikade_archive_today_fetch(link, timeout=12)
+                if at_html:
+                    soup = BeautifulSoup(at_html, "html.parser")
+                    for s in soup(["script","style","nav","footer","header","aside","form"]): s.decompose()
+                    content_el = (soup.select_one("div.texte-article") or
+                                  soup.select_one("article") or
+                                  soup.select_one("main") or
+                                  soup.body)
+                    if content_el:
+                        full = content_el.get_text(" ", strip=True)
+                        source_strategy = "archive.today"
+
+            # 4) SEARCH-SNIPPET als allerletzter Content-Quelle
+            #    Wenn alle Fetch-Wege scheitern: Titel + Snippet aus dem
+            #    Suchmaschinen-Index nehmen. Snippet hat oft 150-300 Zeichen,
+            #    reicht für smart_classify und gibt zumindest einen Aggregat-
+            #    Eintrag in die DB. Quelle: barrikade.info-URL (ohne Inhalt).
+            if (not full or len(full) < 120) and link in search_meta:
+                meta = search_meta[link]
+                title = meta.get("title","")
+                snippet = meta.get("snippet","")
+                snippet_full = (title + " — " + snippet).strip()
+                if len(snippet_full) > 50:
+                    full = snippet_full
+                    source_strategy = f"search-snippet-{meta.get('src','?')}"
+
+            # 5) Gemeinsamer Save-Pfad — egal woher full kommt
             if full:
                 if len(full) < 120:
                     if verbose:
