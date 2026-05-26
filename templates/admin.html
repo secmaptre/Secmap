@@ -238,6 +238,7 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
       <button class="btn" onclick="testBarrikadeAuth()" title="Alle 5 Discovery-Strategien parallel testen">⚡ BARRIKADE-AUTH</button>
       <button class="btn" onclick="crawlBarrikadeAuth()" title="Auth-Crawl + auto Wayback-Fallback bei 0 Inserts">▶ BARRIKADE-CRAWL</button>
       <button class="btn btn-green" onclick="crawlBarrikadeWayback()" title="Direkt Wayback-Only Crawl — funktioniert immer (archive.org ist nicht hinter Cloudflare)">▶ WAYBACK-CRAWL</button>
+      <button class="btn btn-green" onclick="crawlBarrikadeFull()" title="FULL-CRAWL: systematische ID-Iteration durch barrikade.info, 4-stufige Fetch-Chain (direct → wayback → archive.today → search-snippet)">▶ FULL-CRAWL barrikade</button>
       <button class="btn" onclick="reGeo()">⊕ GEOCODING WIEDERHOLEN</button>
       <button class="btn" onclick="refreshStatus()">↺ STATUS</button>
       <button class="btn btn-red" onclick="clearDB()">✕ DB LÖSCHEN</button>
@@ -660,6 +661,47 @@ async function testBarrikadeAuth(){
       toast('Barrikade: ALLE Strategien fehlgeschlagen');
     }
   }catch(e){ log('Fehler: '+e.message); toast('Test-Fehler'); }
+}
+
+async function crawlBarrikadeFull(){
+  const maxStr = prompt('Wieviele Article-IDs maximal versuchen? (Empfehlung: 100-200, Max: 500)', '150');
+  if(!maxStr) return;
+  const maxArt = Math.max(10, Math.min(500, parseInt(maxStr)||150));
+  log(`▶ FULL-CRAWL barrikade — scanne ${maxArt} Article-IDs (kann ~${Math.round(maxArt*1.5/60)}min dauern)…`);
+  try{
+    const d = await apiFetch('/admin/api/barrikade-fullcrawl', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({max_articles: maxArt})
+    });
+    if(d.status === 'error'){
+      log('✗ FEHLER: '+d.error);
+      toast('Full-Crawl: '+d.error.substring(0,40));
+      return;
+    }
+    log('═══════════════════════════════════════════════');
+    log(`Pfad: FULL-CRAWL (direct → wayback → archive.today → snippet)`);
+    log(`ID-Range: ${d.start_id} → ${d.end_id}`);
+    log(`Versucht: ${d.tried_urls} URLs`);
+    log(`✓ INSERTED: ${d.inserted}`);
+    log(`Fetch-Counter: ${JSON.stringify(d.fetch_counter||{})}`);
+    log(`Strategie-Counter: ${JSON.stringify(d.strategy_counter||{})}`);
+    log('───── Per-URL Detail (erste 50) ─────');
+    const items = (d.url_results||[]);
+    const showMax = items.length > 50 ? 50 : items.length;
+    items.slice(0, showMax).forEach(r => {
+      const u = (r.url||'').replace('https://barrikade.info/','b:');
+      if(r.ok){
+        log(`  ✓ ${u} → [${r.strategy}] ${r.category||''} (${r.len||0}b)`);
+      } else {
+        log(`  ◇ ${u} → ${r.reason||r.exc||'übersprungen'}${r.strategy?' ['+r.strategy+']':''}`);
+      }
+    });
+    if(items.length > showMax) log(`  … +${items.length - showMax} weitere`);
+    log('═══════════════════════════════════════════════');
+    toast(`Full-Crawl: +${d.inserted} neue Vorfälle`);
+    setTimeout(refreshStatus, 1500);
+  }catch(e){ log('Exception: '+e.message); toast('Full-Crawl-Fehler'); }
 }
 
 async function crawlBarrikadeWayback(){
