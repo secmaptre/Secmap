@@ -662,7 +662,7 @@ async function testBarrikadeAuth(){
 }
 
 async function crawlBarrikadeAuth(){
-  log('Starte authentifizierten Barrikade-Crawl (kann bis ~2min dauern)…');
+  log('Starte Barrikade-Crawl: Auth + Wayback-Fallback (kann bis ~2-3min dauern)…');
   try{
     const d = await apiFetch('/admin/api/barrikade-crawl', {method:'POST'});
     if(d.status === 'error'){
@@ -670,33 +670,30 @@ async function crawlBarrikadeAuth(){
       toast('Barrikade-Crawl: '+d.error.substring(0,40));
       return;
     }
-    if(d.reason === 'auth_failed'){
-      log('✗ Auth fehlgeschlagen — ENV korrekt gesetzt? Klick erst ⚡ BARRIKADE-AUTH');
-      toast('Auth fehlgeschlagen');
-      return;
-    }
-    if(d.reason === 'discovery_empty'){
-      log('✗ Discovery leer — Login OK, aber Editor-Backend liefert keine Article-IDs');
-      toast('Discovery leer');
-      return;
-    }
 
     log('═══════════════════════════════════════════════');
-    log(`Discovery: ${d.discovered_total} URLs gefunden, ${d.tried_urls} versucht`);
-    log(`✓ Eingefügt: ${d.inserted}`);
+    log(`Auth-Pfad: ${d.auth_path?.inserted ?? 0} Inserts (${d.auth_path?.reason||''})`);
+    if(d.wayback_fallback_used){
+      log('→ Wayback-Only-Fallback aktiviert (Auth lieferte 0)');
+    }
+    log(`Discovery total: ${d.discovered_total} URLs, ${d.tried_urls} versucht`);
+    log(`✓ INSERTED GESAMT: ${d.inserted}`);
     log(`Strategien-Counter: ${JSON.stringify(d.strategy_counter||{})}`);
     log('───── Per-URL Detail ─────');
-    (d.url_results||[]).forEach(r => {
-      const u = r.url.replace('https://barrikade.info/','…/').replace('https://publish.barrikade.info/','…/');
+    const items = (d.url_results||[]);
+    const showMax = items.length > 40 ? 40 : items.length;
+    items.slice(0, showMax).forEach(r => {
+      const u = (r.url||'').replace('https://barrikade.info/','…/').replace('https://publish.barrikade.info/','…/').replace('https://web.archive.org/','wb:');
       if(r.ok){
         log(`  ✓ ${u} → [${r.strategy}] ${r.category||''} (${r.len||0}b)`);
       } else if(r.fetch_err){
         const stepsBrief = r.fetch_err.steps ? r.fetch_err.steps.filter(s=>s.ok===false).slice(0,3).map(s=>s.step).join(',') : '';
         log(`  ✗ ${u} → fetch-fail: ${stepsBrief||r.fetch_err.error||r.fetch_err}`);
       } else {
-        log(`  ◇ ${u} → ${r.reason||r.exc||'übersprungen'} [${r.strategy||'—'}]`);
+        log(`  ◇ ${u} → ${r.reason||r.exc||'übersprungen'}${r.strategy?' ['+r.strategy+']':''}`);
       }
     });
+    if(items.length > showMax) log(`  … +${items.length - showMax} weitere`);
     log('═══════════════════════════════════════════════');
     toast(`Barrikade: +${d.inserted} neue Vorfälle`);
     setTimeout(refreshStatus, 1500);
