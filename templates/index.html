@@ -1063,6 +1063,138 @@ button:focus-visible, a:focus-visible{
 @media (max-width: 720px){
   .brand-sub{display:none;}
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   HOTWIRE-STRIP — SITREP-Ticker mit den jüngsten High-Severity-Vorfällen.
+   Positioniert zwischen classbar (18px) und topbar (54px).
+   ════════════════════════════════════════════════════════════════════ */
+:root{
+  --hwh:26px;
+}
+#hotwire{
+  position:fixed;
+  top:var(--clsh);  /* direkt unter classbar */
+  left:0;right:0;
+  height:var(--hwh);
+  z-index:24;       /* unter classbar (25), über topbar (20) */
+  display:flex;align-items:center;gap:10px;
+  padding:0 14px;
+  background:
+    linear-gradient(90deg, rgba(212,73,93,0.06) 0%, rgba(0,0,0,0.55) 12%, rgba(0,0,0,0.55) 88%, rgba(217,154,43,0.06) 100%),
+    #06090e;
+  border-bottom:1px solid rgba(106,169,201,0.10);
+  font-family:var(--mono);
+  font-size:10px;
+  letter-spacing:0.4px;
+  overflow:hidden;
+  user-select:none;
+}
+/* Topbar muss nach unten verschoben werden um Platz für hotwire zu machen */
+#topbar{top:calc(var(--clsh) + var(--hwh)) !important;}
+#left,#right,#detail{top:calc(var(--tbh) + var(--clsh) + var(--hwh)) !important;}
+#mod-funding-view{top:calc(var(--tbh) + var(--clsh) + var(--hwh)) !important;}
+
+.hw-label{
+  font-weight:700;
+  font-size:9px;
+  letter-spacing:2.5px;
+  color:var(--red);
+  background:rgba(212,73,93,0.10);
+  border:1px solid rgba(212,73,93,0.35);
+  padding:2px 7px;
+  border-radius:2px;
+  flex-shrink:0;
+  text-shadow:0 0 6px rgba(212,73,93,0.45);
+  animation:hwLabelPulse 3.2s ease-in-out infinite;
+}
+@keyframes hwLabelPulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(212,73,93,0.40);}
+  50%{box-shadow:0 0 0 4px rgba(212,73,93,0);}
+}
+.hw-viewport{
+  flex:1;
+  overflow:hidden;
+  position:relative;
+  height:100%;
+}
+.hw-track{
+  display:flex;
+  align-items:center;
+  gap:24px;
+  height:100%;
+  transition:transform .55s cubic-bezier(0.55, 0.0, 0.1, 1.0);
+  will-change:transform;
+}
+.hw-item{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  white-space:nowrap;
+  cursor:pointer;
+  padding:2px 4px;
+  border-radius:2px;
+  transition:background .12s;
+  color:var(--t1);
+}
+.hw-item:hover{background:rgba(255,255,255,0.04);color:var(--t0);}
+.hw-item .hw-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:currentColor;
+  box-shadow:0 0 6px currentColor;
+  flex-shrink:0;
+}
+.hw-item.cat-Brandanschlag,.hw-item.cat-Sabotage{color:var(--red);}
+.hw-item.cat-Gewalt,.hw-item.cat-Militante{color:#e0633a;}
+.hw-item.cat-Sachbeschädigung,.hw-item.cat-Schmiererei{color:var(--amber);}
+.hw-item.cat-Demo,.hw-item.cat-Aufruf{color:var(--accent);}
+.hw-item .hw-time{
+  color:var(--t2);
+  font-weight:500;
+  font-size:9.5px;
+  min-width:48px;
+}
+.hw-item .hw-loc{
+  color:var(--t0);
+  font-weight:600;
+}
+.hw-item .hw-cat{
+  font-weight:500;
+  opacity:0.95;
+}
+.hw-item .hw-co{
+  font-size:9px;
+  color:var(--t3);
+  font-weight:500;
+}
+.hw-item .hw-sep{color:var(--t3);}
+.hw-empty{color:var(--t3);font-style:italic;}
+
+.hw-pager{
+  display:flex;gap:3px;align-items:center;flex-shrink:0;
+}
+.hw-pager .hw-pg{
+  width:14px;height:2px;background:rgba(255,255,255,0.10);
+  transition:background .25s, width .25s;
+  cursor:pointer;
+}
+.hw-pager .hw-pg.on{background:var(--accent);width:22px;}
+
+/* Mobile: kompakter, kleinere Schrift */
+@media (max-width: 720px){
+  :root{--hwh:24px;}
+  #hotwire{padding:0 8px;gap:7px;}
+  .hw-label{font-size:8.5px;padding:1.5px 5px;letter-spacing:1.8px;}
+  .hw-item{gap:5px;font-size:9.5px;}
+  .hw-item .hw-time{min-width:40px;font-size:9px;}
+  .hw-pager{display:none;}
+}
+@media (max-width: 480px){
+  /* Auf sehr schmalen Bildschirmen ausblenden — Topbar hat Vorrang */
+  #hotwire{display:none;}
+  #topbar{top:var(--clsh) !important;}
+  #left,#right,#detail{top:calc(var(--tbh) + var(--clsh)) !important;}
+  #mod-funding-view{top:calc(var(--tbh) + var(--clsh)) !important;}
+}
 </style>
 </head>
 <body>
@@ -1073,6 +1205,17 @@ button:focus-visible, a:focus-visible{
 <div id="classbar" role="banner" aria-label="Classification">
   <span class="cls-l">◆ OPEN SOURCE INTELLIGENCE · LEX EUROPE · UNCLASSIFIED // RELEASABLE</span>
   <span class="cls-r" id="cls-stamp">—</span>
+</div>
+
+<!-- HOTWIRE STRIP — rezente High-Severity-Vorfälle als Live-Ticker.
+     Auto-rotiert alle 9 Sekunden, klickbar → öffnet Detail-Panel.
+     Intel-Dashboard-Aesthetik: schmaler Streifen, nicht reißerisch. -->
+<div id="hotwire" role="region" aria-label="SITREP — jüngste Vorfälle hoher Schwere" aria-live="polite">
+  <span class="hw-label">SITREP</span>
+  <div class="hw-viewport" id="hw-viewport">
+    <div class="hw-track" id="hw-track"><span class="hw-empty">— wird geladen —</span></div>
+  </div>
+  <div class="hw-pager" id="hw-pager"></div>
 </div>
 
 <!-- TOPBAR -->
@@ -1868,6 +2011,8 @@ function runBoot(){
   setLang(detectLang());     // load i18n before first render
   loadData(); loadTrends(); loadTimeline();
   loadEffectiveness();        // Wirkungs-Counter im Status-Footer (§C5)
+  loadHotwire();              // SITREP-Ticker im Header (rezente High-Sev)
+  setInterval(loadHotwire, 5 * 60 * 1000); // refresh alle 5 Minuten
   // Classification stamp tickt mit lokaler Zeit — gibt dem Header die
   // typische Lagezentrum-Anmutung („LAGE 2026-05-24 09:42 UTC+1").
   updateClassStamp();
@@ -2755,6 +2900,113 @@ async function loadData(){
     const sc=document.getElementById('s-cr');if(sc)sc.textContent=stats.crawl_running?'⟳ AKTIV':'● BEREIT';
     applyFilters();
   }catch(e){console.error(e);}
+}
+
+// ── HOTWIRE / SITREP-Ticker ─────────────────────────────────────────
+// Zeigt die jüngsten High-Severity- oder T1-Vorfälle als rotierenden
+// Live-Ticker direkt unter der Topbar. Visuell intel-dashboard-like:
+// kompakt, dataistic, klickbar.
+let _hwItems = [];
+let _hwIdx = 0;
+let _hwTimer = null;
+
+function _hwTimeLabel(dateStr){
+  if(!dateStr) return '';
+  try{
+    const d = new Date(dateStr);
+    const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+    if(days === 0) return 'HEUTE';
+    if(days === 1) return 'GESTERN';
+    if(days < 7)  return days + 'd';
+    if(days < 30) return Math.floor(days/7) + 'w';
+    if(days < 365)return Math.floor(days/30) + 'mo';
+    return Math.floor(days/365) + 'y';
+  }catch(_){return '';}
+}
+
+function _hwCatClass(cat){
+  if(!cat) return '';
+  if(cat.startsWith('Brandanschlag'))   return ' cat-Brandanschlag';
+  if(cat.startsWith('Sabotage'))        return ' cat-Sabotage';
+  if(cat.startsWith('Gewalt'))          return ' cat-Gewalt';
+  if(cat.startsWith('Militante'))       return ' cat-Militante';
+  if(cat.startsWith('Sachbeschädigung'))return ' cat-Sachbeschädigung';
+  if(cat.startsWith('Schmiererei'))     return ' cat-Schmiererei';
+  if(cat.startsWith('Demo'))            return ' cat-Demo';
+  if(cat.startsWith('Aufruf'))          return ' cat-Aufruf';
+  return '';
+}
+
+function _hwRenderItem(i){
+  const t = _hwTimeLabel(i.date);
+  const cls = _hwCatClass(i.category);
+  const co = (i.country||'').toUpperCase();
+  const loc = (i.location||'?');
+  const cat = (i.category||'').toUpperCase();
+  return `<div class="hw-item${cls}" data-id="${i.id}" title="Details öffnen">
+    <span class="hw-dot"></span>
+    <span class="hw-time">${t}</span>
+    <span class="hw-sep">·</span>
+    <span class="hw-co">${co}</span>
+    <span class="hw-sep">/</span>
+    <span class="hw-loc">${loc}</span>
+    <span class="hw-sep">·</span>
+    <span class="hw-cat">${cat}</span>
+  </div>`;
+}
+
+function _hwUpdate(){
+  const track = document.getElementById('hw-track');
+  if(!track || !_hwItems.length) return;
+  // Show 3-4 items in viewport, rotating by stepping the index.
+  const visibleCount = Math.min(4, _hwItems.length);
+  const window = [];
+  for(let k=0;k<visibleCount;k++){
+    window.push(_hwItems[(_hwIdx + k) % _hwItems.length]);
+  }
+  track.innerHTML = window.map(_hwRenderItem).join('');
+  // Wire click-handlers
+  track.querySelectorAll('.hw-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = parseInt(el.getAttribute('data-id'), 10);
+      const full = (typeof incidents !== 'undefined' && incidents)
+        ? incidents.find(x => x.id === id) : null;
+      if(full && typeof openDetail === 'function'){ openDetail(full); }
+    });
+  });
+  // Update pager
+  const pager = document.getElementById('hw-pager');
+  if(pager){
+    const pages = Math.ceil(_hwItems.length / visibleCount) || 1;
+    const curPage = Math.floor(_hwIdx / visibleCount) % pages;
+    pager.innerHTML = Array.from({length: pages}, (_, p) =>
+      `<span class="hw-pg${p===curPage?' on':''}"></span>`).join('');
+  }
+}
+
+function _hwTick(){
+  if(!_hwItems.length) return;
+  _hwIdx = (_hwIdx + 4) % _hwItems.length;
+  _hwUpdate();
+}
+
+async function loadHotwire(){
+  try{
+    const r = await fetch('/api/incidents/hotwire');
+    if(!r.ok) return;
+    const items = await r.json();
+    _hwItems = Array.isArray(items) ? items : [];
+    _hwIdx = 0;
+    _hwUpdate();
+    if(_hwTimer) clearInterval(_hwTimer);
+    if(_hwItems.length > 4){
+      _hwTimer = setInterval(_hwTick, 9000);
+    }
+  }catch(e){
+    console.error('hotwire:', e);
+    const track = document.getElementById('hw-track');
+    if(track) track.innerHTML = '<span class="hw-empty">— keine Vorfälle —</span>';
+  }
 }
 
 // ── TRENDS ─────────────────────────────────────────────────────────
