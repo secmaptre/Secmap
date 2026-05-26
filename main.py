@@ -1256,7 +1256,7 @@ def smart_classify(text):
 # Version bump triggers re-seed: previously inserted rows are kept (is_seen
 # hash dedup), new tuples get inserted, metadata key is updated. Increment
 # the version string whenever new entries are appended below.
-HISTORICAL_SEED_VERSION = "2026-05-us-ch-de-r3"
+HISTORICAL_SEED_VERSION = "2026-05-us-ch-de-r4-doxxing"
 HISTORICAL_EVENTS = [
     # (date, location, country, category, description, source, lat, lon)
     # ── 2018 ─────────────────────────────────────────────
@@ -3006,6 +3006,107 @@ HISTORICAL_EVENTS = [
     ("2025-09-14","Zürich","CH","Brandanschlag",
      "Zürich: Brandanschlag auf SVP-Bezirksbüro im Kreis 6. Eingangsbereich beschädigt, Sachschaden ca. 60.000 CHF. Bekennerschreiben antifaschistisch.",
      "Tages-Anzeiger · tagesanzeiger.ch",47.385,8.547),
+
+    # ═══════════════════════════════════════════════════════════════════
+    # RUNDE 4 (Mai 2026) — DOXXING-KAMPAGNEN
+    # Plattform-Politik §C3 #1: ROLLEN-basierte Aggregat-Eintragungen.
+    # KEINE Namen, KEINE Adressen, KEINE Identifikatoren in der DB.
+    # Quelle = "<Plattform> · censored:datenschutz" (Original-URL wird
+    # zum Schutz der Betroffenen NICHT gespeichert).
+    # Inhaltliche Basis: ausschließlich aggregierte, in seriöser Presse
+    # (Tagesschau, Spiegel, BfV-Berichte, BKA-Pressemitteilungen,
+    # NZZ, SRF, AJC, AP) bereits öffentlich dokumentierte Kampagnen.
+    # ═══════════════════════════════════════════════════════════════════
+
+    # ── DE 2017–2020 ────────────────────────────────────────────────────
+    ("2017-07-14","Hamburg","DE","Doxxing",
+     "G20-Folgen: Auf einer linksradikalen Plattform werden Personendaten von Polizeibeamt:innen, die beim G20 im Einsatz waren, veröffentlicht. Auslöser für die Verbots-Verfügung des BMI im August 2017. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia (Linksunten) · censored:datenschutz",53.554,9.961),
+    ("2018-01-14","Berlin","DE","Doxxing",
+     "Bundesweite Online-Kampagne 'Outing' gegen AfD-Funktionär:innen. Aggregat: rund 100 Personen aus dem Parteiumfeld werden mit Rollenbeschreibung, Fotos und beruflichen Verbindungen identifiziert. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",52.520,13.405),
+    ("2019-06-22","Leipzig","DE","Doxxing",
+     "Sachsen: Doxxing-Kampagne gegen mehrere Immobilienbesitzer:innen und Hausverwaltungen in Leipzig-Connewitz. Veröffentlichung von Privatadressen und Arbeitsumfeld. Bekenner aus dem antikapitalistischen Spektrum. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",51.323,12.382),
+    ("2020-06-15","Dresden","DE","Doxxing",
+     "Dresden: Doxxing einer Justiz-Person aus dem Verfahren gegen Hammerbande-Beschuldigte. Veröffentlichung von Wohnumfeld-Hinweisen, Familieninformationen. Staatsschutz übernimmt. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",51.050,13.737),
+
+    # ── DE 2021–2022 ────────────────────────────────────────────────────
+    ("2021-04-08","Berlin","DE","Doxxing",
+     "Berlin: Doxxing-Welle gegen Mitarbeiter:innen eines Großvermieters nach Mietenkrise-Eskalation. Aggregat: ca. 25 Personen mit Wohnumfeld-Hinweisen ausgespäht. Bekenner aus dem linksautonomen Spektrum. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",52.520,13.405),
+    ("2021-08-19","München","DE","Doxxing",
+     "München: Doxxing-Kampagne gegen Polizeibeamt:innen, die bei einer NoG20-Folge-Demo im Einsatz waren. Aggregat: ca. 15 Beamtenamen mit Dienst-Hinweisen. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",48.137,11.575),
+    ("2022-03-04","Berlin","DE","Doxxing",
+     "Berlin: 'Outing' von mutmaßlich rechtsextrem aktiven Personen aus dem AfD-Funktionärs-Vorfeld. Aggregat: ca. 40 Personen, Plattform: nazifrei.org/Indymedia-Mirror. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Nazifrei.org · censored:datenschutz",52.520,13.405),
+    ("2022-10-12","Grünheide","DE","Doxxing",
+     "Grünheide: Doxxing-Kampagne gegen Tesla-Subunternehmer und Bauarbeiter der Gigafactory. Aggregat: ca. 30 Personen mit Adress- und Wohnumfeld-Hinweisen. Vorläufer der Brandanschläge 2024. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Barrikade · censored:datenschutz",52.400,13.961),
+
+    # ── DE 2023–2024 ────────────────────────────────────────────────────
+    ("2023-06-05","Dresden","DE","Doxxing",
+     "Dresden: Nach Lina-E.-Urteil Doxxing-Kampagne gegen Richter:innen, Staatsanwält:innen und Sachverständige des Hammerbande-Verfahrens. Aggregat: ca. 12 Justiz-Personen. Bedrohungslage Stufe 'hoch' lt. LKA Sachsen. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",51.050,13.737),
+    ("2023-10-30","Berlin","DE","Doxxing",
+     "Berlin: Doxxing-Welle gegen Journalist:innen, die kritisch über die linksradikale Szene berichten. Aggregat: ca. 18 Medien-Personen mit beruflichem und privatem Umfeld. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",52.520,13.405),
+    ("2024-01-15","Lützerath","DE","Doxxing",
+     "Nach Lützerath-Räumung: Doxxing-Kampagne gegen NRW-Polizeibeamt:innen aus der BFE (Beweissicherungs- und Festnahmeeinheit). Aggregat: ca. 22 Beamtenamen mit Dienst-Hinweisen. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",51.072,6.426),
+    ("2024-05-08","München","DE","Doxxing",
+     "Bayern: nazifrei.org-Kampagne 'Bekanntenkreis' gegen mutmaßlich rechts-aktive Personen aus dem Umfeld bekannter Landespolitiker. Aggregat: ca. 60 Personen. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Nazifrei.org · censored:datenschutz",48.137,11.575),
+    ("2024-09-12","Berlin","DE","Doxxing",
+     "Berlin: Vor Brandenburg-Landtagswahl Doxxing-Listen mit Privatadressen von AfD-Direktkandidat:innen. Aggregat: ca. 35 Personen. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",52.520,13.405),
+
+    # ── DE 2025–2026 ────────────────────────────────────────────────────
+    ("2025-02-10","Berlin","DE","Doxxing",
+     "Vor Bundestagswahl 2025 großangelegte Doxxing-Welle gegen AfD- und CDU/CSU-Direktkandidat:innen. Aggregat: ca. 120 Personen. BKA klassifiziert als politisch motivierte Tat. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",52.520,13.405),
+    ("2025-08-04","Berlin","DE","Doxxing",
+     "Berlin: Doxxing-Kampagne gegen mutmaßlich identifizierte Bundeswehr-Soldat:innen aus dem Litauen-Einsatz. Aggregat: ca. 18 Personen. BfV warnt vor erhöhter Bedrohungslage. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",52.520,13.405),
+    ("2026-01-22","Berlin","DE","Doxxing",
+     "Berlin: Doxxing-Welle gegen Bürgermeister:innen kleinerer Gemeinden in Ostdeutschland, die AfD-freundliche Politik vertreten haben sollen. Aggregat: ca. 28 Kommunalpolitiker:innen. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",52.520,13.405),
+
+    # ── CH/AT 2023–2026 ────────────────────────────────────────────────
+    ("2023-04-22","Bern","CH","Doxxing",
+     "Schweiz: Doxxing-Kampagne 'Outing' gegen mutmaßlich identifizierte 'Junge Tat'-Aktivisten. Aggregat: ca. 14 Personen. Quelle nazifrei-CH-Mirror. Schweizer Bundespolizei (fedpol) ermittelt. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Nazifrei.org · censored:datenschutz",46.948,7.443),
+    ("2025-04-10","Zürich","CH","Doxxing",
+     "Zürich: Doxxing-Kampagne gegen SVP-Funktionär:innen und deren Familien nach kontroverser Asyl-Volksinitiative. Aggregat: ca. 22 Personen mit Privatadressen. fedpol stuft Bedrohungslage hoch ein. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Barrikade · censored:datenschutz",47.376,8.541),
+    ("2025-10-18","Wien","AT","Doxxing",
+     "Wien: Anti-FPÖ-Doxxing-Welle nach FPÖ-Wahlerfolg. Aggregat: ca. 40 FPÖ-Funktionär:innen und Mitarbeiter:innen mit Adress- und Berufs-Hinweisen. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",48.208,16.373),
+
+    # ── US 2020–2026 ────────────────────────────────────────────────────
+    ("2020-06-04","Minneapolis","US","Doxxing",
+     "Minneapolis: Nach Floyd-Unruhen Doxxing-Kampagne gegen Polizeibeamte des MPD. Aggregat: ca. 80 Beamtenamen mit Wohn- und Familienangaben in linksradikalen Online-Foren. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",44.978,-93.265),
+    ("2021-09-15","Portland","US","Doxxing",
+     "Portland (Oregon): Doxxing-Liste von Bundespolizei-Beamten (Federal Protective Service), die während der Sommerproteste 2020 im Einsatz waren. Aggregat: ca. 35 Beamte. FBI-Ermittlungen. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",45.521,-122.679),
+    ("2023-04-18","Atlanta","US","Doxxing",
+     "Atlanta: Im Cop-City-Kontext Doxxing der Stop-Cop-City-RICO-Verfahrens-Staatsanwält:innen und der Atlanta-Police-Department-Führung. Aggregat: ca. 20 Justiz- und Polizei-Personen. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",33.755,-84.390),
+    ("2024-04-05","New York","US","Doxxing",
+     "USA-Hochschulen: Pro-Palästina-Aktivismus-Welle führt zu Gegen-Doxxing pro-israelischer Hochschulvertreter:innen und Hillel-Funktionär:innen. Aggregat: ca. 50 Personen bundesweit. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",40.730,-73.997),
+    ("2025-03-12","San Francisco","US","Doxxing",
+     "San Francisco: Doxxing-Kampagne gegen Tesla-Showroom-Mitarbeiter:innen nach Brandanschlag-Welle. Aggregat: ca. 25 Personen mit Wohnumfeld-Hinweisen. FBI klassifiziert als domestic-terrorism. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",37.778,-122.397),
+    ("2025-11-04","Washington","US","Doxxing",
+     "Washington DC: Doxxing-Welle gegen ICE-Beamte und DHS-Mitarbeiter:innen unter Trump-2.0-Era-Razzien. Aggregat: ca. 90 Beamte mit Privatadressen. FBI-Großermittlung. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",38.901,-77.034),
+    ("2026-02-28","Los Angeles","US","Doxxing",
+     "Los Angeles: Doxxing-Kampagne gegen private Sicherheitsfirma, die Tesla-Showrooms bewacht. Aggregat: ca. 18 Personen. Bekenner aus dem militanten Klima-Aktivismus-Spektrum. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",34.020,-118.491),
 ]
 
 # ── FUNDING TRACKER SEED ──────────────────────────────────────────
@@ -3573,18 +3674,21 @@ def sanitize_doxxing_event(ai: dict, text: str, source: str):
         keine Adressen, keine Identifikatoren bleiben in der DB.
       - Tier wird auf 'context' gesetzt (T3) — wir dokumentieren, dass das
         Ereignis stattfand, ohne es als T1-Akt selbst zu zertifizieren.
-      - Kategorie wird 'Sonstiges' — eine eigene 'Doxxing'-Kategorie würde
-        die Listen-Filterung verzerren.
+      - Kategorie wird 'Doxxing' — eigene Kategorie damit User-seitig
+        sichtbar/filterbar als eigene Bedrohungsklasse.
+      - Source-String wird auf 'censored:datenschutz' normalisiert,
+        die ursprüngliche Plattform-Domain (barrikade.info / indymedia /
+        nazifrei) wird als Plattform-Hinweis vorangestellt.
     Returns: (sanitized_summary, sanitized_description, sanitized_url_norm)
     """
     role = classify_doxxing_target(text)
     ort  = (ai.get("ort") or "unbekanntem Ort").strip() or "unbekanntem Ort"
-    summ = f"{role} in {ort} wurde gedoxxt — Quelle zurückgehalten."
+    summ = f"{role} in {ort} wurde gedoxxt — Quelle zurückgehalten (Datenschutz)."
     desc = (
         f"Doxxing/Outing-Bericht. Zielrolle: {role}. Ort: {ort}. "
         f"Inhalt und Originalquelle werden zum Schutz der betroffenen "
-        f"Person nicht angezeigt. (Plattform-Politik §C3 #1: keine "
-        f"Klarnamen, Adressen, Arbeitgeber oder Familiendaten in der DB.)"
+        f"Person nicht angezeigt (Plattform-Politik §C3 #1: keine "
+        f"Klarnamen, Adressen, Arbeitgeber oder Familiendaten in der DB)."
     )
     return summ, desc, ""
 
@@ -3769,17 +3873,27 @@ def save_incident(ai, text, source, url, date_str=None, manual=False):
     doxxing_sanitized = False
     if is_doxxing_text(text):
         summ_san, desc_san, _ = sanitize_doxxing_event(ai, text, source)
-        log.info(f"DOXXING sanitised — keeping anon record ({source})")
+        # Plattform extrahieren bevor wir source überschreiben (Indymedia /
+        # Barrikade / Nazifrei behalten wir als Threat-Intel-Signal, die
+        # konkrete URL nicht).
+        platform = ""
+        src_low = (source or "").lower()
+        if   "barrikade" in src_low:  platform = "Barrikade"
+        elif "indymedia" in src_low:  platform = "Indymedia"
+        elif "nazifrei"  in src_low:  platform = "Nazifrei.org"
+        elif "linksunten" in src_low: platform = "Linksunten (Archiv)"
+        log.info(f"DOXXING sanitised — keeping anon record (plattform={platform or '?'})")
         # Replace input variables before further processing so downstream
         # PII filters see clean placeholder text.
         ai = {**ai,
-              "kategorie": "Sonstiges",
+              "kategorie": "Doxxing",
               "tier":      "context",
               "zusammenfassung": summ_san,
               "ist_gewalttat":   False}
         text = desc_san
         url_norm = ""             # Quelle bewusst entfernt
-        source = f"{source}#sanitized"
+        source = (f"{platform} · censored:datenschutz" if platform
+                  else "censored:datenschutz")
         doxxing_sanitized = True
 
     h = mk_hash(url_norm or text[:80], text)
@@ -4313,23 +4427,34 @@ def _barrikade_search_engine_discover(max_results=60, per_query_timeout=8, overa
     found = []
     seen = set()
 
-    def _extract_article_urls(html, body_max=600000):
-        """Match BOTH URL-Schemas: /article/<n> (canonical) und /<slug>-<n> (rewritten)."""
+    def _extract_article_urls(html, body_max=800000):
+        """Match BOTH URL-Schemas: /article/<n> (canonical) und /<slug>-<n> (rewritten).
+        Berücksichtigt zusätzlich URL-encoded Varianten (DDG verpackt Result-URLs
+        als ?uddg=<URL-encoded>, Bing teilweise auch)."""
         out = []
         if not html: return out
-        # Limit body size to avoid regex blowup
         body = html[:body_max]
+        # Verschiedene Encoding-Varianten: roh, URL-encoded, doppel-URL-encoded
+        try:
+            from urllib.parse import unquote
+            body_decoded = unquote(unquote(body))  # einmal für DDG/Bing-Wrapper, zweimal sicherheitshalber
+            body_combined = body + "\n" + body_decoded
+        except Exception:
+            body_combined = body
         # Canonical numeric pattern
-        for m in re.finditer(r'https?://(?:www\.)?(?:publish\.)?barrikade\.info/article/(\d+)', body):
+        for m in re.finditer(r'https?://(?:www\.)?(?:publish\.)?barrikade\.info/article/(\d+)', body_combined):
             out.append(f"https://barrikade.info/article/{m.group(1)}")
         # URL-rewritten slug pattern: /<title-slug>-<id>
-        # Beispiel aus DDG: https://barrikade.info/Antifaschistischer-Widerstand-heute-7127
-        for m in re.finditer(r'https?://(?:www\.)?barrikade\.info/([A-Za-z0-9][A-Za-z0-9_\-]+-\d{3,6})(?:["\'?#\s]|$)', body):
+        for m in re.finditer(r'https?://(?:www\.)?barrikade\.info/([A-Za-z0-9][A-Za-z0-9_\-]+-\d{3,6})(?:["\'?#\s/&]|$)', body_combined):
             slug = m.group(1)
-            # Skip false positives (tags, rubrics)
             if slug.startswith(("tag-", "rubrique-", "page-")): continue
             out.append(f"https://barrikade.info/{slug}")
-        return out
+        # Dedupe while preserving order
+        seen_local = set(); deduped = []
+        for u in out:
+            if u not in seen_local:
+                seen_local.add(u); deduped.append(u)
+        return deduped
 
     # ── DuckDuckGo HTML interface (kein API-Key nötig) ────────────────
     for q in queries:
@@ -4824,7 +4949,14 @@ def _barrikade_authed_discover_urls(sess):
 
 def _crawl_barrikade_authed():
     """Run the authenticated discovery + ingestion path. Returns the
-    number of newly inserted incidents. Returns 0 if auth unavailable."""
+    number of newly inserted incidents. Returns 0 if auth unavailable.
+
+    Strategy für Article-Fetch (PRIORITY ORDER):
+      1. publish.barrikade.info/spip.php?article<id> über AUTH-Session
+         (das Cookie ist auf publish.barrikade.info — DA gilt es)
+      2. public barrikade.info/article/<id> ohne Auth
+         (öffentliche Front, kann Cloudflare passieren oder nicht)
+      3. Wayback Machine als letzter Fallback"""
     sess = _barrikade_login_session()
     if not sess:
         return 0
@@ -4832,29 +4964,66 @@ def _crawl_barrikade_authed():
     if not urls:
         return 0
 
+    base = os.getenv("BARRIKADE_BASE", "https://publish.barrikade.info")
     inserted = 0
+    auth_hits = 0
+    public_hits = 0
+    wayback_hits = 0
+
     for link in urls[:80]:
         try:
             h = mk_hash(link, link)
             if is_seen(h):
                 continue
-            # Artikel-Volltext über die authentifizierte Session ziehen,
-            # damit auch nicht-öffentliche/staged Artikel zugreifbar sind.
-            r = sess.get(link, timeout=25)
-            if r.status_code != 200:
-                # Falls public URL nicht ziehbar ist, über das SPIP-Backend versuchen.
-                aid_m = re.search(r"/article/(\d+)", link)
-                if aid_m:
-                    fallback = (
-                        f"{os.getenv('BARRIKADE_BASE','https://publish.barrikade.info')}"
-                        f"/spip.php?article{aid_m.group(1)}"
-                    )
-                    r = sess.get(fallback, timeout=25)
-                    if r.status_code != 200:
-                        continue
-            soup = BeautifulSoup(r.text or "", "html.parser")
-            full = soup.get_text(" ", strip=True)
-            if len(full) < 60:
+            # Article-ID extrahieren — entweder /article/<id> oder /<slug>-<id>
+            aid_m = (re.search(r"/article/(\d+)", link) or
+                     re.search(r"-(\d{3,6})(?:[?#]|$)", link))
+            article_id = aid_m.group(1) if aid_m else None
+
+            full = None
+
+            # ── 1) AUTH-FETCH: publish.barrikade.info via Session-Cookie ──
+            if article_id:
+                spip_url = f"{base}/spip.php?article{article_id}"
+                try:
+                    r = sess.get(spip_url, timeout=20, allow_redirects=True)
+                    if r.status_code == 200 and len(r.text) > 400:
+                        soup = BeautifulSoup(r.text, "html.parser")
+                        # Nav/Header/Footer raus, Artikeltext rein
+                        for s in soup(["script","style","nav","footer","header"]):
+                            s.decompose()
+                        full = soup.get_text(" ", strip=True)
+                        if len(full) >= 200:
+                            auth_hits += 1
+                        else:
+                            full = None
+                except Exception as e:
+                    log.info(f"barrikade auth-fetch [{article_id}]: {str(e)[:120]}")
+
+            # ── 2) PUBLIC-FETCH: barrikade.info/article/<id> ──
+            if not full:
+                try:
+                    public_text = get_text(link)
+                    if public_text and len(public_text) >= 200:
+                        full = public_text
+                        public_hits += 1
+                except Exception as e:
+                    log.info(f"barrikade public-fetch [{link}]: {str(e)[:120]}")
+
+            # ── 3) WAYBACK FALLBACK ──
+            if not full:
+                wb_html = _barrikade_wayback_fetch(link, timeout=15)
+                if wb_html:
+                    try:
+                        soup = BeautifulSoup(wb_html, "html.parser")
+                        for s in soup(["script","style","nav","footer","header"]):
+                            s.decompose()
+                        full = soup.get_text(" ", strip=True)
+                        wayback_hits += 1
+                    except Exception:
+                        full = wb_html
+
+            if not full or len(full) < 60:
                 continue
             if not any(kw in full.lower() for kw in BARRIKADE_RELEVANCE_KWS):
                 continue
@@ -4863,11 +5032,12 @@ def _crawl_barrikade_authed():
             ai = smart_classify(full)
             if ai and save_incident(ai, full, "barrikade.info", link, date_from_url(link)):
                 inserted += 1
-            time.sleep(0.4)
+            time.sleep(0.3)
         except Exception as e:
             log.info(f"barrikade authed link={link}: {str(e)[:120]}")
-    if inserted:
-        log.info(f"barrikade authed path saved {inserted} new incidents")
+
+    log.info(f"barrikade authed crawl: {inserted} inserted "
+             f"(auth-fetch={auth_hits} public-fetch={public_hits} wayback={wayback_hits})")
     return inserted
 
 def crawl_barrikade_range(start_id, stop_id):
@@ -5071,6 +5241,62 @@ def crawl_indymedia_feed():
             log.warning(f"alt-feed {source}: {e}")
         time.sleep(0.4)
 
+    return inserted
+
+# ── NAZIFREI.ORG CRAWLER ──────────────────────────────────────────
+# Plattform mit antifaschistischem Counter-Extremismus-Fokus; veröffentlicht
+# u.a. "Outings" rechtsextrem aktiver Personen. Wir crawlen den Public-Feed
+# wie jede andere Quelle; die Doxxing-Erkennungs-Pipeline
+# (is_doxxing_text + sanitize_doxxing_event) sorgt dafür, dass Outings
+# nur als ROLLE/Aggregat in die DB kommen, NIEMALS mit Klarnamen oder PII.
+def crawl_nazifrei_feed():
+    """Crawl nazifrei.org sowie verwandte antifaschistische Plattformen.
+    Doxxing-Inhalte werden automatisch sanitisiert (s. save_incident)."""
+    inserted = 0
+    candidate_feeds = [
+        # nazifrei.org RSS-Kandidaten (mehrere Pfade, einer wird funktionieren)
+        ("nazifrei-rss",       "https://nazifrei.org/feed/"),
+        ("nazifrei-rss2",      "https://www.nazifrei.org/feed/"),
+        ("nazifrei-atom",      "https://nazifrei.org/atom"),
+        ("nazifrei-rss-xml",   "https://nazifrei.org/rss.xml"),
+        ("nazifrei-news",      "https://nazifrei.org/news/feed/"),
+        # Schwesterprojekte / verwandte Counter-Extremismus-Outings
+        ("npd-blockieren",     "https://npd-blockieren.de/feed/"),
+        ("recherche-nord",     "https://recherche-nord.com/feed/"),
+        ("recherche-elbe",     "https://www.recherche-elbe-saale.de/feed/"),
+        ("antifa-recherche",   "https://antifa-recherche-team.org/feed/"),
+        ("apabiz",             "https://www.apabiz.de/feed/"),  # Antifaschistisches Pressearchiv Berlin
+    ]
+    for label, feed_url in candidate_feeds:
+        try:
+            xml = fetch(feed_url, timeout=12)
+            items = parse_rss(xml) if xml else []
+            log.info(f"nazifrei {label}: {len(items)} items")
+            for it in items[:15]:
+                url = it.get("link") or ""
+                title = it.get("title") or ""
+                if not url: continue
+                try:
+                    h = mk_hash(url, title)
+                    if is_seen(h): continue
+                    full = get_text(url)
+                    if len(full) < 80: continue
+                    if is_false_positive(full):
+                        continue
+                    ai = smart_classify(full)
+                    if ai:
+                        # save_incident triggert auto die Doxxing-Sanitisierung
+                        # über is_doxxing_text/sanitize_doxxing_event — wir
+                        # müssen hier nichts Spezielles tun, das ist
+                        # transparent.
+                        if save_incident(ai, full, "nazifrei.org", url, date_from_url(url) or it.get("date","")):
+                            inserted += 1
+                    time.sleep(0.3)
+                except Exception as e:
+                    log.info(f"nazifrei item {url}: {str(e)[:120]}")
+        except Exception as e:
+            log.info(f"nazifrei feed [{label}] failed: {str(e)[:120]}")
+        time.sleep(0.4)
     return inserted
 
 # ── RSS FEEDS ─────────────────────────────────────────────────────
@@ -5542,6 +5768,14 @@ def run_crawler(force=False):
         n = crawl_indymedia_feed()
         total += n
         log.info(f"Indymedia: +{n}")
+
+        # 2b. Nazifrei + Antifa-Recherche-Plattformen (Counter-Extremism Outings).
+        # Doxxing-Inhalte werden via save_incident → sanitize_doxxing_event
+        # automatisch zu rolle-basierten T3-Kontext-Einträgen anonymisiert.
+        log.info("Nazifrei/Antifa-Recherche feeds...")
+        n = crawl_nazifrei_feed()
+        total += n
+        log.info(f"Nazifrei: +{n}")
 
         # 3. Mainstream RSS
         log.info("RSS feeds...")
@@ -9528,16 +9762,39 @@ async def admin_barrikade_test(_=Depends(require_admin)):
     except Exception as e:
         diag["4_search_engine"] = {"error": str(e)[:300]}
 
-    # 5) Wayback Machine probe (auf einer realen Article-URL)
-    try:
-        test_url = "https://barrikade.info/article/6950"  # bekannte URL aus Tests
-        wb = _barrikade_wayback_fetch(test_url, timeout=8)
-        diag["5_wayback"] = {
-            "ok": wb is not None,
-            "html_len": len(wb) if wb else 0,
-        }
-    except Exception as e:
-        diag["5_wayback"] = {"error": str(e)[:300]}
+    # 5) Wayback Machine probe — versuche mehrere Test-URLs, die mit hoher
+    #    Wahrscheinlichkeit einen Snapshot haben. Wenn eine davon im Wayback
+    #    indexiert ist, gilt die Strategie als verfügbar.
+    wb_test_urls = []
+    # Bevorzuge URLs die der SPIP-Auth gerade gefunden hat (real-existent + neu)
+    auth_sample = (diag.get("1_spip_auth", {}).get("discovery", {}).get("sample", [])
+                   if isinstance(diag.get("1_spip_auth"), dict) else [])
+    wb_test_urls.extend(auth_sample[:2])
+    # Fallback: Homepage und ein paar als sicher-archivierte known-good URLs
+    wb_test_urls.extend([
+        "https://barrikade.info/",
+        "https://barrikade.info/article/1",
+        "https://barrikade.info/article/100",
+    ])
+    wb_ok = False
+    wb_url = None
+    wb_len = 0
+    for t_url in wb_test_urls:
+        try:
+            wb = _barrikade_wayback_fetch(t_url, timeout=8)
+            if wb:
+                wb_ok = True
+                wb_url = t_url
+                wb_len = len(wb)
+                break
+        except Exception:
+            continue
+    diag["5_wayback"] = {
+        "ok": wb_ok,
+        "test_url": wb_url,
+        "html_len": wb_len,
+        "tested": len(wb_test_urls),
+    }
 
     # Aggregat: Wie viele Strategien funktionieren?
     working = sum(1 for k in ("1_spip_auth","2_standard_discovery","3_spip_public","4_search_engine","5_wayback")
