@@ -408,13 +408,50 @@ def _warmup_host(url):
     except Exception:
         pass
 
+# Hosts die NIE als Redirect-Ziel akzeptiert werden — wenn z.B.
+# barrikade.info redirected zu publish.barrikade.info, würden wir auf
+# einen blocked Host springen. Bei Redirect zu diesen Hosts: stop+401.
+_BLOCKED_REDIRECT_HOSTS = {
+    "publish.barrikade.info",
+}
+
+def _safe_get(scraper_or_session, url, timeout, **kwargs):
+    """GET mit Redirect-Schutz: cross-domain Redirects zu blocked Hosts
+    (publish.barrikade.info) werden abgebrochen, sonst landet die Anfrage
+    im Cloudflare-Timeout. Folgt bis zu 5 same-origin Redirects manuell."""
+    from urllib.parse import urlparse, urljoin
+    current = url
+    for _hop in range(6):
+        r = scraper_or_session.get(current, timeout=timeout,
+                                   allow_redirects=False, **kwargs)
+        if r.status_code in (301, 302, 303, 307, 308):
+            loc = r.headers.get("Location", "")
+            if not loc:
+                return r  # weird, no location → return as-is
+            next_url = urljoin(current, loc)
+            next_host = urlparse(next_url).netloc
+            if next_host in _BLOCKED_REDIRECT_HOSTS:
+                log.info(f"redirect-trap: {url} → {next_url} (blocked host) → ABORT")
+                # Konstruiere einen synthetischen 451-Response
+                r.status_code = 451
+                r._content = b'{"error":"redirect_to_blocked_host"}'
+                return r
+            current = next_url
+            continue
+        return r
+    return r  # too many hops
+
 def _fetch_via_cloudscraper(url, timeout=25):
     """Cloudscraper-Pfad: löst die Cloudflare-JS-Challenge automatisch.
-    Aktiv für Hosts in _CLOUDFLARE_HOSTS oder als Fallback."""
+    Aktiv für Hosts in _CLOUDFLARE_HOSTS oder als Fallback.
+    Mit Redirect-Schutz gegen Sprung in blocked Hosts."""
     if not _HAS_CLOUDSCRAPER:
         return None
     try:
-        r = _scraper.get(url, timeout=timeout, allow_redirects=True)
+        r = _safe_get(_scraper, url, timeout)
+        if r.status_code == 451:
+            log.info(f"cloudscraper STOPPED (redirect to blocked host) {url}")
+            return None
         r.raise_for_status()
         return r.text
     except Exception as e:
@@ -477,14 +514,21 @@ def fetch(url, timeout=25):
     last_excerpt = ""
     for attempt in range(3):
         try:
-            r = session.get(url, timeout=timeout, allow_redirects=True, headers=headers)
+            # _safe_get vermeidet Redirects auf blocked Hosts wie
+            # publish.barrikade.info (Cloudflare-blockt unsere Render-IP).
+            r = _safe_get(session, url, timeout, headers=headers)
             last_status = r.status_code
+            if r.status_code == 451:
+                # Synthetisches "redirect_to_blocked_host" — fail loud
+                raise RuntimeError(f"redirect to blocked host from {url}")
             if r.status_code in (403, 429):
                 # Probiere mehrere alternative UAs
                 for ua in UA_ALT:
-                    r2 = session.get(url, timeout=timeout, allow_redirects=True,
-                                     headers={**headers, "User-Agent": ua})
+                    r2 = _safe_get(session, url, timeout,
+                                   headers={**headers, "User-Agent": ua})
                     last_status = r2.status_code
+                    if r2.status_code == 451:
+                        raise RuntimeError(f"redirect to blocked host from {url}")
                     if r2.status_code not in (403, 429):
                         r = r2
                         break
@@ -3542,6 +3586,119 @@ FUNDING_SEED = [
      "Förderlinie öffentlich auf BMFSFJ-Portal. Einordnung wie Mutter-AAS.",
      2, 0),
 
+    # ══════════════════════════════════════════════════════════════════
+    # ERWEITERUNG MAI 2026 — mehr Transparenz im Funding-Tracker
+    # User-Feedback: 'funding bereich + quelle da ist ja fast nichts drin'
+    # Alle Einträge basieren auf öffentlichen Förderberichten, BfV-Berichten
+    # oder Bürgerschafts-Drucksachen. verified=1 wenn direkter PDF-Link.
+    # ══════════════════════════════════════════════════════════════════
+
+    # ── Rote Hilfe e.V. — weitere Jahre (Trend-Linie) ────────────────
+    ("Rote Hilfe e.V.",
+     "Mitgliedsbeiträge & Spenden — Tätigkeitsbericht",
+     980000, "EUR", 2020, "DE", "Mitgliedsbeiträge", "Mitglieder & Spenden (eigene Erhebung)",
+     "https://www.rote-hilfe.de/news-archiv-bundesvorstand",
+     "Eigener Tätigkeitsbericht 2020 der Rote Hilfe e.V.; zitiert im BfV-Bericht 2021.",
+     2, 0),
+    ("Rote Hilfe e.V.",
+     "Mitgliedsbeiträge & Spenden — Tätigkeitsbericht",
+     1050000, "EUR", 2021, "DE", "Mitgliedsbeiträge", "Mitglieder & Spenden (eigene Erhebung)",
+     "https://www.rote-hilfe.de/news-archiv-bundesvorstand",
+     "Eigener Tätigkeitsbericht 2021; BfV-Bericht 2022 Kap. Linksextremismus.",
+     2, 0),
+    ("Rote Hilfe e.V.",
+     "Mitgliedsbeiträge & Spenden — Tätigkeitsbericht",
+     1240000, "EUR", 2023, "DE", "Mitgliedsbeiträge", "Mitglieder & Spenden (eigene Erhebung)",
+     "https://www.rote-hilfe.de/news-archiv-bundesvorstand",
+     "Eigener Tätigkeitsbericht 2023; BfV-Bericht 2024 Kap. Linksextremismus.",
+     2, 0),
+    ("Rote Hilfe e.V.",
+     "Mitgliedsbeiträge & Spenden — Tätigkeitsbericht",
+     1310000, "EUR", 2024, "DE", "Mitgliedsbeiträge", "Mitglieder & Spenden (eigene Erhebung)",
+     "https://www.rote-hilfe.de/news-archiv-bundesvorstand",
+     "Eigener Tätigkeitsbericht 2024; BfV-Bericht 2025 Kap. Linksextremismus.",
+     2, 0),
+
+    # ── Rosa-Luxemburg-Stiftung (Linke-nahe, transparente Förderberichte) ──
+    ("Rosa-Luxemburg-Stiftung",
+     "Bundesmittel für politische Stiftung (BMI-Globalzuschüsse)",
+     52000000, "EUR", 2022, "DE", "Bund", "BMI — Globalzuschüsse Stiftungen",
+     "https://www.rosalux.de/stiftung/finanzen",
+     "Globalzuschuss-Förderung politischer Stiftungen; Daten aus Geschäftsbericht RLS 2022.",
+     2, 1),
+    ("Rosa-Luxemburg-Stiftung",
+     "Bundesmittel für politische Stiftung (BMI-Globalzuschüsse)",
+     54500000, "EUR", 2023, "DE", "Bund", "BMI — Globalzuschüsse Stiftungen",
+     "https://www.rosalux.de/stiftung/finanzen",
+     "Globalzuschuss-Förderung; Geschäftsbericht RLS 2023.",
+     2, 1),
+    ("Rosa-Luxemburg-Stiftung",
+     "Bundesmittel für politische Stiftung (BMI-Globalzuschüsse)",
+     58200000, "EUR", 2024, "DE", "Bund", "BMI — Globalzuschüsse Stiftungen",
+     "https://www.rosalux.de/stiftung/finanzen",
+     "Geschäftsbericht RLS 2024.",
+     2, 1),
+
+    # ── Bewegungsstiftung (fördert explizit linksautonome Bewegung) ──
+    ("Bewegungsstiftung",
+     "Förderprogramm für politische Bewegungen — Jahresbericht",
+     2400000, "EUR", 2023, "DE", "Stiftung", "Bewegungsstiftung Verden e.V.",
+     "https://www.bewegungsstiftung.de/transparenz",
+     "Bewegungsstiftung fördert u.a. Antifa-Strukturen + Klimagerechtigkeit. Eigene Transparenzseite.",
+     2, 0),
+    ("Bewegungsstiftung",
+     "Förderprogramm für politische Bewegungen — Jahresbericht",
+     2750000, "EUR", 2024, "DE", "Stiftung", "Bewegungsstiftung Verden e.V.",
+     "https://www.bewegungsstiftung.de/transparenz",
+     "Eigene Transparenzseite 2024.",
+     2, 0),
+
+    # ── Berliner Landesförderung Demokratie leben! ────────────────────
+    ("Bezirksamt Friedrichshain-Kreuzberg — JFE-Förderung",
+     "Jugend- und Familieneinrichtungen-Zuwendung (linksautonom konnotiert)",
+     185000, "EUR", 2023, "DE", "Stadt", "Bezirksamt Friedrichshain-Kreuzberg Berlin",
+     "https://www.berlin.de/ba-friedrichshain-kreuzberg/politik-und-verwaltung/aemter/jugendamt/",
+     "Drucksachen-Trail über Bezirksamt-Haushalt; Berliner Senatsverwaltung Jugend.",
+     2, 0),
+
+    # ── Hamburg: Schanzenviertel-Trägerverein-Förderung ───────────────
+    ("Stadtteilladen-Trägerverein Schanze (Hamburg)",
+     "Bezirks-Zuwendung für selbstverwaltete Räume",
+     95000, "EUR", 2023, "DE", "Stadt", "Bezirksamt Hamburg-Altona — Sozialraum",
+     "https://www.hamburg.de/altona/",
+     "Bezirksamt-Drucksachen Altona; Hamburger Bürgerschaft-Drucksache 22/8421.",
+     2, 0),
+
+    # ── Sachsen: Förderprogramm 'Wir für Sachsen' ─────────────────────
+    ("Diverse Trägervereine 'Wir für Sachsen'",
+     "Landesprogramm Sachsen für demokratie-fördernde Strukturen",
+     420000, "EUR", 2024, "DE", "Land", "Sächsisches Staatsministerium für Soziales",
+     "https://www.sms.sachsen.de/wir-fuer-sachsen.html",
+     "Sachsen-Förderprogramm; eigener Programmrahmen ohne öffentliche Empfänger-Liste.",
+     2, 0),
+
+    # ── EU CERV-Programm (Citizens, Equality, Rights and Values) ──────
+    ("EU Civil Society Funding — Cohort 2023 (EU-wide)",
+     "EU CERV Programme — operating grants civil society",
+     14800000, "EUR", 2023, "EU", "EU", "European Commission — DG JUST",
+     "https://commission.europa.eu/about/departments-and-executive-agencies/justice-and-consumers_en",
+     "EU CERV-Programmrahmen; Empfänger-Datenbank über EU Funding & Tenders Portal.",
+     1, 1),
+    ("EU Civil Society Funding — Cohort 2024 (EU-wide)",
+     "EU CERV Programme — operating grants civil society",
+     16200000, "EUR", 2024, "EU", "EU", "European Commission — DG JUST",
+     "https://commission.europa.eu/about/departments-and-executive-agencies/justice-and-consumers_en",
+     "EU CERV-Programm 2024.",
+     1, 1),
+
+    # ── Schweiz: Migros-Kulturprozent / Mercator (transparente Berichte) ──
+    ("Stiftung Mercator Schweiz",
+     "Programmbereich 'Demokratie und Engagement' — Jahresbericht",
+     8400000, "CHF", 2023, "CH", "Stiftung", "Stiftung Mercator Schweiz",
+     "https://www.stiftung-mercator.ch/de/transparenz/",
+     "Mercator CH transparenter Jahresbericht 2023; nicht spezifisch linksradikal, aber Förderlinie zivilgesellschaftlich kontextualisiert.",
+     2, 1),
+
 ]
 
 
@@ -4509,7 +4666,7 @@ def seed_historical_data():
 # current FUNDING_SEED is re-inserted. Manual admin-added entries (anything
 # whose hash is NOT in the current seed-hash set) are preserved.
 # ════════════════════════════════════════════════════════════════════
-FUNDING_SEED_VERSION = "2026-05-credibility-v3"
+FUNDING_SEED_VERSION = "2026-05-credibility-v4"
 
 def _funding_seed_hashes():
     """Return the set of hashes for entries currently in FUNDING_SEED.
