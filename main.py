@@ -10104,6 +10104,31 @@ async def admin_barrikade_test(_=Depends(require_admin)):
 
     return JSONResponse(diag)
 
+@app.post("/admin/api/barrikade-wayback")
+async def admin_barrikade_wayback(_=Depends(require_admin)):
+    """SOFORT-WAYBACK-CRAWL: skippt Auth komplett, holt URLs+Inhalte
+    NUR aus archive.org. Funktioniert auch wenn publish.barrikade.info
+    von der Render-IP komplett unerreichbar ist (Cloudflare-Block).
+    Liefert detaillierten Per-URL-Bericht im selben Format wie
+    /admin/api/barrikade-crawl."""
+    try:
+        result = _crawl_barrikade_wayback_only(verbose=True, max_articles=80)
+        if isinstance(result, int):
+            result = {"inserted": result, "url_results": []}
+        return JSONResponse({
+            "status": "ok",
+            "path": "wayback_only",
+            "inserted": result.get("inserted", 0),
+            "tried_urls": result.get("tried_urls", 0),
+            "discovered_total": result.get("discovered_total", 0),
+            "strategy_counter": result.get("strategy_counter", {}),
+            "url_results": result.get("url_results", []),
+            "reason": result.get("reason", None),
+        })
+    except Exception as e:
+        log.error(f"barrikade wayback crawl error: {e}", exc_info=True)
+        return JSONResponse({"status": "error", "error": str(e)[:300], "inserted": 0}, status_code=500)
+
 @app.post("/admin/api/barrikade-crawl")
 async def admin_barrikade_crawl(_=Depends(require_admin)):
     """Synchroner Barrikade-Crawl mit detailliertem Per-URL-Bericht.
