@@ -4401,6 +4401,47 @@ def barrikade_latest_id():
         log.warning(f"barrikade_latest_id: {e}")
         return 7600
 
+def _barrikade_normalize_url(raw_url):
+    """Aus einer beliebigen barrikade.info-URL (auch aus CDX-Müll-Daten)
+    die kanonische /article/<id>-Form extrahieren. Returns (clean_url, id)
+    oder None bei nicht-Article-URLs / kaputten URLs.
+
+    CDX liefert oft URLs mit Müll dahinter wie '/article/2283Reitschule'
+    oder '/article/2288[2' — solche werden hier abgelehnt, NICHT 'gefixt'
+    (weil das Risiko ist dass 'Reitschule' ein anderer Article ist)."""
+    if not raw_url or not isinstance(raw_url, str):
+        return None
+    # Normalisieren: Protokoll
+    u = raw_url.strip()
+    if u.startswith("http://"):
+        u = "https://" + u[7:]
+    elif not u.startswith("https://"):
+        u = "https://" + u.lstrip("/")
+    low = u.lower()
+    # Domain-Check
+    if "barrikade.info" not in low:
+        return None
+    # Junk-Filter
+    if any(x in low for x in (
+        "/tag/", "/rubrique-", "/+-", "page=", "redirection=",
+        "javascript:", "mailto:", "#commentaires", "/spip.php?action=",
+        "/ecrire/", ".css", ".js", ".png", ".jpg", ".gif", ".svg",
+    )):
+        return None
+    # Strict /article/<id>$ pattern — ID MUSS terminiert sein, sonst ist es Müll
+    m = re.search(r"barrikade\.info/article/(\d{3,6})(?:[/?#]|$)", low)
+    if m:
+        aid = int(m.group(1))
+        if 1 <= aid <= 99999:  # sanity-cap für SPIP article-IDs
+            return (f"https://barrikade.info/article/{aid}", aid)
+    # Rewritten /<slug>-<id>$ pattern — ID am Ende des Pfades
+    m = re.search(r"barrikade\.info/[a-z0-9][a-z0-9_\-]+?-(\d{3,6})(?:[/?#]|$)", low, re.I)
+    if m:
+        aid = int(m.group(1))
+        if 1 <= aid <= 99999:
+            return (f"https://barrikade.info/article/{aid}", aid)
+    return None
+
 def _barrikade_wayback_cdx_discover(max_results=200, timeout=20):
     """Discover barrikade.info article URLs via the Wayback Machine CDX API.
 
@@ -4441,36 +4482,28 @@ def _barrikade_wayback_cdx_discover(max_results=200, timeout=20):
                 log.info(f"barrikade CDX [{target}] HTTP {r.status_code}")
                 continue
             data = r.json()
-            # Erste Zeile ist Header ("original")
+            # Erste Zeile ist Header ("original"). Strikte URL-Normalisierung:
+            # CDX enthält oft Müll-URLs wie /article/2283Reitschule oder
+            # /article/2268.05.06.2019 — _barrikade_normalize_url lehnt die ab.
+            n_added = 0
             for row in data[1:] if data else []:
                 if not row: continue
-                url = row[0] if isinstance(row, list) else row
-                if not url: continue
-                # Normalisieren: protocol + host
-                if url.startswith("http://"):
-                    url = "https://" + url[7:]
-                elif not url.startswith("https://"):
-                    url = "https://" + url
-                # Filter: nur Article-URLs, keine tags/rubriques/page
-                low = url.lower()
-                is_article = (
-                    bool(re.search(r"/article/\d+", low)) or
-                    bool(re.search(r"-\d{3,6}(?:[?#]|$)", low))
-                )
-                if not is_article: continue
-                if any(x in low for x in ("/tag/", "/rubrique-", "/+-", "page=", "redirection=")):
-                    continue
-                if url not in seen and len(seen) < max_results:
-                    seen.add(url); found.append(url)
-            log.info(f"barrikade CDX [{target}] → {len(found)} URLs (cumulative)")
+                raw = row[0] if isinstance(row, list) else row
+                norm = _barrikade_normalize_url(raw)
+                if not norm: continue
+                clean_url, aid = norm
+                if clean_url not in seen and len(seen) < max_results:
+                    seen.add(clean_url); found.append(clean_url); n_added += 1
+            log.info(f"barrikade CDX [{target}] → {n_added} clean URLs added (total: {len(found)})")
         except Exception as e:
             log.info(f"barrikade CDX [{target}] err: {str(e)[:120]}")
         if len(found) >= max_results: break
 
-    # Newest-first — CDX returns sorted by timestamp, but we want newest URLs
-    # generally come from highest IDs. Sortiere absteigend nach Article-ID.
+    # Newest-first — sortiere absteigend nach Article-ID (höhere ID = neuer).
+    # Da wir nur normalisierte URLs `/article/<id>` haben, ist die ID-Extraktion
+    # sicher und nicht mehr gierig.
     def _id_key(u):
-        m = re.search(r"/article/(\d+)", u) or re.search(r"-(\d+)(?:[?#]|$)", u)
+        m = re.search(r"/article/(\d{3,6})(?:[/?#]|$)", u)
         return int(m.group(1)) if m else 0
     found.sort(key=_id_key, reverse=True)
     return found
@@ -5174,11 +5207,15 @@ def _fetch_article_multi(sess, link, article_id, *, capture_diag=False):
         return None, {"error": last_err, "steps": diag_steps}
     return None, last_err
 
-def _crawl_barrikade_wayback_only(verbose=False, max_articles=80):
+def _crawl_barrikade_wayback_only(verbose=False, max_articles=80, progress_callback=None):
     """Wayback-ONLY crawl path: läuft auch wenn Cloudflare ALLE Direkt-Zugriffe
     auf publish.barrikade.info UND barrikade.info blockt. Discovery via
     Wayback CDX, Article-Fetch via Wayback Snapshots. Komplett unabhängig
-    vom Auth-Pfad. Klassischer Disaster-Fallback."""
+    vom Auth-Pfad. Klassischer Disaster-Fallback.
+
+    progress_callback(dict) → wird nach jeder URL aufgerufen mit aktuellem
+    Stand {inserted, tried, total, last_url, last_result}. Damit kann das
+    Admin-UI Live-Fortschritt anzeigen."""
     url_results = []
     inserted = 0
 
@@ -5190,63 +5227,120 @@ def _crawl_barrikade_wayback_only(verbose=False, max_articles=80):
     if not urls:
         result = {"inserted": 0, "reason": "wayback_discovery_empty",
                   "discovered_total": 0, "url_results": []}
+        if progress_callback:
+            progress_callback({"status": "done", "done": True, **result})
         return result if verbose else 0
     log.info(f"barrikade wayback-only: {len(urls)} URLs from CDX, processing top {max_articles}")
+    if progress_callback:
+        progress_callback({"discovered_total": len(urls), "tried_urls": 0})
 
-    for link in urls[:max_articles]:
+    direct_hits = 0
+    wayback_hits = 0
+    for idx, link in enumerate(urls[:max_articles]):
         try:
-            wb_html = _barrikade_wayback_fetch(link, timeout=15)
-            if not wb_html:
-                if verbose:
-                    url_results.append({"url": link, "ok": False, "reason": "no_wayback_snapshot"})
-                continue
-            soup = BeautifulSoup(wb_html, "html.parser")
-            # Header/Footer/Wayback-Toolbar entfernen
-            for s in soup(["script","style","nav","footer","header","aside",
-                           "form"]): s.decompose()
-            for sel in ["#wm-ipp", "#wm-ipp-base", ".wb-autocomplete-suggestions"]:
-                for el in soup.select(sel): el.decompose()
-            full = soup.get_text(" ", strip=True)
-            if len(full) < 120:
-                if verbose:
-                    url_results.append({"url": link, "ok": False, "reason": "too_short",
-                                        "len": len(full)})
-                continue
-            if not any(kw in full.lower() for kw in BARRIKADE_RELEVANCE_KWS):
-                if verbose:
-                    url_results.append({"url": link, "ok": False, "reason": "no_relevance_kw",
-                                        "len": len(full)})
-                continue
-            if is_false_positive(full):
-                if verbose:
-                    url_results.append({"url": link, "ok": False, "reason": "false_positive"})
-                continue
-            ai = smart_classify(full)
-            if not ai:
-                if verbose:
-                    url_results.append({"url": link, "ok": False, "reason": "classify_failed"})
-                continue
-            saved = save_incident(ai, full, "barrikade.info", link, date_from_url(link))
-            if saved:
-                inserted += 1
-                if verbose:
-                    url_results.append({"url": link, "ok": True, "strategy": "wayback",
-                                        "category": ai.get("kategorie",""), "len": len(full)})
-            else:
-                if verbose:
-                    url_results.append({"url": link, "ok": False, "reason": "duplicate_or_filter",
-                                        "category": ai.get("kategorie","")})
-            time.sleep(0.4)
+            # 1) DIRECT FETCH via cloudscraper (barrikade.info ist u.U. erreichbar
+            #    auch wenn publish.barrikade.info blockt — andere CF-Konfiguration).
+            #    Wenn das geht: aktuelles HTML statt potenziell-altem Wayback-Snapshot.
+            full = None
+            source_strategy = None
+            try:
+                direct_text = get_text(link)
+                if direct_text and len(direct_text) > 200:
+                    full = direct_text
+                    source_strategy = "direct"
+                    direct_hits += 1
+            except Exception as e:
+                log.info(f"barrikade direct-fetch [{link}]: {str(e)[:120]}")
+
+            # 2) WAYBACK SNAPSHOT als Fallback wenn Direct nichts bringt
+            if not full:
+                wb_html = _barrikade_wayback_fetch(link, timeout=15)
+                if not wb_html:
+                    if verbose:
+                        url_results.append({"url": link, "ok": False, "reason": "no_wayback_snapshot"})
+                else:
+                    soup = BeautifulSoup(wb_html, "html.parser")
+                    # Header/Footer/Wayback-Toolbar entfernen — aber NICHT <main> oder <article>
+                    for s in soup(["script","style","nav","footer","header","aside","form"]): s.decompose()
+                    for sel in ["#wm-ipp", "#wm-ipp-base", "#wm-ipp-print", ".wb-autocomplete-suggestions"]:
+                        for el in soup.select(sel): el.decompose()
+                    # SPIP-spezifische Content-Selektoren bevorzugt
+                    content_el = (soup.select_one("div.texte-article") or
+                                  soup.select_one("article .texte") or
+                                  soup.select_one(".surface-texte") or
+                                  soup.select_one("main") or
+                                  soup.select_one("article") or
+                                  soup.body)
+                    if content_el:
+                        full = content_el.get_text(" ", strip=True)
+                    else:
+                        full = soup.get_text(" ", strip=True)
+                    source_strategy = "wayback"
+                    if full and len(full) >= 120:
+                        wayback_hits += 1
+
+            # 3) Gemeinsamer Save-Pfad — egal ob full von DIRECT oder WAYBACK kommt
+            if full:
+                if len(full) < 120:
+                    if verbose:
+                        url_results.append({"url": link, "ok": False, "reason": "too_short",
+                                            "len": len(full), "strategy": source_strategy})
+                elif not any(kw in full.lower() for kw in BARRIKADE_RELEVANCE_KWS):
+                    if verbose:
+                        url_results.append({"url": link, "ok": False, "reason": "no_relevance_kw",
+                                            "len": len(full), "strategy": source_strategy})
+                elif is_false_positive(full):
+                    if verbose:
+                        url_results.append({"url": link, "ok": False, "reason": "false_positive",
+                                            "strategy": source_strategy})
+                else:
+                    ai = smart_classify(full)
+                    if not ai:
+                        if verbose:
+                            url_results.append({"url": link, "ok": False, "reason": "classify_failed",
+                                                "strategy": source_strategy, "len": len(full)})
+                    else:
+                        saved = save_incident(ai, full, "barrikade.info", link, date_from_url(link))
+                        if saved:
+                            inserted += 1
+                            if verbose:
+                                url_results.append({"url": link, "ok": True, "strategy": source_strategy,
+                                                    "category": ai.get("kategorie",""), "len": len(full)})
+                        else:
+                            if verbose:
+                                url_results.append({"url": link, "ok": False, "reason": "duplicate_or_filter",
+                                                    "strategy": source_strategy,
+                                                    "category": ai.get("kategorie","")})
+            time.sleep(0.3)
         except Exception as e:
             log.info(f"barrikade wayback link={link}: {str(e)[:120]}")
             if verbose:
                 url_results.append({"url": link, "ok": False, "exc": str(e)[:120]})
 
-    log.info(f"barrikade wayback-only: {inserted} inserted from {min(len(urls), max_articles)} attempts")
+        if progress_callback:
+            progress_callback({
+                "tried_urls": idx + 1,
+                "discovered_total": len(urls),
+                "inserted": inserted,
+                "url_results": list(url_results),  # copy so caller sees live snapshot
+            })
+
+    log.info(f"barrikade wayback-only: {inserted} inserted from {min(len(urls), max_articles)} attempts "
+             f"(direct_fetch_ok={direct_hits} wayback_fetch_ok={wayback_hits})")
+    # Strategie-Counter aus url_results aufdröseln (welche Strategie hat tatsächlich erfolgreich gespeichert?)
+    saved_by_strategy = {}
+    for r in url_results:
+        if r.get("ok"):
+            s = r.get("strategy", "unknown")
+            saved_by_strategy[s] = saved_by_strategy.get(s, 0) + 1
+    final = {"inserted": inserted, "tried_urls": min(len(urls), max_articles),
+             "discovered_total": len(urls), "url_results": url_results,
+             "strategy_counter": saved_by_strategy,
+             "fetch_counter": {"direct_fetch_ok": direct_hits, "wayback_fetch_ok": wayback_hits}}
+    if progress_callback:
+        progress_callback({"status": "done", "done": True, **final})
     if verbose:
-        return {"inserted": inserted, "tried_urls": min(len(urls), max_articles),
-                "discovered_total": len(urls), "url_results": url_results,
-                "strategy_counter": {"wayback": inserted}}
+        return final
     return inserted
 
 def _crawl_barrikade_authed(verbose=False):
