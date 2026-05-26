@@ -4427,23 +4427,34 @@ def _barrikade_search_engine_discover(max_results=60, per_query_timeout=8, overa
     found = []
     seen = set()
 
-    def _extract_article_urls(html, body_max=600000):
-        """Match BOTH URL-Schemas: /article/<n> (canonical) und /<slug>-<n> (rewritten)."""
+    def _extract_article_urls(html, body_max=800000):
+        """Match BOTH URL-Schemas: /article/<n> (canonical) und /<slug>-<n> (rewritten).
+        Berücksichtigt zusätzlich URL-encoded Varianten (DDG verpackt Result-URLs
+        als ?uddg=<URL-encoded>, Bing teilweise auch)."""
         out = []
         if not html: return out
-        # Limit body size to avoid regex blowup
         body = html[:body_max]
+        # Verschiedene Encoding-Varianten: roh, URL-encoded, doppel-URL-encoded
+        try:
+            from urllib.parse import unquote
+            body_decoded = unquote(unquote(body))  # einmal für DDG/Bing-Wrapper, zweimal sicherheitshalber
+            body_combined = body + "\n" + body_decoded
+        except Exception:
+            body_combined = body
         # Canonical numeric pattern
-        for m in re.finditer(r'https?://(?:www\.)?(?:publish\.)?barrikade\.info/article/(\d+)', body):
+        for m in re.finditer(r'https?://(?:www\.)?(?:publish\.)?barrikade\.info/article/(\d+)', body_combined):
             out.append(f"https://barrikade.info/article/{m.group(1)}")
         # URL-rewritten slug pattern: /<title-slug>-<id>
-        # Beispiel aus DDG: https://barrikade.info/Antifaschistischer-Widerstand-heute-7127
-        for m in re.finditer(r'https?://(?:www\.)?barrikade\.info/([A-Za-z0-9][A-Za-z0-9_\-]+-\d{3,6})(?:["\'?#\s]|$)', body):
+        for m in re.finditer(r'https?://(?:www\.)?barrikade\.info/([A-Za-z0-9][A-Za-z0-9_\-]+-\d{3,6})(?:["\'?#\s/&]|$)', body_combined):
             slug = m.group(1)
-            # Skip false positives (tags, rubrics)
             if slug.startswith(("tag-", "rubrique-", "page-")): continue
             out.append(f"https://barrikade.info/{slug}")
-        return out
+        # Dedupe while preserving order
+        seen_local = set(); deduped = []
+        for u in out:
+            if u not in seen_local:
+                seen_local.add(u); deduped.append(u)
+        return deduped
 
     # ── DuckDuckGo HTML interface (kein API-Key nötig) ────────────────
     for q in queries:
@@ -4938,7 +4949,14 @@ def _barrikade_authed_discover_urls(sess):
 
 def _crawl_barrikade_authed():
     """Run the authenticated discovery + ingestion path. Returns the
-    number of newly inserted incidents. Returns 0 if auth unavailable."""
+    number of newly inserted incidents. Returns 0 if auth unavailable.
+
+    Strategy für Article-Fetch (PRIORITY ORDER):
+      1. publish.barrikade.info/spip.php?article<id> über AUTH-Session
+         (das Cookie ist auf publish.barrikade.info — DA gilt es)
+      2. public barrikade.info/article/<id> ohne Auth
+         (öffentliche Front, kann Cloudflare passieren oder nicht)
+      3. Wayback Machine als letzter Fallback"""
     sess = _barrikade_login_session()
     if not sess:
         return 0
@@ -4946,29 +4964,66 @@ def _crawl_barrikade_authed():
     if not urls:
         return 0
 
+    base = os.getenv("BARRIKADE_BASE", "https://publish.barrikade.info")
     inserted = 0
+    auth_hits = 0
+    public_hits = 0
+    wayback_hits = 0
+
     for link in urls[:80]:
         try:
             h = mk_hash(link, link)
             if is_seen(h):
                 continue
-            # Artikel-Volltext über die authentifizierte Session ziehen,
-            # damit auch nicht-öffentliche/staged Artikel zugreifbar sind.
-            r = sess.get(link, timeout=25)
-            if r.status_code != 200:
-                # Falls public URL nicht ziehbar ist, über das SPIP-Backend versuchen.
-                aid_m = re.search(r"/article/(\d+)", link)
-                if aid_m:
-                    fallback = (
-                        f"{os.getenv('BARRIKADE_BASE','https://publish.barrikade.info')}"
-                        f"/spip.php?article{aid_m.group(1)}"
-                    )
-                    r = sess.get(fallback, timeout=25)
-                    if r.status_code != 200:
-                        continue
-            soup = BeautifulSoup(r.text or "", "html.parser")
-            full = soup.get_text(" ", strip=True)
-            if len(full) < 60:
+            # Article-ID extrahieren — entweder /article/<id> oder /<slug>-<id>
+            aid_m = (re.search(r"/article/(\d+)", link) or
+                     re.search(r"-(\d{3,6})(?:[?#]|$)", link))
+            article_id = aid_m.group(1) if aid_m else None
+
+            full = None
+
+            # ── 1) AUTH-FETCH: publish.barrikade.info via Session-Cookie ──
+            if article_id:
+                spip_url = f"{base}/spip.php?article{article_id}"
+                try:
+                    r = sess.get(spip_url, timeout=20, allow_redirects=True)
+                    if r.status_code == 200 and len(r.text) > 400:
+                        soup = BeautifulSoup(r.text, "html.parser")
+                        # Nav/Header/Footer raus, Artikeltext rein
+                        for s in soup(["script","style","nav","footer","header"]):
+                            s.decompose()
+                        full = soup.get_text(" ", strip=True)
+                        if len(full) >= 200:
+                            auth_hits += 1
+                        else:
+                            full = None
+                except Exception as e:
+                    log.info(f"barrikade auth-fetch [{article_id}]: {str(e)[:120]}")
+
+            # ── 2) PUBLIC-FETCH: barrikade.info/article/<id> ──
+            if not full:
+                try:
+                    public_text = get_text(link)
+                    if public_text and len(public_text) >= 200:
+                        full = public_text
+                        public_hits += 1
+                except Exception as e:
+                    log.info(f"barrikade public-fetch [{link}]: {str(e)[:120]}")
+
+            # ── 3) WAYBACK FALLBACK ──
+            if not full:
+                wb_html = _barrikade_wayback_fetch(link, timeout=15)
+                if wb_html:
+                    try:
+                        soup = BeautifulSoup(wb_html, "html.parser")
+                        for s in soup(["script","style","nav","footer","header"]):
+                            s.decompose()
+                        full = soup.get_text(" ", strip=True)
+                        wayback_hits += 1
+                    except Exception:
+                        full = wb_html
+
+            if not full or len(full) < 60:
                 continue
             if not any(kw in full.lower() for kw in BARRIKADE_RELEVANCE_KWS):
                 continue
@@ -4977,11 +5032,12 @@ def _crawl_barrikade_authed():
             ai = smart_classify(full)
             if ai and save_incident(ai, full, "barrikade.info", link, date_from_url(link)):
                 inserted += 1
-            time.sleep(0.4)
+            time.sleep(0.3)
         except Exception as e:
             log.info(f"barrikade authed link={link}: {str(e)[:120]}")
-    if inserted:
-        log.info(f"barrikade authed path saved {inserted} new incidents")
+
+    log.info(f"barrikade authed crawl: {inserted} inserted "
+             f"(auth-fetch={auth_hits} public-fetch={public_hits} wayback={wayback_hits})")
     return inserted
 
 def crawl_barrikade_range(start_id, stop_id):
@@ -9706,16 +9762,39 @@ async def admin_barrikade_test(_=Depends(require_admin)):
     except Exception as e:
         diag["4_search_engine"] = {"error": str(e)[:300]}
 
-    # 5) Wayback Machine probe (auf einer realen Article-URL)
-    try:
-        test_url = "https://barrikade.info/article/6950"  # bekannte URL aus Tests
-        wb = _barrikade_wayback_fetch(test_url, timeout=8)
-        diag["5_wayback"] = {
-            "ok": wb is not None,
-            "html_len": len(wb) if wb else 0,
-        }
-    except Exception as e:
-        diag["5_wayback"] = {"error": str(e)[:300]}
+    # 5) Wayback Machine probe — versuche mehrere Test-URLs, die mit hoher
+    #    Wahrscheinlichkeit einen Snapshot haben. Wenn eine davon im Wayback
+    #    indexiert ist, gilt die Strategie als verfügbar.
+    wb_test_urls = []
+    # Bevorzuge URLs die der SPIP-Auth gerade gefunden hat (real-existent + neu)
+    auth_sample = (diag.get("1_spip_auth", {}).get("discovery", {}).get("sample", [])
+                   if isinstance(diag.get("1_spip_auth"), dict) else [])
+    wb_test_urls.extend(auth_sample[:2])
+    # Fallback: Homepage und ein paar als sicher-archivierte known-good URLs
+    wb_test_urls.extend([
+        "https://barrikade.info/",
+        "https://barrikade.info/article/1",
+        "https://barrikade.info/article/100",
+    ])
+    wb_ok = False
+    wb_url = None
+    wb_len = 0
+    for t_url in wb_test_urls:
+        try:
+            wb = _barrikade_wayback_fetch(t_url, timeout=8)
+            if wb:
+                wb_ok = True
+                wb_url = t_url
+                wb_len = len(wb)
+                break
+        except Exception:
+            continue
+    diag["5_wayback"] = {
+        "ok": wb_ok,
+        "test_url": wb_url,
+        "html_len": wb_len,
+        "tested": len(wb_test_urls),
+    }
 
     # Aggregat: Wie viele Strategien funktionieren?
     working = sum(1 for k in ("1_spip_auth","2_standard_discovery","3_spip_public","4_search_engine","5_wayback")
