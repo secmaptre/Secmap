@@ -4947,98 +4947,215 @@ def _barrikade_authed_discover_urls(sess):
             log.info(f"barrikade authed [{url}] failed: {str(e)[:120]}")
     return found
 
-def _crawl_barrikade_authed():
+def _fetch_article_multi(sess, link, article_id, *, capture_diag=False):
+    """Versucht einen Artikel über VIELE URL-Patterns zu holen und liefert
+    den ersten erfolgreichen (Volltext, Strategie-Label) zurück.
+
+    Reihenfolge (auf publish wegen Auth-Cookie zuerst):
+      1. publish.barrikade.info/spip.php?article<id>            (public-render on publish)
+      2. publish.barrikade.info/ecrire/?exec=article&id_article=<id>   (editor view)
+      3. publish.barrikade.info/ecrire/?exec=article_edit&id_article=<id>  (editor edit)
+      4. publish.barrikade.info/article/<id>                    (rewritten on publish)
+      5. barrikade.info/article/<id>                            (public-rendering off-domain)
+      6. Wayback Machine snapshot der Public-URL
+
+    Returns: (full_text, strategy_label) oder (None, last_error_string)."""
+    base = os.getenv("BARRIKADE_BASE", "https://publish.barrikade.info")
+    diag_steps = [] if capture_diag else None
+
+    def _add(label, **kw):
+        if diag_steps is not None:
+            diag_steps.append({"step": label, **kw})
+
+    # Helper: aus HTML den Artikel-Body extrahieren
+    def _extract_body(html, prefer_editor=False):
+        if not html or len(html) < 300:
+            return None
+        try:
+            soup = BeautifulSoup(html, "html.parser")
+            # 1. Editor-Textarea (definitive Inhalts-Quelle wenn wir im editor sind)
+            ta = soup.select_one("textarea[name=texte], textarea#texte")
+            if ta and ta.get_text(strip=True):
+                title_el = soup.select_one("input[name=titre], input#titre, #titre_input")
+                title = title_el.get("value","").strip() if title_el else ""
+                t = (title + "\n" + ta.get_text(" ", strip=True)).strip()
+                if len(t) > 100:
+                    return t
+            # 2. Public Article-Body (SPIP default theme selectors)
+            for sel in [
+                ".texte-article", ".texte", ".surface-texte", "#texte",
+                "div.contenu", "article .formo", "article",
+                ".article-body", "main .content", "main",
+            ]:
+                el = soup.select_one(sel)
+                if el:
+                    txt = el.get_text(" ", strip=True)
+                    if len(txt) > 150:
+                        # Title auch dazu
+                        h1 = soup.select_one("h1, .titre, .pagination-titre")
+                        title = h1.get_text(strip=True) if h1 else ""
+                        return (title + "\n" + txt).strip()
+            # 3. Fallback: ganze Page minus Nav/Footer
+            for s in soup(["script","style","nav","footer","header","aside","form"]):
+                s.decompose()
+            txt = soup.get_text(" ", strip=True)
+            if len(txt) > 200:
+                return txt
+        except Exception:
+            pass
+        return None
+
+    candidates = []
+    if article_id:
+        candidates.extend([
+            ("auth-spip",    f"{base}/spip.php?article{article_id}", True),
+            ("auth-editor",  f"{base}/ecrire/?exec=article&id_article={article_id}", True),
+            ("auth-edit",    f"{base}/ecrire/?exec=article_edit&id_article={article_id}", True),
+            ("auth-rewrite", f"{base}/article/{article_id}", True),
+            ("public",       f"https://barrikade.info/article/{article_id}", False),
+        ])
+    # Original-URL (Slug oder Article) als Public-Fallback
+    if link and link not in [c[1] for c in candidates]:
+        candidates.append(("public-link", link, False))
+
+    last_err = "no candidates"
+    for label, url, use_auth in candidates:
+        try:
+            if use_auth:
+                r = sess.get(url, timeout=15, allow_redirects=True)
+            else:
+                # Public path: nutze global session (mit cloudscraper für barrikade.info)
+                try:
+                    text = get_text(url)
+                    if text and len(text) > 200:
+                        _add(label, ok=True, len=len(text), via="get_text")
+                        return text, label
+                    else:
+                        _add(label, ok=False, reason="too_short", via="get_text")
+                        last_err = f"{label}: too short"
+                        continue
+                except Exception as e:
+                    _add(label, ok=False, reason=str(e)[:120], via="get_text")
+                    last_err = f"{label}: {str(e)[:80]}"
+                    continue
+            if r.status_code != 200:
+                _add(label, status=r.status_code, ok=False)
+                last_err = f"{label}: HTTP {r.status_code}"
+                continue
+            full = _extract_body(r.text, prefer_editor=("ecrire" in url))
+            if full:
+                _add(label, status=200, ok=True, len=len(full))
+                return full, label
+            _add(label, status=200, ok=False, reason="no_body_extracted", html_len=len(r.text or ""))
+            last_err = f"{label}: empty body"
+        except Exception as e:
+            _add(label, ok=False, exc=str(e)[:120])
+            last_err = f"{label}: {str(e)[:80]}"
+
+    # ── Wayback Machine als allerletzter Fallback ──
+    try:
+        wb = _barrikade_wayback_fetch(link or f"https://barrikade.info/article/{article_id}", timeout=10)
+        if wb:
+            full = _extract_body(wb)
+            if full:
+                _add("wayback", ok=True, len=len(full))
+                return full, "wayback"
+            _add("wayback", ok=False, reason="no_body_extracted", html_len=len(wb))
+        else:
+            _add("wayback", ok=False, reason="no_snapshot")
+    except Exception as e:
+        _add("wayback", ok=False, exc=str(e)[:120])
+
+    if diag_steps is not None:
+        return None, {"error": last_err, "steps": diag_steps}
+    return None, last_err
+
+def _crawl_barrikade_authed(verbose=False):
     """Run the authenticated discovery + ingestion path. Returns the
     number of newly inserted incidents. Returns 0 if auth unavailable.
 
-    Strategy für Article-Fetch (PRIORITY ORDER):
-      1. publish.barrikade.info/spip.php?article<id> über AUTH-Session
-         (das Cookie ist auf publish.barrikade.info — DA gilt es)
-      2. public barrikade.info/article/<id> ohne Auth
-         (öffentliche Front, kann Cloudflare passieren oder nicht)
-      3. Wayback Machine als letzter Fallback"""
+    Strategy für Article-Fetch (siehe _fetch_article_multi für volle Liste):
+      1. publish.barrikade.info/spip.php?article<id>  (auth)
+      2. publish.barrikade.info/ecrire/?exec=article  (auth, editor view)
+      3. publish.barrikade.info/ecrire/?exec=article_edit (auth, editor with textarea)
+      4. publish.barrikade.info/article/<id>  (auth, rewritten)
+      5. barrikade.info/article/<id>  (public, cloudscraper)
+      6. Wayback Machine snapshot
+
+    verbose=True → liefert pro URL die genutzte Strategie + Status,
+    damit der Admin im UI sieht, welcher Pfad pro Artikel geklappt hat."""
     sess = _barrikade_login_session()
     if not sess:
-        return 0
+        return {"inserted": 0, "reason": "auth_failed", "url_results": []} if verbose else 0
     urls = _barrikade_authed_discover_urls(sess)
     if not urls:
-        return 0
+        return {"inserted": 0, "reason": "discovery_empty", "url_results": []} if verbose else 0
 
-    base = os.getenv("BARRIKADE_BASE", "https://publish.barrikade.info")
     inserted = 0
-    auth_hits = 0
-    public_hits = 0
-    wayback_hits = 0
+    strategy_counter = {}
+    url_results = []  # für verbose-Output
 
     for link in urls[:80]:
         try:
-            h = mk_hash(link, link)
-            if is_seen(h):
-                continue
             # Article-ID extrahieren — entweder /article/<id> oder /<slug>-<id>
             aid_m = (re.search(r"/article/(\d+)", link) or
                      re.search(r"-(\d{3,6})(?:[?#]|$)", link))
             article_id = aid_m.group(1) if aid_m else None
 
-            full = None
-
-            # ── 1) AUTH-FETCH: publish.barrikade.info via Session-Cookie ──
-            if article_id:
-                spip_url = f"{base}/spip.php?article{article_id}"
-                try:
-                    r = sess.get(spip_url, timeout=20, allow_redirects=True)
-                    if r.status_code == 200 and len(r.text) > 400:
-                        soup = BeautifulSoup(r.text, "html.parser")
-                        # Nav/Header/Footer raus, Artikeltext rein
-                        for s in soup(["script","style","nav","footer","header"]):
-                            s.decompose()
-                        full = soup.get_text(" ", strip=True)
-                        if len(full) >= 200:
-                            auth_hits += 1
-                        else:
-                            full = None
-                except Exception as e:
-                    log.info(f"barrikade auth-fetch [{article_id}]: {str(e)[:120]}")
-
-            # ── 2) PUBLIC-FETCH: barrikade.info/article/<id> ──
-            if not full:
-                try:
-                    public_text = get_text(link)
-                    if public_text and len(public_text) >= 200:
-                        full = public_text
-                        public_hits += 1
-                except Exception as e:
-                    log.info(f"barrikade public-fetch [{link}]: {str(e)[:120]}")
-
-            # ── 3) WAYBACK FALLBACK ──
-            if not full:
-                wb_html = _barrikade_wayback_fetch(link, timeout=15)
-                if wb_html:
-                    try:
-                        soup = BeautifulSoup(wb_html, "html.parser")
-                        for s in soup(["script","style","nav","footer","header"]):
-                            s.decompose()
-                        full = soup.get_text(" ", strip=True)
-                        wayback_hits += 1
-                    except Exception:
-                        full = wb_html
-
-            if not full or len(full) < 60:
+            full, strategy = _fetch_article_multi(sess, link, article_id, capture_diag=verbose)
+            if full is None:
+                if verbose:
+                    url_results.append({"url": link, "ok": False, "fetch_err": strategy})
                 continue
+
+            strategy_counter[strategy] = strategy_counter.get(strategy, 0) + 1
+
+            # Relevanz-Filter
             if not any(kw in full.lower() for kw in BARRIKADE_RELEVANCE_KWS):
+                if verbose:
+                    url_results.append({"url": link, "ok": False, "strategy": strategy,
+                                        "reason": "no_relevance_kw", "len": len(full)})
                 continue
             if is_false_positive(full):
+                if verbose:
+                    url_results.append({"url": link, "ok": False, "strategy": strategy,
+                                        "reason": "false_positive"})
                 continue
+
             ai = smart_classify(full)
-            if ai and save_incident(ai, full, "barrikade.info", link, date_from_url(link)):
+            if not ai:
+                if verbose:
+                    url_results.append({"url": link, "ok": False, "strategy": strategy,
+                                        "reason": "classify_failed", "len": len(full)})
+                continue
+
+            saved = save_incident(ai, full, "barrikade.info", link, date_from_url(link))
+            if saved:
                 inserted += 1
+                if verbose:
+                    url_results.append({"url": link, "ok": True, "strategy": strategy,
+                                        "category": ai.get("kategorie",""), "len": len(full)})
+            else:
+                if verbose:
+                    url_results.append({"url": link, "ok": False, "strategy": strategy,
+                                        "reason": "duplicate_or_filter", "category": ai.get("kategorie","")})
             time.sleep(0.3)
         except Exception as e:
             log.info(f"barrikade authed link={link}: {str(e)[:120]}")
+            if verbose:
+                url_results.append({"url": link, "ok": False, "exc": str(e)[:120]})
 
-    log.info(f"barrikade authed crawl: {inserted} inserted "
-             f"(auth-fetch={auth_hits} public-fetch={public_hits} wayback={wayback_hits})")
+    log.info(f"barrikade authed crawl: {inserted} inserted, strategies={strategy_counter}")
+    if verbose:
+        return {
+            "inserted": inserted,
+            "tried_urls": min(len(urls), 80),
+            "discovered_total": len(urls),
+            "strategy_counter": strategy_counter,
+            "url_results": url_results,
+        }
     return inserted
+
 
 def crawl_barrikade_range(start_id, stop_id):
     """Crawl barrikade article IDs from start_id down to stop_id.
@@ -9809,16 +9926,17 @@ async def admin_barrikade_test(_=Depends(require_admin)):
     return JSONResponse(diag)
 
 @app.post("/admin/api/barrikade-crawl")
-async def admin_barrikade_crawl(bg: BackgroundTasks, _=Depends(require_admin)):
-    """Trigger einen authentifizierten Barrikade-Crawl-Lauf im Background."""
-    def _job():
-        try:
-            n = _crawl_barrikade_authed()
-            log.info(f"barrikade authed crawl finished: {n} inserts")
-        except Exception as e:
-            log.error(f"barrikade authed crawl error: {e}", exc_info=True)
-    bg.add_task(_job)
-    return JSONResponse({"status": "Barrikade-Auth-Crawl gestartet"})
+async def admin_barrikade_crawl(_=Depends(require_admin)):
+    """Synchroner Barrikade-Auth-Crawl mit detailliertem Per-URL-Bericht.
+    Läuft direkt (kein Background-Task) damit der Admin im UI sofort sieht
+    welche URLs erfolgreich waren und welche Strategie pro URL gegriffen hat.
+    Begrenzt durch das 80-URLs-Cap in _crawl_barrikade_authed (~120s max)."""
+    try:
+        result = _crawl_barrikade_authed(verbose=True)
+        return JSONResponse({"status": "ok", **result})
+    except Exception as e:
+        log.error(f"barrikade authed crawl error: {e}", exc_info=True)
+        return JSONResponse({"status": "error", "error": str(e)[:300], "inserted": 0}, status_code=500)
 
 @app.get("/admin/api/status")
 async def admin_status(_=Depends(require_admin)):
