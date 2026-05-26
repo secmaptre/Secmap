@@ -611,18 +611,52 @@ async function testGrok(){
 }
 
 async function testBarrikadeAuth(){
-  log('Teste publish.barrikade.info SPIP-Login (volle Diagnose)…');
+  log('Teste ALLE 5 Barrikade-Discovery-Strategien (kann 30s dauern)…');
   try{
     const d = await apiFetch('/admin/api/barrikade-test', {method:'POST'});
     log('— ENV: '+JSON.stringify(d.env||{}));
-    (d.steps||[]).forEach(s => log('  · '+s.step+' '+JSON.stringify(Object.assign({},s,{step:undefined}))));
-    if(d.session_acquired){
-      log('✓ LOGIN OK (variant='+d.variant+')');
-      if(d.discovery) log('✓ Discovery: '+d.discovery.urls_found+' URLs · sample='+JSON.stringify(d.discovery.sample||[]));
-      toast('Barrikade-Auth OK');
+    log('');
+
+    // Strategy 1: SPIP Auth
+    const a1 = d['1_spip_auth'] || {};
+    if(a1.skipped){
+      log('1) SPIP-AUTH ◇ skipped: '+a1.skipped);
+    } else if(a1.session_acquired){
+      log('1) SPIP-AUTH ✓ OK (variant='+a1.variant+', '+(a1.discovery?.urls_found||0)+' URLs)');
+      if(a1.discovery?.sample) log('   sample='+JSON.stringify(a1.discovery.sample));
     } else {
-      log('✗ LOGIN FEHLGESCHLAGEN — siehe steps oben');
-      toast('Barrikade-Auth fehlgeschlagen');
+      log('1) SPIP-AUTH ✗ FAIL — '+(a1.fail_reason||'siehe steps'));
+      (a1.steps||[]).forEach(s => log('     · '+s.step+' '+JSON.stringify(Object.assign({},s,{step:undefined}))));
+    }
+
+    // Strategies 2-4: URL-based
+    [['2','2_standard_discovery','Standard (RSS/Sitemap)'],
+     ['3','3_spip_public','SPIP-Public (?page=backend)'],
+     ['4','4_search_engine','Search-Engine (DDG/Bing)']].forEach(([n, k, name]) => {
+      const a = d[k] || {};
+      if(a.error){
+        log(n+') '+name+' ✗ ERROR — '+a.error.substring(0,200));
+      } else {
+        const n_urls = a.urls_found || 0;
+        log(n+') '+name+' '+(n_urls>0?'✓':'◇')+' '+n_urls+' URLs');
+        if(a.sample?.length) log('   sample='+JSON.stringify(a.sample));
+      }
+    });
+
+    // Strategy 5: Wayback
+    const a5 = d['5_wayback'] || {};
+    if(a5.error){
+      log('5) WAYBACK ✗ ERROR — '+a5.error.substring(0,200));
+    } else {
+      log('5) WAYBACK '+(a5.ok?'✓':'◇')+' '+(a5.ok?(a5.html_len+'b html')+' fetched':'no snapshot'));
+    }
+
+    log('');
+    log('═══ AGGREGATE: '+(d.working_strategies||0)+'/5 Strategien aktiv ═══');
+    if(d.overall_ok){
+      toast('Barrikade: '+(d.working_strategies)+'/5 OK');
+    } else {
+      toast('Barrikade: ALLE Strategien fehlgeschlagen');
     }
   }catch(e){ log('Fehler: '+e.message); toast('Test-Fehler'); }
 }
