@@ -662,13 +662,45 @@ async function testBarrikadeAuth(){
 }
 
 async function crawlBarrikadeAuth(){
-  log('Starte authentifizierten Barrikade-Crawl…');
+  log('Starte authentifizierten Barrikade-Crawl (kann bis ~2min dauern)…');
   try{
     const d = await apiFetch('/admin/api/barrikade-crawl', {method:'POST'});
-    log(d.status||'gestartet');
-    toast('Barrikade-Crawl läuft');
-    setTimeout(refreshStatus, 5000);
-  }catch(e){ log('Fehler: '+e.message); }
+    if(d.status === 'error'){
+      log('✗ FEHLER: '+d.error);
+      toast('Barrikade-Crawl: '+d.error.substring(0,40));
+      return;
+    }
+    if(d.reason === 'auth_failed'){
+      log('✗ Auth fehlgeschlagen — ENV korrekt gesetzt? Klick erst ⚡ BARRIKADE-AUTH');
+      toast('Auth fehlgeschlagen');
+      return;
+    }
+    if(d.reason === 'discovery_empty'){
+      log('✗ Discovery leer — Login OK, aber Editor-Backend liefert keine Article-IDs');
+      toast('Discovery leer');
+      return;
+    }
+
+    log('═══════════════════════════════════════════════');
+    log(`Discovery: ${d.discovered_total} URLs gefunden, ${d.tried_urls} versucht`);
+    log(`✓ Eingefügt: ${d.inserted}`);
+    log(`Strategien-Counter: ${JSON.stringify(d.strategy_counter||{})}`);
+    log('───── Per-URL Detail ─────');
+    (d.url_results||[]).forEach(r => {
+      const u = r.url.replace('https://barrikade.info/','…/').replace('https://publish.barrikade.info/','…/');
+      if(r.ok){
+        log(`  ✓ ${u} → [${r.strategy}] ${r.category||''} (${r.len||0}b)`);
+      } else if(r.fetch_err){
+        const stepsBrief = r.fetch_err.steps ? r.fetch_err.steps.filter(s=>s.ok===false).slice(0,3).map(s=>s.step).join(',') : '';
+        log(`  ✗ ${u} → fetch-fail: ${stepsBrief||r.fetch_err.error||r.fetch_err}`);
+      } else {
+        log(`  ◇ ${u} → ${r.reason||r.exc||'übersprungen'} [${r.strategy||'—'}]`);
+      }
+    });
+    log('═══════════════════════════════════════════════');
+    toast(`Barrikade: +${d.inserted} neue Vorfälle`);
+    setTimeout(refreshStatus, 1500);
+  }catch(e){ log('Exception: '+e.message); toast('Crawl-Fehler'); }
 }
 
 async function reGeo(){
