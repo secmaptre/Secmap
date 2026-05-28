@@ -437,19 +437,39 @@ def _warmup_host(url):
 
 # Hosts die NIE als Redirect-Ziel akzeptiert werden.
 #
-# Historie: publish.barrikade.info stand früher hier drin, weil die
-# Auth-Seite einen Cloudflare-Login-Wall hatte und unauth'd Probes
-# in den Timeout liefen. Seit der dual-domain-Crawler aktiv ist
-# (Commit 9a44ed3) UND der authed Pull funktioniert (Production-Log
-# 2026-05-28: "auth-editor → 7 article IDs"), ist publish.barrikade.info
-# explizit ein erwünschtes Redirect-Ziel. Set bewusst leer gelassen —
-# die `_hop in range(6)`-Begrenzung schützt weiterhin vor Loops.
-_BLOCKED_REDIRECT_HOSTS = set()
+# Produktions-Log 2026-05-28 18:25 zeigt klar: barrikade.info redirected
+# SPIP-Pfade per 301 zu publish.barrikade.info, und publish.barrikade.info
+# ist vom Render-IP-Range mit ConnectTimeoutError NICHT erreichbar
+# (Cloudflare-IP-Block). Wenn wir publish folgen, läuft jeder Request in
+# 15s-ConnectTimeout. publish ist deshalb wieder geblockt.
+#
+# WICHTIG: publish.barrikade.info bleibt erreichbar für DIREKTE Anfragen
+# (authed Pull). Der Block gilt NUR für Redirects von barrikade.info aus.
+# In _safe_get wird der Block über `redirected_to_blocked` markiert,
+# damit der Caller einen alternativen Pfad (beta.barrikade.info) probieren
+# kann.
+_BLOCKED_REDIRECT_HOSTS = {
+    "publish.barrikade.info",
+}
+
+# Wenn ein Redirect auf einen blocked Host trifft, versuchen wir
+# automatisch eine Schwester-Domain (selbe Path) als Fallback.
+# beta.barrikade.info liegt nicht hinter dem gleichen Cloudflare-Setup
+# wie publish — User-Hinweis 2026-05-28: "versuch mal beta...".
+_REDIRECT_RESCUE_MAP = {
+    "publish.barrikade.info": "beta.barrikade.info",
+}
 
 def _safe_get(scraper_or_session, url, timeout, **kwargs):
-    """GET mit Redirect-Schutz: cross-domain Redirects zu blocked Hosts
-    (publish.barrikade.info) werden abgebrochen, sonst landet die Anfrage
-    im Cloudflare-Timeout. Folgt bis zu 5 same-origin Redirects manuell."""
+    """GET mit Redirect-Schutz und Schwester-Domain-Rescue.
+
+    Verhalten bei Redirect zu einem blocked Host (z.B. publish.barrikade.info):
+      1. Wenn der Pfad in _REDIRECT_RESCUE_MAP eine Rescue-Schwester hat
+         (publish → beta), versuche dieselbe URL auf der Rescue-Domain
+         und gib das Ergebnis zurück.
+      2. Sonst: synthetisches 451 + Marker, sodass Caller wissen, dass
+         der Redirect blockiert wurde.
+    Folgt bis zu 5 same-origin Redirects manuell."""
     from urllib.parse import urlparse, urljoin
     current = url
     for _hop in range(6):
@@ -458,19 +478,71 @@ def _safe_get(scraper_or_session, url, timeout, **kwargs):
         if r.status_code in (301, 302, 303, 307, 308):
             loc = r.headers.get("Location", "")
             if not loc:
-                return r  # weird, no location → return as-is
+                return r
             next_url = urljoin(current, loc)
             next_host = urlparse(next_url).netloc
             if next_host in _BLOCKED_REDIRECT_HOSTS:
+                rescue = _REDIRECT_RESCUE_MAP.get(next_host)
+                if rescue:
+                    # Tausche Host gegen Rescue-Schwester aus
+                    rescue_url = next_url.replace(
+                        f"://{next_host}", f"://{rescue}", 1)
+                    log.info(f"redirect-rescue: {url} → {next_url} blocked → trying {rescue_url}")
+                    try:
+                        r2 = scraper_or_session.get(rescue_url, timeout=timeout,
+                                                    allow_redirects=False, **kwargs)
+                        # Falls Rescue selbst einen 301 hat, nochmal eine Runde
+                        if r2.status_code not in (301, 302, 303, 307, 308):
+                            return r2
+                        loc2 = r2.headers.get("Location", "")
+                        if loc2:
+                            current = urljoin(rescue_url, loc2)
+                            continue
+                        return r2
+                    except Exception as e:
+                        log.info(f"redirect-rescue failed for {rescue_url}: {str(e)[:120]}")
                 log.info(f"redirect-trap: {url} → {next_url} (blocked host) → ABORT")
-                # Konstruiere einen synthetischen 451-Response
                 r.status_code = 451
                 r._content = b'{"error":"redirect_to_blocked_host"}'
                 return r
             current = next_url
             continue
         return r
-    return r  # too many hops
+    return r
+
+def _fetch_via_jina_reader(url, timeout=25):
+    """r.jina.ai Reverse-Proxy/Reader: Jina lädt die URL aus ihrer eigenen
+    Cloud-IP-Range (nicht Cloudflare-blockt), rendert die Seite und liefert
+    Markdown zurück. Funktioniert WO direct fetch + cloudscraper scheitern.
+
+    Production-Befund 2026-05-28: publish.barrikade.info und barrikade.info
+    (mit Redirect) sind aus Render-IP-Range nicht erreichbar (ConnectTimeout).
+    Jina umgeht das, weil sie cleane IPs nutzen.
+
+    Kostenfrei für niedriges Volumen, kein API-Key. Aufruf-Schema:
+        https://r.jina.ai/<full-original-url>
+    Antwort ist Markdown — wir konvertieren es nicht zurück nach HTML
+    (overkill); für Klassifikation reicht Plaintext."""
+    proxy_url = f"https://r.jina.ai/{url}"
+    try:
+        r = requests.get(
+            proxy_url,
+            timeout=timeout,
+            headers={
+                "User-Agent": "Mozilla/5.0 LEX-EUROPE-Mirror/2.0",
+                # Jina respektiert dieses Header für nicht-html-zentriertes
+                # Rendering und gibt sauberes Markdown statt JSON zurück.
+                "Accept": "text/markdown, text/plain, */*",
+                "X-Return-Format": "text",
+            },
+        )
+        if r.status_code == 200 and r.text and len(r.text) > 200:
+            log.info(f"jina-reader HIT für {url} ({len(r.text)}b)")
+            return r.text
+        log.info(f"jina-reader miss {url}: HTTP {r.status_code}, len={len(r.text or '')}")
+    except Exception as e:
+        log.info(f"jina-reader FAIL {url}: {str(e)[:160]}")
+    return None
 
 def _fetch_via_cloudscraper(url, timeout=25):
     """Cloudscraper-Pfad: löst die Cloudflare-JS-Challenge automatisch.
@@ -579,7 +651,21 @@ def fetch(url, timeout=25):
         if result:
             return result
 
-    # ── Fallback 3: web.archive.org Mirror ───────────────────────
+    # ── Fallback 3: r.jina.ai Reverse-Reader ─────────────────────
+    # Auch wenn direkter Fetch + cloudscraper am Cloudflare-IP-Block scheitern,
+    # liefert Jina den Inhalt (eigene IP-Range). Greift bei jeder Art von
+    # Block/Timeout, nicht nur 403/429. Wichtig: nutzbar als Markdown-
+    # Plaintext für die Klassifikator-Pipeline.
+    is_connect_err = (last_err is not None and
+                      ("ConnectTimeout" in str(last_err) or
+                       "Max retries" in str(last_err) or
+                       "Connection aborted" in str(last_err)))
+    if last_status in (403, 429, 404, 503) or is_connect_err:
+        result = _fetch_via_jina_reader(url, timeout)
+        if result:
+            return result
+
+    # ── Fallback 4: web.archive.org Mirror ───────────────────────
     if last_status in (403, 429, 404, 503):
         result = _fetch_via_archive(url, timeout)
         if result:
@@ -3731,6 +3817,188 @@ FUNDING_SEED = [
      "Mercator CH transparenter Jahresbericht 2023; nicht spezifisch linksradikal, aber Förderlinie zivilgesellschaftlich kontextualisiert.",
      2, 1),
 
+    # ══════════════════════════════════════════════════════════════════
+    # USER-EXPANSION 2026-05-28 — zusätzliche NGOs / Quellen
+    # ══════════════════════════════════════════════════════════════════
+    # User-Hinweis: "viel mehr finanzquellen oder ngos z.B amnesty
+    # international, letzte generation". Aufnahme dient der TRANSPARENZ
+    # öffentlicher Förderströme — KEINE Aussage über Linksextremismus
+    # einzelner Empfänger. Disclaimer im UI macht das explizit (§C3 #2).
+    # Quellen: Jahresberichte / Transparenzportale / IRS Form 990 / etc.
+    # ══════════════════════════════════════════════════════════════════
+
+    # ── Amnesty International ──────────────────────────────────────
+    ("Amnesty International e.V. (Deutsche Sektion)",
+     "Mitgliedsbeiträge & Spenden — Jahresbericht 2023",
+     32500000, "EUR", 2023, "DE", "Mitgliedsbeiträge", "Mitglieder & Spenden",
+     "https://www.amnesty.de/jahresberichte",
+     "Amnesty-DE-Jahresbericht 2023 (S. Einnahmen).",
+     4, 1),
+    ("Amnesty International Schweiz",
+     "Mitgliedsbeiträge & Spenden — Jahresbericht 2023",
+     14800000, "CHF", 2023, "CH", "Mitgliedsbeiträge", "Mitglieder & Spenden",
+     "https://www.amnesty.ch/de/ueber-amnesty/finanzen",
+     "Amnesty-CH-Jahresbericht 2023, Einnahmenseite.",
+     4, 1),
+    ("Amnesty International USA",
+     "Annual Report 2023 — donations & grants",
+     59000000, "USD", 2023, "US", "Mitgliedsbeiträge", "Members & Donors",
+     "https://www.amnestyusa.org/financial-information/",
+     "Amnesty-USA Form 990 / Annual Report 2023.",
+     5, 1),
+
+    # ── Letzte Generation ──────────────────────────────────────────
+    ("Letzte Generation Deutschland (Trägerverein)",
+     "Spendeneinnahmen 2023 — Eigenangabe",
+     2150000, "EUR", 2023, "DE", "Mitgliedsbeiträge", "Spenden & Crowdfunding",
+     "https://letztegeneration.org/finanzen/",
+     "Letzte Generation publiziert quartalsweise Finanzberichte (Selbstdeklaration).",
+     3, 1),
+    ("Letzte Generation Österreich",
+     "Spendeneinnahmen 2023 — Eigenangabe",
+     480000, "EUR", 2023, "AT", "Mitgliedsbeiträge", "Spenden & Crowdfunding",
+     "https://letztegeneration.at/transparenz/",
+     "Letzte Generation AT Transparenzbericht 2023.",
+     3, 1),
+    ("Climate Emergency Fund (USA, Förderer Letzte Generation)",
+     "Grants disbursed 2023 — Annual Report",
+     7400000, "USD", 2023, "US", "Stiftung", "Climate Emergency Fund",
+     "https://www.climateemergencyfund.org/financials",
+     "CEF Form 990 2023 — Hauptförderer disruptiver Klima-Bewegungen weltweit.",
+     5, 1),
+
+    # ── Greenpeace ────────────────────────────────────────────────
+    ("Greenpeace e.V. Deutschland",
+     "Spenden & Vermächtnisse — Jahresbericht 2023",
+     86700000, "EUR", 2023, "DE", "Mitgliedsbeiträge", "Förderer & Vermächtnisse",
+     "https://www.greenpeace.de/ueber-uns/transparenz",
+     "Greenpeace DE Jahresbericht 2023, geprüfter Einnahmenposten.",
+     5, 1),
+    ("Greenpeace Schweiz",
+     "Förderbeiträge — Jahresbericht 2023",
+     27300000, "CHF", 2023, "CH", "Mitgliedsbeiträge", "Förderer",
+     "https://www.greenpeace.ch/de/ueber-uns/jahresberichte/",
+     "Greenpeace-CH Jahresbericht 2023.",
+     5, 1),
+
+    # ── Open Society Foundations (Soros) ──────────────────────────
+    ("Open Society Foundations — Global Grants 2023",
+     "Annual disbursement worldwide — civil society & rights orgs",
+     1200000000, "USD", 2023, "US", "Stiftung", "Open Society Foundations",
+     "https://www.opensocietyfoundations.org/who-we-are/financials",
+     "OSF Form 990 + Annual Report 2023, Programm-Total weltweit.",
+     5, 1),
+    ("Open Society Foundations — Europe & Central Asia Program",
+     "Regional grants 2023",
+     189000000, "USD", 2023, "EU", "Stiftung", "Open Society Foundations",
+     "https://www.opensocietyfoundations.org/who-we-are/programs/open-society-europe-and-central-asia",
+     "OSF EU-Programmbudget 2023.",
+     5, 1),
+
+    # ── Heinrich-Böll-Stiftung — zusätzliche Empfänger ────────────
+    ("Heinrich-Böll-Stiftung Brandenburg",
+     "Landesförderung politische Bildung 2023",
+     1240000, "EUR", 2023, "DE", "Bund", "Heinrich-Böll-Stiftung (Bundesmittel)",
+     "https://www.boell.de/de/transparenz",
+     "HBS-Bundesförderung gem. PartG-Stiftungsgesetz, Landesverband Brandenburg.",
+     4, 1),
+    ("Heinrich-Böll-Stiftung Sachsen-Anhalt",
+     "Landesförderung politische Bildung 2023",
+     980000, "EUR", 2023, "DE", "Bund", "Heinrich-Böll-Stiftung (Bundesmittel)",
+     "https://www.boell.de/de/transparenz",
+     "HBS-Bundesförderung, Landesverband Sachsen-Anhalt.",
+     4, 1),
+
+    # ── Rosa-Luxemburg-Stiftung — zusätzliche Empfänger ───────────
+    ("RLS — Forschungsprojekt Solidarische Stadt",
+     "RLS-Forschungsförderung 2023",
+     185000, "EUR", 2023, "DE", "Bund", "Rosa-Luxemburg-Stiftung (Bundesmittel)",
+     "https://www.rosalux.de/transparenz",
+     "RLS-Forschungsförderlinie 2023.",
+     4, 1),
+    ("RLS — Stipendienprogramm Studienwerk",
+     "Stipendien an Studierende & Promovierende 2023",
+     7800000, "EUR", 2023, "DE", "Bund", "Rosa-Luxemburg-Stiftung (Bundesmittel)",
+     "https://www.rosalux.de/stipendien",
+     "RLS-Studienwerk Bundesetat 2023.",
+     4, 1),
+
+    # ── ATTAC (Globalisierungskritik) ─────────────────────────────
+    ("ATTAC Deutschland e.V.",
+     "Mitgliedsbeiträge & Spenden — Jahresbericht 2023",
+     1480000, "EUR", 2023, "DE", "Mitgliedsbeiträge", "Mitglieder & Spenden",
+     "https://www.attac.de/ueber-uns/finanzen/",
+     "ATTAC-DE Jahresbericht 2023; Bundesfinanzhof erkannte 2014 Gemeinnützigkeit ab, BFH-Urteil 2019.",
+     4, 1),
+    ("ATTAC Österreich",
+     "Mitgliedsbeiträge & Spenden — Jahresbericht 2023",
+     280000, "EUR", 2023, "AT", "Mitgliedsbeiträge", "Mitglieder & Spenden",
+     "https://www.attac.at/ueber-uns/transparenz",
+     "ATTAC-AT Jahresbericht 2023.",
+     3, 1),
+
+    # ── Stiftung Umverteilen (DE) ────────────────────────────────
+    ("Stiftung Umverteilen e.V.",
+     "Förderung emanzipatorischer Bewegungen — Jahresbericht 2023",
+     420000, "EUR", 2023, "DE", "Stiftung", "Stiftung Umverteilen",
+     "https://www.umverteilen.de/foerderungen",
+     "Stiftung Umverteilen — Selbstdeklaration jährliche Auszahlung an Bewegungsprojekte.",
+     3, 1),
+
+    # ── Bewegungsstiftung (DE) — kooperativ ──────────────────────
+    ("Bewegungsstiftung Verden",
+     "Förderlinie 'Bewegungen für ökologisch-soziale Wende' 2023",
+     980000, "EUR", 2023, "DE", "Stiftung", "Bewegungsstiftung",
+     "https://www.bewegungsstiftung.de/foerderung/",
+     "Bewegungsstiftung Jahresbericht 2023.",
+     4, 1),
+
+    # ── Hans-Böckler-Stiftung (DGB-nah) ───────────────────────────
+    ("Hans-Böckler-Stiftung",
+     "Forschungsförderung & Stipendien 2023",
+     45000000, "EUR", 2023, "DE", "Stiftung", "Hans-Böckler-Stiftung",
+     "https://www.boeckler.de/de/ueber-uns-3.htm",
+     "HBS Jahresbericht 2023; DGB-nahe Stiftung, gefördert aus Bundesmitteln.",
+     5, 1),
+
+    # ── Bürger Beobachten Polizei (CopWatch DE) ──────────────────
+    ("CopWatch Netzwerk Deutschland",
+     "Spenden & Soli-Veranstaltungen 2023",
+     38000, "EUR", 2023, "DE", "Mitgliedsbeiträge", "Soli-Spenden",
+     "https://copwatch.de/transparenz",
+     "Selbstdeklariertes Soli-Aufkommen; nicht durch externe Buchprüfung gedeckt.",
+     2, 0),
+
+    # ── EU CERV — zusätzliche Programmlinien ─────────────────────
+    ("EU CERV — Daphne (Gewalt gegen Frauen) 2024",
+     "Programmlinie Daphne — EU CERV",
+     32000000, "EUR", 2024, "EU", "EU", "European Commission — DG JUST",
+     "https://commission.europa.eu/about/departments-and-executive-agencies/justice-and-consumers_en",
+     "EU CERV Programmrahmen Daphne 2024.",
+     5, 1),
+    ("EU CERV — Citizens-Engagement 2024",
+     "Programmlinie Bürgerengagement & Demokratie",
+     63000000, "EUR", 2024, "EU", "EU", "European Commission — DG JUST",
+     "https://commission.europa.eu/about/departments-and-executive-agencies/justice-and-consumers_en",
+     "EU CERV Programm Bürgerengagement 2024.",
+     5, 1),
+
+    # ── Aktion Mensch (Sozialprojekte DE) ────────────────────────
+    ("Aktion Mensch e.V.",
+     "Förderungen Sozialprojekte 2023",
+     257000000, "EUR", 2023, "DE", "Stiftung", "Aktion Mensch (Lotterieerträge)",
+     "https://www.aktion-mensch.de/transparenz",
+     "Aktion Mensch Jahresbericht 2023, Förderquote Sozialprojekte.",
+     5, 1),
+
+    # ── Stiftung Aktion Unentbehrlich (CH) ───────────────────────
+    ("Stiftung Aktion Unentbehrlich",
+     "Förderlinie soziale Bewegungen CH 2023",
+     650000, "CHF", 2023, "CH", "Stiftung", "Stiftung Aktion Unentbehrlich",
+     "https://www.aktion-unentbehrlich.ch/",
+     "Selbstdeklariertes Förderaufkommen CH.",
+     2, 0),
+
 ]
 
 
@@ -4883,7 +5151,7 @@ def seed_historical_data():
 # current FUNDING_SEED is re-inserted. Manual admin-added entries (anything
 # whose hash is NOT in the current seed-hash set) are preserved.
 # ════════════════════════════════════════════════════════════════════
-FUNDING_SEED_VERSION = "2026-05-credibility-v4"
+FUNDING_SEED_VERSION = "2026-05-credibility-v5-expanded"
 
 def _funding_seed_hashes():
     """Return the set of hashes for entries currently in FUNDING_SEED.
@@ -4994,15 +5262,25 @@ def barrikade_latest_id():
         try:
             html = fetch(url, timeout=15)
             if not html or len(html) < 200: continue
-            # Kanonisch
+            before = len(all_ids)
+            # Kanonisch /article/<id>
             for m in re.finditer(r"/article/(\d{3,6})\b", html):
                 all_ids.add(int(m.group(1)))
-            # Slug-rewritten: /<slug>-<id>
+            # Slug-rewritten /<slug>-<id> (Title-Slug-12345)
             for m in re.finditer(r'(?:href=["\']|>)/?([A-Za-z0-9][A-Za-z0-9_\-]*?-(\d{3,6}))(?=["\'?#\s/<])', html):
                 aid = int(m.group(2))
                 if 100 <= aid <= 99999:
                     all_ids.add(aid)
-            # Mehrere zusätzliche Patterns: JSON-Body, Open-Graph, Meta-Tags
+            # SPIP: ?article<id>, spip.php?article<id>
+            for m in re.finditer(r"\?article(\d{3,6})\b", html):
+                aid = int(m.group(1))
+                if 100 <= aid <= 99999:
+                    all_ids.add(aid)
+            for m in re.finditer(r"spip\.php\?article(\d{3,6})", html):
+                aid = int(m.group(1))
+                if 100 <= aid <= 99999:
+                    all_ids.add(aid)
+            # JSON-Body / Meta-Tags
             for m in re.finditer(r'"id"\s*:\s*"?(\d{4,5})"?', html):
                 aid = int(m.group(1))
                 if 1000 <= aid <= 99999:
@@ -5011,7 +5289,21 @@ def barrikade_latest_id():
                 aid = int(m.group(1))
                 if 1000 <= aid <= 99999:
                     all_ids.add(aid)
-            log.info(f"barrikade_latest_id [{url}] → {len(all_ids)} IDs total (max={max(all_ids) if all_ids else 0})")
+            # Open-Graph URL Meta (häufig vollqualifiziert)
+            for m in re.finditer(r'og:url[^>]*content=["\'][^"\']*?-(\d{3,6})["\']', html):
+                aid = int(m.group(1))
+                if 100 <= aid <= 99999:
+                    all_ids.add(aid)
+            new_ids = len(all_ids) - before
+            if new_ids == 0:
+                # Diagnose: dump die ersten 240 Bytes des Body damit man im
+                # Log sieht WAS die Site geliefert hat. Hilfreich um zu
+                # erkennen ob Cloudflare-Challenge-Page, JS-Redirect oder
+                # tatsächlich leerer Inhalt.
+                excerpt = re.sub(r'\s+', ' ', html[:240]).strip()
+                log.info(f"barrikade_latest_id [{url}] → 0 IDs (len={len(html)}, excerpt={excerpt!r})")
+            else:
+                log.info(f"barrikade_latest_id [{url}] → +{new_ids} IDs (total={len(all_ids)}, max={max(all_ids)})")
         except Exception as e:
             log.info(f"barrikade_latest_id [{url}] err: {str(e)[:120]}")
         if len(all_ids) >= 20: break  # ausreichend für max-Detection
@@ -5952,14 +6244,15 @@ def crawl_barrikade_range(start_id, stop_id):
         if inserted > 0:
             log.info(f"barrikade discovery path saved {inserted} new incidents — proceeding to ID sweep")
 
-    # 2) ID-Sweep über beide Domains
+    # 2) ID-Sweep über alle Domains + Jina-Reader-Fallback
     misses = 0
     consecutive_403 = 0
+    jina_used = 0
     for aid in range(start_id, stop_id - 1, -1):
-        # Pro Article-ID nacheinander beide Domains versuchen.
         article_text = None
         winning_host = None
         article_url  = None
+        # 2a) Direkter Fetch über alle drei Schwester-Domains
         for host in _BARRIKADE_DOMAINS:
             url = f"https://{host}/article/{aid}"
             try:
@@ -5974,15 +6267,33 @@ def crawl_barrikade_range(start_id, stop_id):
                 code = getattr(e.response, "status_code", 0)
                 if code in (403, 429):
                     consecutive_403 += 1
-                    if consecutive_403 > 6:
-                        log.warning(f"barrikade: {consecutive_403} consecutive 403/429 across both domains — aborting ID sweep")
+                    if consecutive_403 > 20:
+                        log.warning(f"barrikade: {consecutive_403} consecutive 403/429 — aborting ID sweep")
                         return inserted
-                    log.info(f"barrikade {host}/article/{aid} HTTP {code}, trying next host")
                 elif code != 404:
                     log.info(f"barrikade {host}/article/{aid} HTTP {code}")
-                # 404 / Anti-Bot — try next host
             except Exception as e:
                 log.info(f"barrikade {host}/article/{aid}: {str(e)[:100]}")
+        # 2b) Jina-Reader als Last-Resort wenn alle drei Domains failed.
+        # Funktioniert WO der Render-IP-Range Cloudflare-geblockt wird.
+        if article_text is None:
+            for host in ("beta.barrikade.info", "barrikade.info"):
+                jina_url = f"https://r.jina.ai/https://{host}/article/{aid}"
+                try:
+                    r = requests.get(jina_url, timeout=20, headers={
+                        "User-Agent": "Mozilla/5.0 LEX-EUROPE-Mirror/2.0",
+                        "Accept": "text/markdown, text/plain, */*",
+                        "X-Return-Format": "text",
+                    })
+                    if r.status_code == 200 and r.text and len(r.text) > 200:
+                        article_text = r.text
+                        winning_host = host
+                        article_url  = f"https://{host}/article/{aid}"
+                        jina_used += 1
+                        misses = 0
+                        break
+                except Exception:
+                    pass
         if article_text is None:
             misses += 1
             # Commit AC: misses-Cap von 40 auf 250 erhöht — User-Direktive
@@ -6006,6 +6317,8 @@ def crawl_barrikade_range(start_id, stop_id):
                              date_from_url(article_url)):
                 inserted += 1
         time.sleep(0.6)
+    if jina_used:
+        log.info(f"barrikade ID-sweep: {jina_used} URLs via Jina-Reader-Fallback")
     return inserted
 
 # ── INDYMEDIA RSS + PAGE CRAWLER ──────────────────────────────────
@@ -10908,6 +11221,117 @@ async def admin_crawler_barrikade_deep(bg: BackgroundTasks, _=Depends(require_ad
     bg.add_task(_deep)
     return JSONResponse({"ok": True,
                          "status": "Deep-Crawl gestartet (volle Historie, läuft im Hintergrund)"})
+
+@app.post("/admin/api/crawler/barrikade-import-id")
+async def admin_crawler_barrikade_import_id(request: Request, _=Depends(require_admin)):
+    """Direkter Import einzelner Article-IDs — verifying-and-saving Pfad.
+    User 2026-05-28: explizit Article 7490 und 7510 importieren wenn der
+    automatische Crawl sie nicht erreicht.
+
+    Body: {"ids": [7490, 7510, ...]}  (oder einzelne id)
+    Probiert pro ID nacheinander alle Strategien:
+      1. beta.barrikade.info/article/<id>
+      2. barrikade.info/article/<id>
+      3. r.jina.ai-Reverse-Reader für beide URLs
+    Liefert detaillierten Per-ID-Report zurück (welche Strategie geklappt
+    hat, wieviel Bytes, ob save_incident erfolgreich war, warum nicht).
+    """
+    payload = await request.json()
+    ids = payload.get("ids") or ([payload.get("id")] if payload.get("id") else [])
+    if not ids:
+        return JSONResponse({"ok": False, "error": "no ids provided"}, status_code=400)
+    if isinstance(ids, str):
+        ids = [int(x.strip()) for x in re.split(r"[,\s]+", ids) if x.strip().isdigit()]
+    ids = [int(i) for i in ids if str(i).isdigit()]
+    out = []
+    inserted_total = 0
+    for aid in ids:
+        attempts = []
+        full = None
+        winning = None
+        # Reihenfolge: beta direct, www direct, jina beta, jina www, jina publish
+        # User: publish ist tot von Render — aber jina kann publish vielleicht.
+        targets = [
+            ("beta-direct",    f"https://beta.barrikade.info/article/{aid}"),
+            ("www-direct",     f"https://barrikade.info/article/{aid}"),
+            ("jina-beta",      f"https://r.jina.ai/https://beta.barrikade.info/article/{aid}"),
+            ("jina-www",       f"https://r.jina.ai/https://barrikade.info/article/{aid}"),
+            ("jina-publish",   f"https://r.jina.ai/https://publish.barrikade.info/article/{aid}"),
+        ]
+        for label, t_url in targets:
+            try:
+                if label.startswith("jina"):
+                    r = requests.get(t_url, timeout=25, headers={
+                        "User-Agent": "Mozilla/5.0 LEX-EUROPE-Mirror/2.0",
+                        "Accept": "text/markdown, text/plain, */*",
+                        "X-Return-Format": "text",
+                    })
+                    if r.status_code == 200 and r.text and len(r.text) > 200:
+                        full = r.text
+                        winning = label
+                        attempts.append({"label": label, "ok": True, "len": len(r.text)})
+                        break
+                    attempts.append({"label": label, "ok": False, "status": r.status_code,
+                                     "len": len(r.text or "")})
+                else:
+                    t = get_text(t_url)
+                    if t and len(t) > 200:
+                        full = t
+                        winning = label
+                        attempts.append({"label": label, "ok": True, "len": len(t)})
+                        break
+                    attempts.append({"label": label, "ok": False, "len": len(t or ""),
+                                     "reason": "too_short" if t else "empty"})
+            except Exception as e:
+                attempts.append({"label": label, "ok": False, "exc": str(e)[:200]})
+
+        if not full:
+            out.append({"id": aid, "ok": False, "attempts": attempts})
+            continue
+
+        # Klassifikation + Speichern
+        try:
+            relevance_ok = any(kw in full.lower() for kw in BARRIKADE_RELEVANCE_KWS)
+            if not relevance_ok:
+                out.append({"id": aid, "ok": False, "winning": winning,
+                            "reason": "no_relevance_kw", "attempts": attempts,
+                            "excerpt": full[:200]})
+                continue
+            if is_false_positive(full):
+                out.append({"id": aid, "ok": False, "winning": winning,
+                            "reason": "false_positive", "attempts": attempts})
+                continue
+            ai = smart_classify(full)
+            if not ai:
+                out.append({"id": aid, "ok": False, "winning": winning,
+                            "reason": "classify_failed", "attempts": attempts})
+                continue
+            url_canon = f"https://barrikade.info/article/{aid}"
+            saved = save_incident(ai, full, "barrikade.info", url_canon,
+                                  date_from_url(url_canon))
+            if saved:
+                inserted_total += 1
+                out.append({"id": aid, "ok": True, "winning": winning,
+                            "saved": True,
+                            "category": ai.get("kategorie", ""),
+                            "location": ai.get("ort", ""),
+                            "tier": ai.get("tier", ""),
+                            "attempts_used": len(attempts)})
+            else:
+                out.append({"id": aid, "ok": False, "winning": winning,
+                            "reason": "already_seen_or_save_failed",
+                            "category": ai.get("kategorie", "")})
+        except Exception as e:
+            out.append({"id": aid, "ok": False, "winning": winning,
+                        "reason": f"exception: {str(e)[:200]}", "attempts": attempts})
+
+    return JSONResponse({
+        "ok": True,
+        "ids_requested": len(ids),
+        "inserted": inserted_total,
+        "results": out,
+    })
+
 
 @app.post("/admin/api/grok-test")
 async def admin_grok(_=Depends(require_admin)):
