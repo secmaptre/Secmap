@@ -431,12 +431,16 @@ def _warmup_host(url):
     except Exception:
         pass
 
-# Hosts die NIE als Redirect-Ziel akzeptiert werden — wenn z.B.
-# barrikade.info redirected zu publish.barrikade.info, würden wir auf
-# einen blocked Host springen. Bei Redirect zu diesen Hosts: stop+401.
-_BLOCKED_REDIRECT_HOSTS = {
-    "publish.barrikade.info",
-}
+# Hosts die NIE als Redirect-Ziel akzeptiert werden.
+#
+# Historie: publish.barrikade.info stand früher hier drin, weil die
+# Auth-Seite einen Cloudflare-Login-Wall hatte und unauth'd Probes
+# in den Timeout liefen. Seit der dual-domain-Crawler aktiv ist
+# (Commit 9a44ed3) UND der authed Pull funktioniert (Production-Log
+# 2026-05-28: "auth-editor → 7 article IDs"), ist publish.barrikade.info
+# explizit ein erwünschtes Redirect-Ziel. Set bewusst leer gelassen —
+# die `_hop in range(6)`-Begrenzung schützt weiterhin vor Loops.
+_BLOCKED_REDIRECT_HOSTS = set()
 
 def _safe_get(scraper_or_session, url, timeout, **kwargs):
     """GET mit Redirect-Schutz: cross-domain Redirects zu blocked Hosts
@@ -5202,8 +5206,12 @@ def _barrikade_search_engine_discover_with_snippets(max_results=60, per_query_ti
                     timeout=per_query_timeout,
                 )
                 if r.status_code != 200: continue
-                # Parse RSS items
-                soup = BeautifulSoup(r.text, "xml")
+                # Parse RSS items — lxml ist optimal, html.parser ist
+                # stdlib-Fallback wenn lxml im Image fehlt.
+                try:
+                    soup = BeautifulSoup(r.text, "xml")
+                except Exception:
+                    soup = BeautifulSoup(r.text, "html.parser")
                 items = soup.find_all("item")
                 if not items:
                     items = soup.find_all("entry")  # Atom
