@@ -1433,10 +1433,10 @@ HISTORICAL_EVENTS = [
      "1.-Mai-Demonstration der Gewerkschaftsjugend und autonomer Gruppen in Wien. Kleinere Ausschreitungen am Rande, Polizei im Großeinsatz. 6 Festnahmen.",
      "Archiv",48.21,16.37),
     ("2025-03-15","Bern","CH","Sachbeschädigung",
-     "Antifaschistische Aktion in Bern: Büros einer als rechtsextrem eingestuften Organisation mit Farbe beschmiert, Scheiben eingeworfen. Bekennerschreiben veröffentlicht. Sachschaden ca. 12.000 CHF.",
+     "Antifaschistische Aktion in Bern: Büros einer politischen Organisation mit Farbe beschmiert, Scheiben eingeworfen. Bekennerschreiben antifaschistischer Gruppe. Sachschaden ca. 12.000 CHF.",
      "Archiv",46.95,7.44),
     ("2025-02-08","München","DE","Brandanschlag",
-     "Fahrzeug eines als rechtsextrem bekannten Kaders in München-Schwabing in der Nacht angezündet. Bekennerschreiben antifaschistischer Gruppe. Sachschaden ca. 35.000 Euro.",
+     "Pkw einer Privatperson in München-Schwabing in der Nacht angezündet. Bekennerschreiben antifaschistischer Gruppe ordnet das Ziel politisch ein. Sachschaden ca. 35.000 Euro.",
      "Archiv",48.16,11.57),
 
     # ════════════════════════════════════════════════════════════════
@@ -1684,7 +1684,7 @@ HISTORICAL_EVENTS = [
      "Mehrere FPÖ-Plakate in Graz-Innenstadt beschädigt, Steiermark-Landesgeschäftsstelle mit Farbe beschmiert. Bekennerschreiben Aktionskollektiv Graz.",
      "Archiv",47.07,15.44),
     ("2024-11-12","Wien","AT","Brandanschlag",
-     "Brandanschlag auf Pkw eines bekannten Identitären-Aktivisten in Wien-Hietzing. Vollbrand, Sachschaden ca. 35.000 Euro. Bekennerschreiben.",
+     "Brandanschlag auf Privat-Pkw einer Person in Wien-Hietzing. Vollbrand, Sachschaden ca. 35.000 Euro. Bekennerschreiben antifaschistischer Gruppe.",
      "Archiv",48.18,16.30),
 
     # ── Frankreich: Notre-Dame-des-Landes / Loi Sécurité Globale ────
@@ -1818,7 +1818,7 @@ HISTORICAL_EVENTS = [
 
     # ── AT: weitere Eskalationen ──────────────────────────────────
     ("2024-12-22","Wien","AT","Brandanschlag",
-     "Brandanschlag auf Privat-Pkw eines Identitären-Aktivisten in Wien-Liesing. Vollbrand, Sachschaden ca. 28.000 Euro. Bekennerschreiben antifaschistischer Gruppe.",
+     "Brandanschlag auf Privat-Pkw einer Person in Wien-Liesing. Vollbrand, Sachschaden ca. 28.000 Euro. Bekennerschreiben antifaschistischer Gruppe.",
      "Archiv",48.13,16.30),
     ("2025-05-20","Innsbruck","AT","Sachbeschädigung",
      "Innsbruck: FPÖ-Landesgeschäftsstelle mit Farbbeuteln, Slogans und beschädigten Fenstern attackiert. Schaden ca. 7.500 Euro.",
@@ -1955,7 +1955,7 @@ HISTORICAL_EVENTS = [
      "Salzburg: FPÖ-Landesgeschäftsstelle mit Farbbeuteln, Slogans und beschädigten Fenstern attackiert. Schaden ca. 6.500 Euro.",
      "Archiv",47.80,13.05),
     ("2025-05-18","Wien","AT","Brandanschlag",
-     "Wien-Brigittenau: Brandanschlag auf Privat-Pkw eines bekannten Identitären-Aktivisten. Vollbrand, Sachschaden ca. 32.000 Euro. Bekennerschreiben.",
+     "Wien-Brigittenau: Brandanschlag auf Privat-Pkw einer Person. Vollbrand, Sachschaden ca. 32.000 Euro. Bekennerschreiben antifaschistischer Gruppe.",
      "Archiv",48.24,16.38),
 
     # ── USA — weitere 2025 ─────────────────────────────────────────
@@ -2220,7 +2220,7 @@ HISTORICAL_EVENTS = [
      "Düsseldorf: AfD-Landesgeschäftsstelle NRW mit Farbbeuteln und Steinen attackiert. Drei Fenster zerstört. Bekennerschreiben antifaschistische Aktion Rheinland.",
      "Archiv",51.23,6.78),
     ("2025-01-08","Magdeburg","DE","Brandanschlag",
-     "Magdeburg: Brandanschlag auf einen Pkw eines bekannten AfD-Funktionärs. Vollbrand. Sachschaden ca. 35.000 Euro. Bekennerschreiben.",
+     "Magdeburg: Brandanschlag auf einen Privat-Pkw. Vollbrand. Sachschaden ca. 35.000 Euro. Bekennerschreiben antifaschistischer Gruppe ordnet das Ziel politisch ein.",
      "Archiv",52.12,11.62),
     ("2025-04-26","Heidelberg","DE","Sachbeschädigung",
      "Heidelberg: Identitäre-Räumlichkeit mit Farbbomben und beschädigten Fenstern attackiert. Schaden ca. 10.000 Euro.",
@@ -2590,11 +2590,23 @@ def classify(text):
         'HTML-Reste, kein Navigations-Müll. Nennt nur Wo, Was, ggf. Wer. '
         'Beispiele für den gewünschten Stil:\n'
         '    \\"In Bamberg wurde ANTIFA-Graffiti an der Stadtbibliothek entdeckt.\\"\n'
-        '    \\"Linksextreme attackierten in Kloten eine Junge-Tat-WG mit Farbe.\\"\n'
+        '    \\"In Kloten attackierten Linksextreme eine Wohnung mit Farbe; '
+        'Bekennerschreiben antifaschistischer Gruppe.\\"\n'
         '    \\"In Berlin-Friedrichshain brannte ein Polizei-Streifenwagen aus.\\"\n'
         '    Verbote: Wörter wie \\"feige\\", \\"perfide\\", \\"mutige Tat\\", '
         '\\"solidarische Aktion\\", \\"das System\\", \\"die Schweine\\" — '
-        'diese sind aktivistische Sprache und gehören NICHT in die Zusammenfassung."\n\n'
+        'diese sind aktivistische Sprache und gehören NICHT in die Zusammenfassung.\n'
+        '    RECHTSSCHUTZ (zwingend): Bezeichne ZIELPERSONEN NIEMALS als '
+        '\\"Nazi\\", \\"rechtsextrem\\", \\"rechtsradikal\\", \\"Faschist\\", '
+        '\\"Neonazi\\", \\"AfD-Funktionär\\", \\"SVP-Politiker\\", \\"FPÖ-Kader\\", '
+        '\\"Identitärer\\", auch wenn die Originalquelle das tut. Das gilt als '
+        'üble Nachrede/Verleumdung (StGB §§ 185-187 DE, §111 öStGB AT, '
+        'Art. 173/174 StGB CH) und ist gegen unsere Plattform-Politik §C3 #4 '
+        '(keine Vorverurteilung). Verwende stattdessen neutrale Begriffe: '
+        '\\"Privatperson\\", \\"Pkw einer Person\\", \\"Räumlichkeit einer '
+        'Organisation\\". Die TÄTER-Seite (\\"antifaschistische Gruppe\\", '
+        '\\"Bekennerschreiben\\") darf benannt werden — das ist '
+        'Selbstbezeichnung der Täter, kein Vorwurf an einen Dritten."\n\n'
         f"Text:\n{text[:2200]}\n\n"
         "JSON:"
     )
@@ -2623,9 +2635,10 @@ def classify(text):
         res.setdefault("ziel_typ", "")
         res.setdefault("zusammenfassung", "")
         # Sanitise the summary: clamp length, strip nav artefacts AND
-        # aktivismus-Sprache. The hard 140-char cap matches the new prompt.
+        # aktivismus-Sprache AND defamatory labels against targets
+        # (Commit AB). Hard 140-char cap matches the new prompt.
         summ = (res.get("zusammenfassung") or "").strip()
-        summ = strip_activist_phrases(summ)
+        summ = neutralize_political_labels(strip_activist_phrases(summ))
         if _SUMMARY_BAD.search(summ):
             summ = ""
         res["zusammenfassung"] = clamp_two_sentences(summ, 140)
@@ -2926,6 +2939,173 @@ def redact_pii(text: str) -> str:
                  r'(\s+\1){1,}', r'\1', out)
     return out
 
+# ──────────────────────────────────────────────────────────────────────
+# Defamation-Sanitisation (§C3 #4: keine Vorverurteilung)
+# ──────────────────────────────────────────────────────────────────────
+# Rechtsschutz: ein Bekennerschreiben einer antifaschistischen Gruppe
+# bedeutet NICHT, dass die Zielperson tatsächlich "rechtsextrem" oder
+# "Nazi" ist. Solche Labels sind in DE/AT/CH justiziabel als Beleidigung/
+# üble Nachrede/Verleumdung (StGB §§ 185-187, § 111 öStGB, Art. 173/174
+# StGB CH). Wir entfernen sie aus jeder von uns gespeicherten Beschreibung
+# und aus jeder Zusammenfassung — auch wenn die Originalquelle sie führt.
+# Was bleibt: die Tat (Brand, Sabotage, Sachbeschädigung), das politische
+# Motiv-Signal der TÄTER-Seite (Bekennerschreiben antifaschistischer
+# Gruppe), und neutrale Rollenbeschreibungen ohne Bewertung der Zielperson.
+_NEUTRALIZE_PATTERNS = [
+    # 1. "als <Ideologie> [bekannt/eingestuft/geltend/geoutet]" inkl. nach-
+    #    folgendem Substantiv (Kader/Funktionär/Organisation/Person).
+    #    Output: gleicher Artikel, dann "politisch zugeordneten <Noun>".
+    (re.compile(
+        r"\b(eines?|einer?|einem|einen|den?|der|die|das)\s+"
+        r"als\s+"
+        r"(?:rechtsextrem(?:istisch)?\w*|rechtsradikal\w*|neonazistisch\w*|"
+        r"neonazi\w*|nazi(?!onal)\w*|faschistisch\w*|faschist\w*)\s+"
+        r"(?:bekannten?|eingestuften?|geltenden?|verd[äa]chtigen?|"
+        r"geouteten?|enttarnt(?:en)?)\s+"
+        r"(\w+)",
+        re.IGNORECASE,
+    ), r"\1 politisch zugeordneten \2"),
+    # 2. "wurde als <Ideologie>(...) [geoutet|bezeichnet|enttarnt|...]"
+    (re.compile(
+        r"\b(wurde|wird|gilt|outet[e]?\s+sich|enttarnt|enttarnte)\s+"
+        r"(?:als\s+|zum\s+)?"
+        r"(?:rechtsextrem(?:istisch)?\w*|neonazi\w*|nazi(?!onal)\w*|"
+        r"faschist\w*|rechtsradikal\w*)"
+        r"(?:\s+(?:geoutet|bezeichnet|beschimpft|enttarnt|abgestempelt|"
+        r"verurteilt|tituliert|dargestellt))?",
+        re.IGNORECASE,
+    ), r"\1 politisch eingeordnet"),
+    # 2b. "als <Ideologie> beschimpft/bezeichnet/tituliert" ohne Verb davor
+    (re.compile(
+        r"\bals\s+"
+        r"(?:rechtsextrem(?:istisch)?\w*|neonazi\w*|nazi(?!onal)\w*|"
+        r"faschist\w*|rechtsradikal\w*)\s+"
+        r"(beschimpft|bezeichnet|tituliert|verleumdet|dargestellt|"
+        r"abgestempelt|verurteilt)",
+        re.IGNORECASE,
+    ), r"politisch eingeordnet \1"),
+    # 3. "Nazi-Schwein/Sau/Pack" und Hetzphrasen
+    (re.compile(
+        r"\b(?:nazi|fascho)[\-–\s]?"
+        r"(?:schwein|sau|pack|gesindel|abschaum|bande)\w*",
+        re.IGNORECASE,
+    ), "[politische Beleidigung entfernt]"),
+    # 4. "<Artikel> [bekannten/mutmasslichen] <Partei>-<Rolle>" → neutralisieren
+    (re.compile(
+        r"\b(eines?|einer?|den?|der|die|das|einem|einen)\s+"
+        r"(?:bekannten?\s+|mutma[ßs]lichen?\s+|f[üu]hrenden?\s+|"
+        r"hochrangigen?\s+|langj[äa]hrigen?\s+)?"
+        r"(?:afd|svp|fp[öo]|cdu|csu|spd|fdp|gr[üu]ne[rn]?|linke[rn]?|"
+        r"bsw|[öo]vp|sp[öo]|npd|junge\s+alternative|ja-|jl-|jvp)"
+        r"[\-–\s]+"
+        r"(?:funktion[äa]r(?:in|s|en)?|kader[ns]?|politiker(?:in|s|en)?|"
+        r"abgeordnete[rmn]?|mitglied(?:s|er)?|kandidat(?:in|en)?|"
+        r"aktivist(?:in|en)?|vorstand(?:s|es)?|chef(?:in|s)?|"
+        r"sprecher(?:in|s)?)\b",
+        re.IGNORECASE,
+    ), lambda m: f"{m.group(1)} Person mit politischer Funktion"),
+    # 5. "<Artikel> [bekannten] <Ideologie>-<Rolle>" oder
+    #    zusammengeschrieben "Identitärer-Aktivist". → Privatperson.
+    #    Wichtig: NICHT für "Identitäre Bewegung" (formelle Organisation).
+    (re.compile(
+        r"\b(eines?|einer?|den?|der|die|das|einem|einen)\s+"
+        r"(?:bekannten?\s+|mutma[ßs]lichen?\s+|f[üu]hrenden?\s+|"
+        r"hochrangigen?\s+|sogenannten?\s+|angeblichen?\s+)?"
+        r"(?:rechtsextrem(?:istisch)?\w*|rechtsradikal\w*|neonazistisch\w*|"
+        r"neonazi\w*|nazi(?!onal)\w*|faschistisch\w*|faschist\w*|"
+        r"identit[äa]r\w*|junge[\-\s]tat)"
+        r"(?:[\-–\s]+)?"
+        r"(?:aktivist(?:in|en)?|kader[ns]?|funktion[äa]r(?:in|s|en)?|"
+        r"politiker(?:in|s|en)?|mitglied(?:s|er)?|anh[äa]nger(?:in|s)?|"
+        r"k[äa]mpfer(?:in|s)?|person|sympathisant(?:in|en)?|"
+        r"szene[\-\s](?:angeh[öo]riger?|mitglied))\b",
+        re.IGNORECASE,
+    ), lambda m: f"{m.group(1)} Privatperson"),
+    # 6. Solitäres Personen-Substantiv "ein Rechtsextremer" / "der Nazi"
+    #    Negative Lookahead: nicht für Bewegung/Partei/Szene/Aufmarsch
+    #    (das sind Organisations-/Event-Begriffe, keine Personen-Etiketten).
+    (re.compile(
+        r"\b(eines?|einer?|den?|der|die|das|einem|einen)\s+"
+        r"(?:bekannten?\s+|mutma[ßs]lichen?\s+)?"
+        r"(?:rechtsextreme[rmns]?|neonazis?|nazis?(?!onal)|"
+        r"faschist(?:en|in)?|rechtsradikale[rmns]?)"
+        r"\b(?!\s+(?:bewegung|partei|szene|aufmarsch|demonstration))",
+        re.IGNORECASE,
+    ), lambda m: f"{m.group(1)} Privatperson"),
+    # 7. "<Ideologie>-<Rolle>" ohne Artikel ("AfD-Politiker", "Nazi-Kader")
+    #    als Satzfragment-Subjekt. Hier ersetzen wir nur das Etikett.
+    (re.compile(
+        r"\b(?:afd|svp|fp[öo]|cdu|csu|spd|fdp|[öo]vp|sp[öo]|npd|junge\s+"
+        r"alternative)[\-–\s]+(funktion[äa]r(?:in|s|en)?|kader[ns]?|"
+        r"politiker(?:in|s|en)?|abgeordnete[rmn]?|mitglied(?:s|er)?|"
+        r"aktivist(?:in|en)?|sprecher(?:in|s)?)",
+        re.IGNORECASE,
+    ), "Person mit politischer Funktion"),
+    (re.compile(
+        r"\b(?:rechtsextrem(?:istisch)?|rechtsradikal|neonazistisch|"
+        r"neonazi|nazi(?!onal)|faschistisch|faschist|identit[äa]r|"
+        r"junge[\-\s]tat)\w*"
+        r"[\-–\s]+(aktivist(?:in|en)?|kader[ns]?|funktion[äa]r(?:in|s|en)?|"
+        r"politiker(?:in|s|en)?|mitglied(?:s|er)?|anh[äa]nger(?:in|s)?)",
+        re.IGNORECASE,
+    ), "Privatperson"),
+    # 8. Solo-Substantive in der Ziel-Rolle, z.B. "Ein Nazi verhaftet"
+    (re.compile(
+        r"\b(ein|der|die|das|den)\s+"
+        r"(?:rechtsextremer?|neonazi|nazi(?!onal)|faschist)\b"
+        r"(?!\s+(?:bewegung|partei|szene|aufmarsch))",
+        re.IGNORECASE,
+    ), lambda m: f"{'eine' if m.group(1).lower() == 'ein' else 'die'} Privatperson"),
+]
+
+# Genitiv-/Akkusativ-Korrekturen nach Geschlechtswechsel: ein maskulines
+# "eines/einen <Subjekt>" wird in der Neutralisierung zu femininem
+# "einer <Person>" — der Artikel muss mitwandern.
+_NEUTRALIZE_GENDER_FIXUPS = [
+    (re.compile(r"\beines\s+(Privatperson|Person\s+mit\s+politischer\s+Funktion)\b"),
+     r"einer \1"),
+    (re.compile(r"\beinen\s+(Privatperson|Person\s+mit\s+politischer\s+Funktion)\b"),
+     r"eine \1"),
+    (re.compile(r"\bein\s+(Privatperson|Person\s+mit\s+politischer\s+Funktion)\b"),
+     r"eine \1"),
+    (re.compile(r"\beinem\s+(Privatperson|Person\s+mit\s+politischer\s+Funktion)\b"),
+     r"einer \1"),
+    (re.compile(r"\bden\s+(Privatperson|Person\s+mit\s+politischer\s+Funktion)\b"),
+     r"die \1"),
+    (re.compile(r"\bdes\s+(Privatperson|Person\s+mit\s+politischer\s+Funktion)\b"),
+     r"der \1"),
+    (re.compile(r"\bdem\s+(Privatperson|Person\s+mit\s+politischer\s+Funktion)\b"),
+     r"der \1"),
+]
+
+def neutralize_political_labels(text: str) -> str:
+    """
+    Entferne diffamierende Personen-Etiketten ("rechtsextrem", "Nazi",
+    "AfD-Funktionär" etc.) aus einem Text.
+
+    Wichtige Abgrenzung:
+      - Bekenner- und Akteurs-Bezeichnungen auf der TÄTER-Seite bleiben
+        erhalten ("antifaschistische Gruppe", "Bekennerschreiben") —
+        das ist die Selbst-Beschreibung der Täter, kein Vorwurf an einen
+        Dritten.
+      - Politisch-Motiv-Signale für die Tat-Klassifikation bleiben
+        erhalten (`_POLITICAL_MOTIVE_RE` greift weiter).
+      - Verbleibende Lücken werden im sauberen `clean_description()`-
+        Pass nach diesem Helper kompaktiert.
+    """
+    if not text:
+        return ""
+    out = text
+    for rx, repl in _NEUTRALIZE_PATTERNS:
+        out = rx.sub(repl, out)
+    # Grammatik-Pass: Geschlechts-Übergänge korrigieren
+    for rx, repl in _NEUTRALIZE_GENDER_FIXUPS:
+        out = rx.sub(repl, out)
+    # Cleanup: doppelte Leerzeichen + ", ," → ","
+    out = re.sub(r"\s{2,}", " ", out)
+    out = re.sub(r",\s*[\.,]", ".", out)
+    return out.strip(" ,;")
+
 # Political-motive signal for Sachbeschädigung: without one of these (or a
 # known actor), the incident is treated as non-political vandalism and dropped.
 _POLITICAL_MOTIVE_RE = re.compile(
@@ -3129,14 +3309,15 @@ def save_incident(ai, text, source, url, date_str=None, manual=False):
         summ = fallback_summary(text)
     # Strip activist phrasing AND clamp to 140 chars / 2 sentences — the new
     # high-impact-news style the dashboard renders. Defense-in-depth: even a
-    # too-long Grok output gets trimmed here.
+    # too-long Grok output gets trimmed here. neutralize_political_labels()
+    # blockt vor allen anderen Filtern Verleumdungs-Etiketten gegen Dritte.
     summ = clamp_two_sentences(
-        strip_activist_phrases(redact_pii(summ)),
+        strip_activist_phrases(neutralize_political_labels(redact_pii(summ))),
         140,
     )
 
     d = date_str or datetime.now().strftime("%Y-%m-%d")
-    desc = redact_pii(clean_description(text))[:500]
+    desc = neutralize_political_labels(redact_pii(clean_description(text)))[:500]
     ai["land"] = land_raw  # propagate the corrected value to the INSERT below
 
     try:
@@ -3397,12 +3578,16 @@ def backfill_summaries_and_flags():
     for r in rows:
         desc_in = r["description"] or ""
         summ_in = (r["summary"] or "").strip()
-        desc_out = redact_pii(desc_in)
+        # Defamation-Sanitisation (Commit AB): "rechtsextrem"/"Nazi"-Labels
+        # gegen Privatpersonen aus Altdaten entfernen.
+        desc_out = neutralize_political_labels(redact_pii(desc_in))
         # Re-strip activist phrasing + clamp to 140 chars even for existing
         # rows so the visual tightening is retroactive.
         summ_raw = summ_in or fallback_summary(desc_in)
         summ_out = clamp_two_sentences(
-            strip_activist_phrases(redact_pii(summ_raw)),
+            strip_activist_phrases(
+                neutralize_political_labels(redact_pii(summ_raw))
+            ),
             140,
         )
         prim, hi, tier_new = compute_flags(
