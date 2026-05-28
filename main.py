@@ -519,10 +519,9 @@ def _fetch_via_jina_reader(url, timeout=25):
     (mit Redirect) sind aus Render-IP-Range nicht erreichbar (ConnectTimeout).
     Jina umgeht das, weil sie cleane IPs nutzen.
 
-    Kostenfrei für niedriges Volumen, kein API-Key. Aufruf-Schema:
+    Kostenfrei für niedriges Volumen, kein API-Key nötig. Aufruf-Schema:
         https://r.jina.ai/<full-original-url>
-    Antwort ist Markdown — wir konvertieren es nicht zurück nach HTML
-    (overkill); für Klassifikation reicht Plaintext."""
+    Antwort ist Markdown — für Klassifikation reicht Plaintext."""
     proxy_url = f"https://r.jina.ai/{url}"
     try:
         r = requests.get(
@@ -530,8 +529,6 @@ def _fetch_via_jina_reader(url, timeout=25):
             timeout=timeout,
             headers={
                 "User-Agent": "Mozilla/5.0 LEX-EUROPE-Mirror/2.0",
-                # Jina respektiert dieses Header für nicht-html-zentriertes
-                # Rendering und gibt sauberes Markdown statt JSON zurück.
                 "Accept": "text/markdown, text/plain, */*",
                 "X-Return-Format": "text",
             },
@@ -542,6 +539,60 @@ def _fetch_via_jina_reader(url, timeout=25):
         log.info(f"jina-reader miss {url}: HTTP {r.status_code}, len={len(r.text or '')}")
     except Exception as e:
         log.info(f"jina-reader FAIL {url}: {str(e)[:160]}")
+    return None
+
+def _fetch_via_scrapingbee(url, timeout=30):
+    """ScrapingBee API — Cloudflare/Anti-Bot-Bypass + headless Browser as
+    Service. Benötigt SCRAPINGBEE_API_KEY in ENV. 1000 free credits/month.
+    Aktiv NUR wenn ENV-Var gesetzt — sonst silent skip.
+    Doku: https://www.scrapingbee.com/documentation/"""
+    key = os.getenv("SCRAPINGBEE_API_KEY", "").strip()
+    if not key:
+        return None
+    try:
+        r = requests.get(
+            "https://app.scrapingbee.com/api/v1/",
+            params={
+                "api_key": key,
+                "url": url,
+                "render_js": "false",      # spart credits; barrikade ist SSR
+                "premium_proxy": "true",   # residential IPs — bypasst Cloudflare
+                "country_code": "de",      # DE-IP für DE-zentrierte Site
+            },
+            timeout=timeout,
+        )
+        if r.status_code == 200 and r.text and len(r.text) > 400:
+            log.info(f"scrapingbee HIT für {url} ({len(r.text)}b)")
+            return r.text
+        log.info(f"scrapingbee miss {url}: HTTP {r.status_code}")
+    except Exception as e:
+        log.info(f"scrapingbee FAIL {url}: {str(e)[:160]}")
+    return None
+
+def _fetch_via_scraperapi(url, timeout=30):
+    """ScraperAPI — alternative zu ScrapingBee, gleiches Konzept. 1000
+    free credits/month. Aktiv NUR wenn SCRAPERAPI_KEY in ENV.
+    Doku: https://www.scraperapi.com/documentation/"""
+    key = os.getenv("SCRAPERAPI_KEY", "").strip()
+    if not key:
+        return None
+    try:
+        r = requests.get(
+            "https://api.scraperapi.com/",
+            params={
+                "api_key": key,
+                "url": url,
+                "country_code": "de",
+                "premium": "true",
+            },
+            timeout=timeout,
+        )
+        if r.status_code == 200 and r.text and len(r.text) > 400:
+            log.info(f"scraperapi HIT für {url} ({len(r.text)}b)")
+            return r.text
+        log.info(f"scraperapi miss {url}: HTTP {r.status_code}")
+    except Exception as e:
+        log.info(f"scraperapi FAIL {url}: {str(e)[:160]}")
     return None
 
 def _fetch_via_cloudscraper(url, timeout=25):
@@ -652,10 +703,8 @@ def fetch(url, timeout=25):
             return result
 
     # ── Fallback 3: r.jina.ai Reverse-Reader ─────────────────────
-    # Auch wenn direkter Fetch + cloudscraper am Cloudflare-IP-Block scheitern,
-    # liefert Jina den Inhalt (eigene IP-Range). Greift bei jeder Art von
-    # Block/Timeout, nicht nur 403/429. Wichtig: nutzbar als Markdown-
-    # Plaintext für die Klassifikator-Pipeline.
+    # Funktioniert auch wenn die Render-IP-Range Cloudflare-geblockt ist
+    # (Jina nutzt eigene IP-Range). Kostenfrei, kein API-Key.
     is_connect_err = (last_err is not None and
                       ("ConnectTimeout" in str(last_err) or
                        "Max retries" in str(last_err) or
@@ -665,7 +714,22 @@ def fetch(url, timeout=25):
         if result:
             return result
 
-    # ── Fallback 4: web.archive.org Mirror ───────────────────────
+    # ── Fallback 4: ScrapingBee (NUR wenn SCRAPINGBEE_API_KEY gesetzt) ──
+    # Residential-Proxy + JS-Render-Service. Bypasst Cloudflare zuverlässig.
+    # 1000 free credits/Monat (~30 pro Tag). User-Direktive 2026-05-28:
+    # Render-Setup robust gegen Cloudflare-Block machen.
+    if last_status in (403, 429, 503) or is_connect_err:
+        result = _fetch_via_scrapingbee(url, timeout)
+        if result:
+            return result
+
+    # ── Fallback 5: ScraperAPI (alternative wenn SCRAPERAPI_KEY gesetzt) ──
+    if last_status in (403, 429, 503) or is_connect_err:
+        result = _fetch_via_scraperapi(url, timeout)
+        if result:
+            return result
+
+    # ── Fallback 6: web.archive.org Mirror ───────────────────────
     if last_status in (403, 429, 404, 503):
         result = _fetch_via_archive(url, timeout)
         if result:
@@ -11249,39 +11313,29 @@ async def admin_crawler_barrikade_import_id(request: Request, _=Depends(require_
         attempts = []
         full = None
         winning = None
-        # Reihenfolge: beta direct, www direct, jina beta, jina www, jina publish
-        # User: publish ist tot von Render — aber jina kann publish vielleicht.
+        # Reihenfolge: schnellste/günstigste zuerst, teure/langsame zuletzt.
+        # Jeder Eintrag ist (label, fetch-fn) — fetch-fn liefert HTML/Markdown.
+        url_canon = f"https://barrikade.info/article/{aid}"
+        url_beta  = f"https://beta.barrikade.info/article/{aid}"
         targets = [
-            ("beta-direct",    f"https://beta.barrikade.info/article/{aid}"),
-            ("www-direct",     f"https://barrikade.info/article/{aid}"),
-            ("jina-beta",      f"https://r.jina.ai/https://beta.barrikade.info/article/{aid}"),
-            ("jina-www",       f"https://r.jina.ai/https://barrikade.info/article/{aid}"),
-            ("jina-publish",   f"https://r.jina.ai/https://publish.barrikade.info/article/{aid}"),
+            ("beta-direct",  lambda: get_text(url_beta)),
+            ("www-direct",   lambda: get_text(url_canon)),
+            ("jina-beta",    lambda: _fetch_via_jina_reader(url_beta, 20)),
+            ("jina-www",     lambda: _fetch_via_jina_reader(url_canon, 20)),
+            ("scrapingbee",  lambda: _fetch_via_scrapingbee(url_canon, 30)),
+            ("scraperapi",   lambda: _fetch_via_scraperapi(url_canon, 30)),
+            ("archive.org",  lambda: _fetch_via_archive(url_canon, 20)),
         ]
-        for label, t_url in targets:
+        for label, fn in targets:
             try:
-                if label.startswith("jina"):
-                    r = requests.get(t_url, timeout=25, headers={
-                        "User-Agent": "Mozilla/5.0 LEX-EUROPE-Mirror/2.0",
-                        "Accept": "text/markdown, text/plain, */*",
-                        "X-Return-Format": "text",
-                    })
-                    if r.status_code == 200 and r.text and len(r.text) > 200:
-                        full = r.text
-                        winning = label
-                        attempts.append({"label": label, "ok": True, "len": len(r.text)})
-                        break
-                    attempts.append({"label": label, "ok": False, "status": r.status_code,
-                                     "len": len(r.text or "")})
-                else:
-                    t = get_text(t_url)
-                    if t and len(t) > 200:
-                        full = t
-                        winning = label
-                        attempts.append({"label": label, "ok": True, "len": len(t)})
-                        break
-                    attempts.append({"label": label, "ok": False, "len": len(t or ""),
-                                     "reason": "too_short" if t else "empty"})
+                t = fn()
+                if t and len(t) > 200:
+                    full = t
+                    winning = label
+                    attempts.append({"label": label, "ok": True, "len": len(t)})
+                    break
+                attempts.append({"label": label, "ok": False, "len": len(t or ""),
+                                 "reason": "too_short" if t else "empty"})
             except Exception as e:
                 attempts.append({"label": label, "ok": False, "exc": str(e)[:200]})
 
@@ -11337,6 +11391,68 @@ async def admin_crawler_barrikade_import_id(request: Request, _=Depends(require_
 async def admin_grok(_=Depends(require_admin)):
     res = classify("In Berlin-Kreuzberg wurden drei Polizeifahrzeuge in Brand gesetzt. Bekennerschreiben einer militanten autonomen Gruppe.")
     return JSONResponse(res or {"error": "Keine Antwort"})
+
+@app.get("/admin/api/scrape-test")
+async def admin_scrape_test(url: str = "https://barrikade.info/article/7490",
+                            _=Depends(require_admin)):
+    """Live-Diagnose: testet ALLE Fetch-Strategien gegen die übergebene URL
+    und zeigt pro Strategie ok/Status/Bytes. Damit sieht der Operator
+    auf einen Blick welche Pfade aus Render-IP funktionieren — relevant
+    nachdem ENV-Vars (SCRAPINGBEE_API_KEY, SCRAPERAPI_KEY) gesetzt wurden.
+
+    User 2026-05-28: 'sag einfach was ich bei render einstellen muss'.
+    Dieser Endpoint beantwortet das pro Strategie:
+      - direct        → braucht KEINE ENV-Var, aber oft blockiert
+      - cloudscraper  → braucht KEINE ENV-Var, oft blockiert
+      - jina          → KEIN Key nötig (gratis, sofort)
+      - scrapingbee   → braucht SCRAPINGBEE_API_KEY (1000/Mon free)
+      - scraperapi    → braucht SCRAPERAPI_KEY (1000/Mon free)
+      - archive.org   → KEIN Key, langsam
+    """
+    out = {"url": url, "render_region": os.getenv("RENDER_REGION", "unknown"),
+           "env_keys": {
+               "SCRAPINGBEE_API_KEY": bool(os.getenv("SCRAPINGBEE_API_KEY")),
+               "SCRAPERAPI_KEY":      bool(os.getenv("SCRAPERAPI_KEY")),
+               "BARRIKADE_USER":      bool(os.getenv("BARRIKADE_USER")),
+               "BARRIKADE_PASS":      bool(os.getenv("BARRIKADE_PASS")),
+           },
+           "strategies": []}
+    import time as _t
+
+    def _measure(label, fn):
+        t0 = _t.monotonic()
+        try:
+            result = fn()
+            dt = round((_t.monotonic() - t0) * 1000)
+            if result and len(result) > 200:
+                preview = re.sub(r'\s+', ' ', result[:160]).strip()
+                out["strategies"].append({
+                    "label": label, "ok": True, "len": len(result),
+                    "ms": dt, "preview": preview,
+                })
+            else:
+                out["strategies"].append({
+                    "label": label, "ok": False, "ms": dt,
+                    "reason": "empty_or_short", "len": len(result or "")
+                })
+        except Exception as e:
+            dt = round((_t.monotonic() - t0) * 1000)
+            out["strategies"].append({
+                "label": label, "ok": False, "ms": dt,
+                "exc": str(e)[:200]
+            })
+
+    _measure("direct (requests)",   lambda: requests.get(url, timeout=12,
+                                       headers={"User-Agent": "Mozilla/5.0"}).text)
+    _measure("cloudscraper",        lambda: _fetch_via_cloudscraper(url, 15))
+    _measure("jina (r.jina.ai)",    lambda: _fetch_via_jina_reader(url, 20))
+    _measure("scrapingbee",         lambda: _fetch_via_scrapingbee(url, 25))
+    _measure("scraperapi",          lambda: _fetch_via_scraperapi(url, 25))
+    _measure("archive.org mirror",  lambda: _fetch_via_archive(url, 15))
+
+    out["working_count"] = sum(1 for s in out["strategies"] if s.get("ok"))
+    out["working_strategies"] = [s["label"] for s in out["strategies"] if s.get("ok")]
+    return JSONResponse(out)
 
 @app.get("/admin/api/export-csv")
 async def export_csv(_=Depends(require_admin)):
