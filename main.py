@@ -3843,7 +3843,13 @@ def _barrikade_discover_urls():
                 for ux in urls:
                     if ux not in seen:
                         seen.add(ux); found.append(ux)
-                if len(found) >= 30:
+                # Commit AC: keine Early-Stop bei 30 mehr — User-Direktive
+                # "alles crawlen". Wir lassen alle 20 Discovery-Endpoints
+                # durchlaufen und sammeln die volle Liste. Soft-Cap bei 500
+                # damit Pathological-Sitemaps mit 50k URLs nicht den Speicher
+                # auffressen.
+                if len(found) >= 500:
+                    log.info(f"barrikade discover: 500-URL soft-cap erreicht")
                     return found
             except Exception as e:
                 log.info(f"barrikade discover [{host}/{label}] failed: {str(e)[:120]}")
@@ -3873,8 +3879,12 @@ def crawl_barrikade_range(start_id, stop_id):
     # 1) Multi-Domain-Discovery
     discovered = _barrikade_discover_urls()
     if discovered:
-        log.info(f"barrikade: {len(discovered)} URLs from discovery — processing")
-        for link in discovered[:50]:
+        log.info(f"barrikade: {len(discovered)} URLs from discovery — processing ALL")
+        # Commit AC: kein [:50]-Slice mehr — User-Direktive "alles crawlen".
+        # is_seen() pro Hash blockt schon Doppelverarbeitung; das einzige
+        # was wir verlieren ist Lauf-Zeit, was beim einmaligen 12-h-Tick OK
+        # ist. Per-Item sleep 0.4s = max 500 URLs × 0.4s = 200s pro Lauf.
+        for link in discovered:
             try:
                 h = mk_hash(link, link)
                 if is_seen(h): continue
@@ -3890,9 +3900,12 @@ def crawl_barrikade_range(start_id, stop_id):
                 time.sleep(0.4)
             except Exception as e:
                 log.info(f"barrikade link={link}: {str(e)[:100]}")
+        # Commit AC: discovery+ID-sweep ergänzen sich jetzt, statt einer
+        # den anderen abzulösen. Wenn Discovery 60 URLs fand, brauchen wir
+        # trotzdem den ID-Sweep um historische Lücken zu schließen. Daher
+        # KEIN Early-Return mehr.
         if inserted > 0:
-            log.info(f"barrikade discovery path saved {inserted} new incidents")
-            return inserted
+            log.info(f"barrikade discovery path saved {inserted} new incidents — proceeding to ID sweep")
 
     # 2) ID-Sweep über beide Domains
     misses = 0
@@ -3927,7 +3940,11 @@ def crawl_barrikade_range(start_id, stop_id):
                 log.info(f"barrikade {host}/article/{aid}: {str(e)[:100]}")
         if article_text is None:
             misses += 1
-            if misses >= 40: break
+            # Commit AC: misses-Cap von 40 auf 250 erhöht — User-Direktive
+            # "alles crawlen, aktuell gehen nur 500 Einträge". Bei lückigem
+            # ID-Raum (z.B. nach Massen-Löschungen) waren wir vorher viel
+            # zu früh ausgestiegen.
+            if misses >= 250: break
             time.sleep(0.2)
             continue
         h = mk_hash(article_url, article_text)
@@ -4485,12 +4502,15 @@ def run_crawler(force=False):
     total = 0
     log.info("══ CRAWLER START ══")
     try:
-        # 1. Barrikade: sweep latest 80 article IDs
+        # 1. Barrikade: sweep latest 400 article IDs (Commit AC: war 80,
+        # User-Direktive "alles crawlen"). 400 IDs × 0.6s = ~4 min Worst-Case
+        # bei voll besetztem ID-Raum; mit dem 250-Misses-Abbruch bleibt das
+        # auch bei dünnem ID-Raum beschränkt.
         log.info("Barrikade live sweep...")
         latest = barrikade_latest_id()
         saved_latest = int(meta_get("b_live_max") or 0)
         if latest > saved_latest:
-            n = crawl_barrikade_range(latest, max(saved_latest, latest - 80))
+            n = crawl_barrikade_range(latest, max(saved_latest, latest - 400))
             meta_set("b_live_max", latest)
             total += n
             log.info(f"Barrikade live: +{n}")
@@ -8548,15 +8568,56 @@ async def admin_crawler_barrikade_discover(_=Depends(require_admin)):
 async def admin_crawler_barrikade_run(bg: BackgroundTasks, _=Depends(require_admin)):
     """Triggert einen Discovery-Run gegen barrikade.info im Hintergrund.
     Ergebnis ist später in /admin/api/status (running flag) bzw. der
-    incidents-DB sichtbar."""
+    incidents-DB sichtbar.
+
+    Commit AC: Range von 50 auf 400 IDs vergrößert — User-Direktive
+    'alles crawlen'. Mit dem 250-Misses-Abbruch im crawl_barrikade_range
+    bleibt das auch bei dünnem ID-Raum beschränkt."""
     def _run():
         try:
-            n = crawl_barrikade_range(barrikade_latest_id(), barrikade_latest_id() - 50)
+            latest = barrikade_latest_id()
+            n = crawl_barrikade_range(latest, max(1, latest - 400))
             log.info(f"manual barrikade run: {n} new incidents")
         except Exception as e:
             log.warning(f"manual barrikade run failed: {e}")
     bg.add_task(_run)
     return JSONResponse({"ok": True, "status": "Discovery-Run gestartet"})
+
+
+@app.post("/admin/api/crawler/barrikade-deep-crawl")
+async def admin_crawler_barrikade_deep(bg: BackgroundTasks, _=Depends(require_admin)):
+    """Commit AC: Voller historischer Sweep — durchläuft den gesamten
+    Article-ID-Raum von der aktuellen latest_id bis ID=1. Läuft im
+    Hintergrund (kann mehrere Stunden dauern), respektiert den 250-
+    Misses-Abbruch pro Range-Chunk. Resümiert pro 800-ID-Chunk und setzt
+    `hist_b_curr` so dass parallele run_historical()-Aufrufe nicht in die
+    Quere kommen.
+
+    User-Direktive: 'wir wollen alles crawlen, aktuell gehen nur 500
+    Einträge' — dieser Endpoint öffnet die volle Historie auf Knopfdruck.
+    """
+    def _deep():
+        try:
+            latest = barrikade_latest_id()
+            total = 0
+            chunk = 800
+            curr = latest
+            while curr > 1:
+                stop = max(1, curr - chunk)
+                log.info(f"barrikade DEEP: {curr}→{stop}")
+                n = crawl_barrikade_range(curr, stop)
+                total += n
+                log.info(f"barrikade DEEP chunk done: +{n} (running total {total})")
+                meta_set("hist_b_curr", stop - 1)
+                if stop <= 1:
+                    break
+                curr = stop - 1
+            log.info(f"barrikade DEEP crawl finished: {total} new incidents")
+        except Exception as e:
+            log.warning(f"deep barrikade crawl failed: {e}")
+    bg.add_task(_deep)
+    return JSONResponse({"ok": True,
+                         "status": "Deep-Crawl gestartet (volle Historie, läuft im Hintergrund)"})
 
 @app.post("/admin/api/grok-test")
 async def admin_grok(_=Depends(require_admin)):
