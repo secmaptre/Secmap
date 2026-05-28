@@ -357,10 +357,13 @@ except Exception as _e:
     _scraper = None
     _HAS_CLOUDSCRAPER = False
 
-# Barrikade-Schwester-Domains. publish.barrikade.info hostet das gleiche
-# Drupal-Backend wie www, aber typischerweise mit permissiverer Anti-Bot-
-# Konfiguration. Discovery probiert beide; was durchgeht, kommt rein.
-_BARRIKADE_DOMAINS = ("barrikade.info", "publish.barrikade.info")
+# Barrikade-Schwester-Domains. publish.barrikade.info ist das SPIP-Editor-
+# Backend (für authed Pull), beta.barrikade.info ist ein zusätzlicher
+# Front-Mirror den der User 2026-05-28 nannte ("versuch mal
+# beta.barrikade.info/article/7490"). Alle drei teilen denselben
+# Article-ID-Raum. Discovery + ID-Sweep probieren alle der Reihe nach
+# durch — was durchgeht, kommt rein. Hash-Dedup verhindert Doppel-Saves.
+_BARRIKADE_DOMAINS = ("beta.barrikade.info", "barrikade.info", "publish.barrikade.info")
 
 # Candidate-Pfade für die Discovery-Probe (RSS/Atom/Sitemap/Homepage).
 # Wird vom Admin-Diagnose-Endpoint genutzt, der pro Domain alle Pfade
@@ -383,6 +386,7 @@ _BARRIKADE_DISCOVERY_PATHS = [
 _CLOUDFLARE_HOSTS = {
     "barrikade.info",
     "publish.barrikade.info",
+    "beta.barrikade.info",
     "linksunten.indymedia.org",  # historisch geblockt; cloudscraper hilft
 }
 
@@ -4974,7 +4978,12 @@ def barrikade_latest_id():
     """Ermittelt die höchste Article-ID auf barrikade.info via Homepage-Scrape.
     Versucht BEIDE URL-Patterns (kanonisch /article/<id> UND slug-rewritten
     /<slug>-<id>) sowie verschiedene Discovery-Seiten."""
+    # beta.barrikade.info zuerst — User 2026-05-28: "versuch mal beta...
+    # und runterzählen". Falls beta antwortet, sind die IDs identisch zum
+    # www-Mirror, aber die Anti-Bot-Konfig ist meist permissiver.
     candidates = [
+        "https://beta.barrikade.info/",
+        "https://beta.barrikade.info/?lang=de",
         "https://barrikade.info/",
         "https://barrikade.info/?lang=de",
         "https://barrikade.info/spip.php?page=sommaire",
@@ -4993,12 +5002,36 @@ def barrikade_latest_id():
                 aid = int(m.group(2))
                 if 100 <= aid <= 99999:
                     all_ids.add(aid)
+            # Mehrere zusätzliche Patterns: JSON-Body, Open-Graph, Meta-Tags
+            for m in re.finditer(r'"id"\s*:\s*"?(\d{4,5})"?', html):
+                aid = int(m.group(1))
+                if 1000 <= aid <= 99999:
+                    all_ids.add(aid)
+            for m in re.finditer(r'-(\d{4,5})\.html?', html):
+                aid = int(m.group(1))
+                if 1000 <= aid <= 99999:
+                    all_ids.add(aid)
             log.info(f"barrikade_latest_id [{url}] → {len(all_ids)} IDs total (max={max(all_ids) if all_ids else 0})")
         except Exception as e:
             log.info(f"barrikade_latest_id [{url}] err: {str(e)[:120]}")
         if len(all_ids) >= 20: break  # ausreichend für max-Detection
     if all_ids:
         return max(all_ids)
+    # Fallback: nutze die zuletzt-bekannte ID aus der DB, sonst 7600.
+    # User-Hinweis 2026-05-28: articles 7503/7510/5247 fehlen — der
+    # Default 7600 stimmte ungefähr, war aber statisch. Wenn der echte
+    # Site-Probe scheitert, peilen wir lieber das DB-Maximum + 50 an.
+    try:
+        row = db.execute(
+            "SELECT MAX(CAST(SUBSTR(url, INSTR(url,'/article/')+9) AS INTEGER)) AS mx "
+            "FROM incidents WHERE url LIKE '%barrikade.info/article/%'"
+        ).fetchone()
+        if row and row["mx"] and row["mx"] > 1000:
+            anchor = int(row["mx"]) + 50
+            log.warning(f"barrikade_latest_id: site-probe failed, DB-anchor max+50 = {anchor}")
+            return anchor
+    except Exception:
+        pass
     log.warning("barrikade_latest_id: keine IDs gefunden, default 7600")
     return 7600
 
@@ -5042,306 +5075,6 @@ def _barrikade_normalize_url(raw_url):
         if 1 <= aid <= 99999:
             return (f"https://barrikade.info/article/{aid}", aid)
     return None
-
-def _barrikade_wayback_cdx_discover(max_results=200, timeout=20):
-    """Discover barrikade.info article URLs via the Wayback Machine CDX API.
-
-    Diese Strategie hat eine ENORME Wahrscheinlichkeit zu funktionieren, weil
-    archive.org NICHT hinter Cloudflare liegt und sehr Bot-friendly ist. Die
-    CDX-API liefert Listen aller jemals archivierten URLs, gefiltert per Glob.
-
-    URL-Pattern: https://web.archive.org/cdx/search/cdx?url=barrikade.info/article/*
-                 &output=json&limit=N&from=YYYYMMDD&filter=statuscode:200
-
-    Returns: Liste kanonischer barrikade.info-Article-URLs."""
-    found = []
-    seen = set()
-    # Suche nach Snapshots ab 2023 (relevanter Zeitraum), 200er-Status (echte Artikel,
-    # keine 404). url=barrikade.info/article/* matcht beide URL-Patterns.
-    cdx_targets = [
-        # Klassisches /article/<id> Pattern, viele Snapshots vorhanden
-        "barrikade.info/article/*",
-        # URL-rewritten /<slug>-<id> Pattern — separat abgreifen
-        "barrikade.info/*-*",
-    ]
-    for target in cdx_targets:
-        try:
-            r = session.get(
-                "https://web.archive.org/cdx/search/cdx",
-                params={
-                    "url": target,
-                    "output": "json",
-                    "limit": max_results // len(cdx_targets) + 50,
-                    "from": "20230101",
-                    "filter": "statuscode:200",
-                    "collapse": "urlkey",  # eine Zeile pro eindeutiger URL
-                    "fl": "original",       # nur die original-URL zurückgeben
-                },
-                timeout=timeout,
-            )
-            if r.status_code != 200:
-                log.info(f"barrikade CDX [{target}] HTTP {r.status_code}")
-                continue
-            data = r.json()
-            # Erste Zeile ist Header ("original"). Strikte URL-Normalisierung:
-            # CDX enthält oft Müll-URLs wie /article/2283Reitschule oder
-            # /article/2268.05.06.2019 — _barrikade_normalize_url lehnt die ab.
-            n_added = 0
-            for row in data[1:] if data else []:
-                if not row: continue
-                raw = row[0] if isinstance(row, list) else row
-                norm = _barrikade_normalize_url(raw)
-                if not norm: continue
-                clean_url, aid = norm
-                if clean_url not in seen and len(seen) < max_results:
-                    seen.add(clean_url); found.append(clean_url); n_added += 1
-            log.info(f"barrikade CDX [{target}] → {n_added} clean URLs added (total: {len(found)})")
-        except Exception as e:
-            log.info(f"barrikade CDX [{target}] err: {str(e)[:120]}")
-        if len(found) >= max_results: break
-
-    # Newest-first — sortiere absteigend nach Article-ID (höhere ID = neuer).
-    # Da wir nur normalisierte URLs `/article/<id>` haben, ist die ID-Extraktion
-    # sicher und nicht mehr gierig.
-    def _id_key(u):
-        m = re.search(r"/article/(\d{3,6})(?:[/?#]|$)", u)
-        return int(m.group(1)) if m else 0
-    found.sort(key=_id_key, reverse=True)
-    return found
-
-def _barrikade_archive_today_fetch(url, timeout=15):
-    """Fallback zu archive.today (archive.ph/archive.is) — separates Archiv
-    von Wayback Machine. Wenn Wayback keinen Snapshot hat, hat archive.today
-    möglicherweise einen, weil andere Crawler dort archivieren.
-
-    archive.today hat keine offene API, aber https://archive.ph/newest/<URL>
-    redirected zum neuesten Snapshot. Wir folgen Redirects und nehmen den Body."""
-    archive_base = "https://archive.ph"
-    snap_url = f"{archive_base}/newest/{url}"
-    try:
-        # archive.today macht oft 302 redirect zum gespeicherten Snapshot
-        r = session.get(snap_url, timeout=timeout, allow_redirects=True,
-                        headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"})
-        if r.status_code == 200 and len(r.text) > 500:
-            log.info(f"barrikade archive.today HIT for {url} ({len(r.text)}b)")
-            return r.text
-        # Fallback: ohne /newest/ direkt mit URL
-        snap_url2 = f"{archive_base}/{url}"
-        r2 = session.get(snap_url2, timeout=timeout, allow_redirects=True,
-                         headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"})
-        if r2.status_code == 200 and len(r2.text) > 500:
-            log.info(f"barrikade archive.today (direct) HIT for {url} ({len(r2.text)}b)")
-            return r2.text
-    except Exception as e:
-        log.info(f"barrikade archive.today {url}: {str(e)[:120]}")
-    return None
-
-def _barrikade_search_engine_discover_with_snippets(max_results=60, per_query_timeout=8, overall_budget_s=25):
-    """Wie _barrikade_search_engine_discover, aber liefert (url, title, snippet)
-    Tupel. Das Snippet ist OFT genug Content um den Artikel zu klassifizieren
-    OHNE die Original-Seite abrufen zu müssen — perfekter Cloudflare-Bypass."""
-    _t_start = time.time()
-    queries = [
-        "site:barrikade.info 2026",
-        "site:barrikade.info 2025",
-        "site:barrikade.info brandanschlag OR sabotage OR anschlag",
-        "site:barrikade.info bekennerschreiben",
-        "site:barrikade.info aktion antifa",
-        "barrikade.info linksautonom 2025 2026",
-    ]
-    found_dict = {}  # url → {title, snippet}
-
-    def _norm_url(u):
-        n = _barrikade_normalize_url(u)
-        return n[0] if n else None
-
-    # DuckDuckGo HTML — parse result-list structured (title + snippet + URL).
-    # DDG's HTML format:
-    #   <a class="result__a" href="...">TITLE</a>
-    #   <a class="result__snippet">...</a>  oder  <div class="result__snippet">...</div>
-    for q in queries:
-        if (time.time() - _t_start) > overall_budget_s: break
-        try:
-            r = session.get(
-                "https://html.duckduckgo.com/html/",
-                params={"q": q},
-                timeout=per_query_timeout,
-                headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
-                allow_redirects=True,
-            )
-            if r.status_code != 200: continue
-            soup = BeautifulSoup(r.text, "html.parser")
-            results = soup.select("div.result, div.web-result, div.result__body")
-            for res in results[:30]:
-                a = res.select_one("a.result__a") or res.select_one("a")
-                if not a: continue
-                href = a.get("href", "")
-                # DDG wraps with /l/?uddg=<encoded>
-                if "uddg=" in href:
-                    try:
-                        from urllib.parse import unquote, parse_qs, urlparse
-                        qs = parse_qs(urlparse(href).query)
-                        href = unquote(qs.get("uddg", [href])[0])
-                    except Exception: pass
-                norm = _norm_url(href)
-                if not norm: continue
-                title = a.get_text(strip=True)
-                snippet_el = res.select_one(".result__snippet, .result-snippet")
-                snippet = snippet_el.get_text(" ", strip=True) if snippet_el else ""
-                if norm not in found_dict and len(found_dict) < max_results:
-                    found_dict[norm] = {"title": title, "snippet": snippet, "src": "ddg"}
-            log.info(f"barrikade DDG-snip[{q!r}] → {len([k for k in found_dict if found_dict[k]['src']=='ddg'])} URLs cumulative")
-        except Exception as e:
-            log.info(f"barrikade DDG-snip[{q!r}] err: {str(e)[:120]}")
-        if len(found_dict) >= max_results: break
-
-    # Bing RSS — Atom-feed format mit title + description + link
-    if len(found_dict) < max_results and (time.time() - _t_start) < overall_budget_s:
-        for q in queries[:4]:
-            if (time.time() - _t_start) > overall_budget_s: break
-            try:
-                r = session.get(
-                    "https://www.bing.com/search",
-                    params={"q": q, "format": "rss", "count": 50},
-                    timeout=per_query_timeout,
-                )
-                if r.status_code != 200: continue
-                # Parse RSS items — lxml ist optimal, html.parser ist
-                # stdlib-Fallback wenn lxml im Image fehlt.
-                try:
-                    soup = BeautifulSoup(r.text, "xml")
-                except Exception:
-                    soup = BeautifulSoup(r.text, "html.parser")
-                items = soup.find_all("item")
-                if not items:
-                    items = soup.find_all("entry")  # Atom
-                for it in items[:30]:
-                    link_el = it.find("link")
-                    title_el = it.find("title")
-                    desc_el = it.find("description") or it.find("summary") or it.find("content")
-                    href = ""
-                    if link_el:
-                        href = link_el.get_text(strip=True) or link_el.get("href","")
-                    norm = _norm_url(href)
-                    if not norm: continue
-                    title = title_el.get_text(strip=True) if title_el else ""
-                    snippet = desc_el.get_text(" ", strip=True) if desc_el else ""
-                    if norm not in found_dict and len(found_dict) < max_results:
-                        found_dict[norm] = {"title": title, "snippet": snippet, "src": "bing"}
-                log.info(f"barrikade Bing-snip[{q!r}] → {len(found_dict)} URLs cumulative")
-            except Exception as e:
-                log.info(f"barrikade Bing-snip[{q!r}] err: {str(e)[:120]}")
-            if len(found_dict) >= max_results: break
-
-    # Sortieren by article-ID DESC (neuere zuerst)
-    result = []
-    for url, meta in found_dict.items():
-        m = re.search(r"/article/(\d{3,6})", url)
-        aid = int(m.group(1)) if m else 0
-        result.append({"url": url, "aid": aid, "title": meta["title"],
-                       "snippet": meta["snippet"], "src": meta["src"]})
-    result.sort(key=lambda x: x["aid"], reverse=True)
-    return result
-
-def _barrikade_search_engine_discover(max_results=60, per_query_timeout=8, overall_budget_s=25):
-    """Discover barrikade.info article URLs via search engines.
-
-    Strategie: Statt direkt barrikade.info anzufragen (was an Cloudflare
-    scheitert wenn unsere IP geblockt ist), fragen wir DuckDuckGo und
-    Bing nach 'site:barrikade.info'. Die Suchmaschinen haben die Site
-    bereits indexiert und liefern Article-URLs in den Results — ganz ohne
-    dass wir barrikade.info berühren.
-
-    Funktioniert auch auf Render.com wenn die direkte Verbindung scheitert.
-    overall_budget_s: hartes Gesamt-Zeitbudget — bricht ab wenn überschritten,
-    damit Diagnose-Aufrufe nicht in den Timeout laufen."""
-    _t_start = time.time()
-    # Mehrere Queries für maximale Abdeckung: Jahre + spezifische Begriffe
-    # = breiteres Set an indizierten URLs.
-    queries = [
-        "site:barrikade.info 2026",
-        "site:barrikade.info 2025",
-        "site:barrikade.info brandanschlag OR sabotage",
-        "site:barrikade.info bekennerschreiben",
-        "site:barrikade.info aktion",
-        "site:publish.barrikade.info",
-    ]
-    found = []
-    seen = set()
-
-    def _extract_article_urls(html, body_max=800000):
-        """Match BOTH URL-Schemas: /article/<n> (canonical) und /<slug>-<n> (rewritten).
-        Berücksichtigt zusätzlich URL-encoded Varianten (DDG verpackt Result-URLs
-        als ?uddg=<URL-encoded>, Bing teilweise auch)."""
-        out = []
-        if not html: return out
-        body = html[:body_max]
-        # Verschiedene Encoding-Varianten: roh, URL-encoded, doppel-URL-encoded
-        try:
-            from urllib.parse import unquote
-            body_decoded = unquote(unquote(body))  # einmal für DDG/Bing-Wrapper, zweimal sicherheitshalber
-            body_combined = body + "\n" + body_decoded
-        except Exception:
-            body_combined = body
-        # Canonical numeric pattern
-        for m in re.finditer(r'https?://(?:www\.)?(?:publish\.)?barrikade\.info/article/(\d+)', body_combined):
-            out.append(f"https://barrikade.info/article/{m.group(1)}")
-        # URL-rewritten slug pattern: /<title-slug>-<id>
-        for m in re.finditer(r'https?://(?:www\.)?barrikade\.info/([A-Za-z0-9][A-Za-z0-9_\-]+-\d{3,6})(?:["\'?#\s/&]|$)', body_combined):
-            slug = m.group(1)
-            if slug.startswith(("tag-", "rubrique-", "page-")): continue
-            out.append(f"https://barrikade.info/{slug}")
-        # Dedupe while preserving order
-        seen_local = set(); deduped = []
-        for u in out:
-            if u not in seen_local:
-                seen_local.add(u); deduped.append(u)
-        return deduped
-
-    # ── DuckDuckGo HTML interface (kein API-Key nötig) ────────────────
-    for q in queries:
-        if (time.time() - _t_start) > overall_budget_s: break
-        try:
-            r = session.get(
-                "https://html.duckduckgo.com/html/",
-                params={"q": q},
-                timeout=per_query_timeout,
-                headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
-                allow_redirects=True,
-            )
-            if r.status_code != 200:
-                log.info(f"barrikade DDG[{q!r}] HTTP {r.status_code}")
-                continue
-            ids = _extract_article_urls(r.text)
-            log.info(f"barrikade DDG[{q!r}] → {len(ids)} URLs")
-            for u in ids:
-                if u not in seen and len(seen) < max_results:
-                    seen.add(u); found.append(u)
-        except Exception as e:
-            log.info(f"barrikade DDG[{q!r}] err: {str(e)[:120]}")
-        if len(found) >= max_results: break
-
-    # ── Bing RSS (returns XML, kein Captcha) ──────────────────────────
-    if len(found) < max_results and (time.time() - _t_start) < overall_budget_s:
-        for q in queries[:3]:
-            if (time.time() - _t_start) > overall_budget_s: break
-            try:
-                r = session.get(
-                    "https://www.bing.com/search",
-                    params={"q": q, "format": "rss", "count": 50},
-                    timeout=per_query_timeout,
-                )
-                if r.status_code != 200: continue
-                ids = _extract_article_urls(r.text)
-                log.info(f"barrikade Bing[{q!r}] → {len(ids)} URLs")
-                for u in ids:
-                    if u not in seen and len(seen) < max_results:
-                        seen.add(u); found.append(u)
-            except Exception as e:
-                log.info(f"barrikade Bing[{q!r}] err: {str(e)[:120]}")
-            if len(found) >= max_results: break
-
-    return found
 
 def _barrikade_spip_public_discover(max_results=80, per_request_timeout=6, overall_budget_s=30):
     """Try the SPIP-specific public endpoints on BOTH domains.
@@ -5410,35 +5143,6 @@ def _barrikade_spip_public_discover(max_results=80, per_request_timeout=6, overa
         if len(found) >= max_results: break
     return found
 
-def _barrikade_wayback_fetch(url, timeout=25):
-    """Wenn der direkte Fetch von barrikade.info blockiert ist (Cloudflare 403),
-    versuchen wir das Web-Archiv (archive.org Wayback Machine) als Backup-Quelle.
-    Wayback ist nicht hinter Cloudflare und cached die Inhalte oft."""
-    try:
-        # 1) Frage Wayback nach dem neuesten Snapshot
-        avail = session.get(
-            "https://archive.org/wayback/available",
-            params={"url": url},
-            timeout=15,
-        )
-        if avail.status_code != 200: return None
-        data = avail.json()
-        snap = (data or {}).get("archived_snapshots", {}).get("closest", {})
-        if not snap or not snap.get("available"): return None
-        snap_url = snap.get("url", "")
-        if not snap_url: return None
-        # 2) Hole den Snapshot. wayback liefert oft mit ?if_=identity ungefiltert
-        if "id_" not in snap_url:
-            # Ersetze "/web/<ts>/" durch "/web/<ts>id_/" → liefert Roh-HTML ohne wayback-Toolbar
-            snap_url = re.sub(r"/web/(\d+)/", r"/web/\1id_/", snap_url)
-        r = session.get(snap_url, timeout=timeout)
-        if r.status_code == 200 and len(r.text) > 200:
-            log.info(f"barrikade wayback HIT for {url} → {snap_url} ({len(r.text)}b)")
-            return r.text
-    except Exception as e:
-        log.info(f"barrikade wayback {url}: {str(e)[:120]}")
-    return None
-
 def _barrikade_discover_urls():
     """Discover recent barrikade article URLs via multiple strategies.
     Returns a list of unique URLs sorted newest-first (best-effort).
@@ -5471,6 +5175,10 @@ def _barrikade_discover_urls():
         # Schwester-Host publish.barrikade.info (typischerweise permissivere Anti-Bot)
         ("publish-feed",  "https://publish.barrikade.info/feed"),
         ("publish-home",  "https://publish.barrikade.info/"),
+        # beta-Domain (User 2026-05-28)
+        ("beta-feed",     "https://beta.barrikade.info/feed"),
+        ("beta-home",     "https://beta.barrikade.info/"),
+        ("beta-rss",      "https://beta.barrikade.info/rss"),
     ]
     found = []  # preserve order
     seen  = set()
@@ -5537,30 +5245,10 @@ def _barrikade_discover_urls():
         except Exception as e:
             log.info(f"barrikade discover: SPIP-public failed: {str(e)[:120]}")
 
-    if len(found) < 15:
-        log.info(f"barrikade discover: nur {len(found)} URLs — versuche Search-Engine-Discovery")
-        try:
-            extra = _barrikade_search_engine_discover(max_results=40)
-            for u in extra:
-                if u not in seen:
-                    seen.add(u); found.append(u)
-            log.info(f"barrikade discover: Search-Engine ergänzt → {len(found)} URLs total")
-        except Exception as e:
-            log.info(f"barrikade discover: Search-Engine failed: {str(e)[:120]}")
-
-    # Wayback CDX-Discovery — DAS ist der goldene Pfad wenn Cloudflare alle
-    # Direkt-Strategien blockiert. archive.org ist nicht hinter CF und kennt
-    # tausende archivierte barrikade.info-Artikel.
-    if len(found) < 30:
-        log.info(f"barrikade discover: nur {len(found)} URLs — versuche Wayback CDX")
-        try:
-            extra = _barrikade_wayback_cdx_discover(max_results=200, timeout=15)
-            for u in extra:
-                if u not in seen:
-                    seen.add(u); found.append(u)
-            log.info(f"barrikade discover: Wayback CDX ergänzt → {len(found)} URLs total")
-        except Exception as e:
-            log.info(f"barrikade discover: Wayback CDX failed: {str(e)[:120]}")
+    # User 2026-05-28: alle externen Discovery-Quellen (DDG/Bing/Wayback)
+    # entfernt — sie lieferten konsequent 0 URLs und blockierten Crawl-
+    # Cycles. Verbleibende Pfade: RSS/Atom/Sitemap auf den Barrikade-
+    # Domains + SPIP-public.
 
     return found
 
@@ -5940,19 +5628,9 @@ def _fetch_article_multi(sess, link, article_id, *, capture_diag=False):
             _add(label, ok=False, exc=str(e)[:120])
             last_err = f"{label}: {str(e)[:80]}"
 
-    # ── Wayback Machine als allerletzter Fallback ──
-    try:
-        wb = _barrikade_wayback_fetch(link or f"https://barrikade.info/article/{article_id}", timeout=10)
-        if wb:
-            full = _extract_body(wb)
-            if full:
-                _add("wayback", ok=True, len=len(full))
-                return full, "wayback"
-            _add("wayback", ok=False, reason="no_body_extracted", html_len=len(wb))
-        else:
-            _add("wayback", ok=False, reason="no_snapshot")
-    except Exception as e:
-        _add("wayback", ok=False, exc=str(e)[:120])
+    # User 2026-05-28: "mach ohne wayback ist zu buggy" — Wayback-Fallback
+    # an dieser Stelle gestrichen. _crawl_barrikade_wayback_only steht
+    # weiter als separater Admin-Endpoint zur Verfügung.
 
     if diag_steps is not None:
         return None, {"error": last_err, "steps": diag_steps}
@@ -5962,13 +5640,18 @@ def _crawl_barrikade_full(verbose=False, max_articles=200, start_id=None, end_id
                           progress_callback=None):
     """ECHTER Full-Crawl: systematische ID-Iteration durch barrikade.info.
 
-    Im Gegensatz zum Wayback-Only-Pfad arbeitet das hier mit der
-    LIVE-Site (barrikade.info ist von Render erreichbar lt. User-Log).
-    Für jede ID wird in dieser Reihenfolge versucht:
-      1) Direct cloudscraper (barrikade.info/article/<id>) — Primary
-      2) Wayback Machine snapshot — Fallback wenn direct 404 oder leer
-      3) archive.today snapshot — Zweit-Archiv-Fallback
-      4) Search-Snippet aus DDG/Bing — letzter Notnagel
+    User-Hinweis 2026-05-28: "mach ohne wayback ist zu buggy und nur 1/10
+    ist dort eingetragen". Wayback + archive.today aus dem Default-Pfad
+    entfernt — beide hatten Timeout-Quoten >80% und blockierten den
+    Crawler in 15s-Schritten. Direct cloudscraper-Fetch ist der einzige
+    schnelle Pfad; bei Fehlschlag fällt der Code auf den preloaded
+    Search-Snippet (DDG/Bing) zurück, sofern vorhanden — das gibt zumindest
+    Titel+Snippet zur Klassifikation.
+    Reihenfolge:
+      1) Direct cloudscraper (barrikade.info/article/<id>)
+      2) Search-Snippet aus preloaded DDG/Bing-Index als Notnagel
+    Wayback bleibt im separaten Admin-Endpoint `barrikade-wayback-only`
+    falls explizit gewollt — aus dem Default-Pfad ist er raus.
 
     start_id: höchste ID zu versuchen (None=auto via barrikade_latest_id)
     end_id: niedrigste ID (None=start_id-max_articles)
@@ -5976,24 +5659,13 @@ def _crawl_barrikade_full(verbose=False, max_articles=200, start_id=None, end_id
     progress_callback(dict) → Live-Updates an UI"""
     url_results = []
     inserted = 0
-    fetch_counter = {"direct": 0, "wayback": 0, "archive_today": 0, "snippet": 0, "failed": 0}
+    fetch_counter = {"direct": 0, "failed": 0}
 
     if start_id is None:
         start_id = barrikade_latest_id()
         log.info(f"barrikade full-crawl: auto-detected latest_id={start_id}")
     if end_id is None:
         end_id = max(1, start_id - max_articles)
-
-    # Optional: Search-Snippets-Preload für letzte Fallback-Quelle
-    search_meta = {}
-    try:
-        snip_results = _barrikade_search_engine_discover_with_snippets(
-            max_results=80, per_query_timeout=6, overall_budget_s=20)
-        for r in snip_results:
-            search_meta[r["url"]] = {"title": r["title"], "snippet": r["snippet"], "src": r["src"]}
-        log.info(f"barrikade full-crawl: {len(search_meta)} search-snippets preloaded")
-    except Exception as e:
-        log.info(f"barrikade full-crawl: search-snippet preload err: {str(e)[:120]}")
 
     log.info(f"barrikade full-crawl: scanning IDs {start_id} → {end_id} (max {max_articles} tries)")
     if progress_callback:
@@ -6046,58 +5718,6 @@ def _crawl_barrikade_full(verbose=False, max_articles=200, start_id=None, end_id
                     log.info(f"barrikade direct id={aid} HTTP {code}")
             except Exception as e:
                 log.info(f"barrikade direct id={aid}: {str(e)[:100]}")
-
-            # 2) Wayback Snapshot wenn direct nichts
-            if not full:
-                try:
-                    wb = _barrikade_wayback_fetch(link_canonical, timeout=12)
-                    if wb:
-                        soup = BeautifulSoup(wb, "html.parser")
-                        for s in soup(["script","style","nav","footer","header","aside","form"]):
-                            s.decompose()
-                        for sel in ["#wm-ipp","#wm-ipp-base","#wm-ipp-print"]:
-                            for el in soup.select(sel): el.decompose()
-                        content_el = (soup.select_one("div.texte-article") or
-                                      soup.select_one("article") or
-                                      soup.select_one("main") or
-                                      soup.body)
-                        if content_el:
-                            t = content_el.get_text(" ", strip=True)
-                            if t and len(t) > 250:
-                                full = t
-                                strategy = "wayback"
-                                fetch_counter["wayback"] += 1
-                                consecutive_404 = 0
-                except Exception as e:
-                    log.info(f"barrikade wayback id={aid}: {str(e)[:100]}")
-
-            # 3) archive.today als 2. Archiv
-            if not full:
-                try:
-                    at = _barrikade_archive_today_fetch(link_canonical, timeout=10)
-                    if at:
-                        soup = BeautifulSoup(at, "html.parser")
-                        for s in soup(["script","style","nav","footer","header","aside","form"]):
-                            s.decompose()
-                        content_el = (soup.select_one("div.texte-article") or
-                                      soup.select_one("article") or soup.body)
-                        if content_el:
-                            t = content_el.get_text(" ", strip=True)
-                            if t and len(t) > 250:
-                                full = t
-                                strategy = "archive_today"
-                                fetch_counter["archive_today"] += 1
-                except Exception as e:
-                    log.info(f"barrikade archive.today id={aid}: {str(e)[:100]}")
-
-            # 4) Search-Snippet als allerletzter Content
-            if not full and link_canonical in search_meta:
-                meta = search_meta[link_canonical]
-                t = (meta.get("title","") + " — " + meta.get("snippet","")).strip()
-                if len(t) > 80:
-                    full = t
-                    strategy = f"snippet-{meta.get('src','?')}"
-                    fetch_counter["snippet"] += 1
 
             # Wenn nichts: failed
             if not full or len(full) < 80:
@@ -6165,195 +5785,6 @@ def _crawl_barrikade_full(verbose=False, max_articles=200, start_id=None, end_id
             s = r.get("strategy","?")
             sc[s] = sc.get(s, 0) + 1
     final["strategy_counter"] = sc
-    if progress_callback:
-        progress_callback({"status": "done", "done": True, **final})
-    if verbose:
-        return final
-    return inserted
-
-def _crawl_barrikade_wayback_only(verbose=False, max_articles=80, progress_callback=None):
-    """No-Auth crawl path: läuft auch wenn Cloudflare ALLE Direkt-Zugriffe
-    auf publish.barrikade.info UND barrikade.info blockt.
-
-    Discovery: SEARCH-ENGINE-SNIPPETS (DDG/Bing) + Wayback CDX (URL-Listen).
-    Article-Fetch in dieser Reihenfolge:
-      1) Direct cloudscraper (manchmal geht barrikade.info doch durch CF)
-      2) Wayback Machine Snapshot
-      3) archive.today (separates Archiv)
-      4) Search-Engine-Snippet als Mini-Content (Titel + Snippet
-         reicht oft für Classification + Save)
-
-    progress_callback(dict) → wird nach jeder URL aufgerufen mit aktuellem
-    Stand {inserted, tried, total}."""
-    url_results = []
-    inserted = 0
-
-    # ── Discovery via SEARCH-SNIPPETS (gibt direkt Content mit) ──
-    search_meta = {}  # url → {title, snippet}
-    try:
-        snip_results = _barrikade_search_engine_discover_with_snippets(
-            max_results=max_articles, per_query_timeout=8, overall_budget_s=25)
-        for r in snip_results:
-            search_meta[r["url"]] = {"title": r["title"], "snippet": r["snippet"],
-                                      "src": r["src"]}
-        log.info(f"barrikade search-snip: {len(search_meta)} URLs mit snippets")
-    except Exception as e:
-        log.warning(f"barrikade search-snip err: {e}")
-
-    # ── Discovery via Wayback CDX (ergänzt mit historischen URLs) ──
-    cdx_urls = []
-    try:
-        cdx_urls = _barrikade_wayback_cdx_discover(max_results=max_articles*2, timeout=20)
-    except Exception as e:
-        log.warning(f"barrikade wayback discover err: {e}")
-
-    # Vereinige beide Quellen — search-snippet-URLs zuerst (neuer)
-    urls = list(search_meta.keys())
-    for u in cdx_urls:
-        if u not in search_meta and u not in urls:
-            urls.append(u)
-    log.info(f"barrikade combined discovery: {len(urls)} URLs total ({len(search_meta)} mit search-snippets, {len(cdx_urls)} aus CDX)")
-    if not urls:
-        result = {"inserted": 0, "reason": "wayback_discovery_empty",
-                  "discovered_total": 0, "url_results": []}
-        if progress_callback:
-            progress_callback({"status": "done", "done": True, **result})
-        return result if verbose else 0
-    log.info(f"barrikade wayback-only: {len(urls)} URLs from CDX, processing top {max_articles}")
-    if progress_callback:
-        progress_callback({"discovered_total": len(urls), "tried_urls": 0})
-
-    direct_hits = 0
-    wayback_hits = 0
-    for idx, link in enumerate(urls[:max_articles]):
-        try:
-            # 1) DIRECT FETCH via cloudscraper (barrikade.info ist u.U. erreichbar
-            #    auch wenn publish.barrikade.info blockt — andere CF-Konfiguration).
-            #    Wenn das geht: aktuelles HTML statt potenziell-altem Wayback-Snapshot.
-            full = None
-            source_strategy = None
-            try:
-                direct_text = get_text(link)
-                if direct_text and len(direct_text) > 200:
-                    full = direct_text
-                    source_strategy = "direct"
-                    direct_hits += 1
-            except Exception as e:
-                log.info(f"barrikade direct-fetch [{link}]: {str(e)[:120]}")
-
-            # 2) WAYBACK SNAPSHOT als Fallback wenn Direct nichts bringt
-            if not full:
-                wb_html = _barrikade_wayback_fetch(link, timeout=15)
-                if not wb_html:
-                    if verbose:
-                        url_results.append({"url": link, "ok": False, "reason": "no_wayback_snapshot"})
-                else:
-                    soup = BeautifulSoup(wb_html, "html.parser")
-                    # Header/Footer/Wayback-Toolbar entfernen — aber NICHT <main> oder <article>
-                    for s in soup(["script","style","nav","footer","header","aside","form"]): s.decompose()
-                    for sel in ["#wm-ipp", "#wm-ipp-base", "#wm-ipp-print", ".wb-autocomplete-suggestions"]:
-                        for el in soup.select(sel): el.decompose()
-                    # SPIP-spezifische Content-Selektoren bevorzugt
-                    content_el = (soup.select_one("div.texte-article") or
-                                  soup.select_one("article .texte") or
-                                  soup.select_one(".surface-texte") or
-                                  soup.select_one("main") or
-                                  soup.select_one("article") or
-                                  soup.body)
-                    if content_el:
-                        full = content_el.get_text(" ", strip=True)
-                    else:
-                        full = soup.get_text(" ", strip=True)
-                    source_strategy = "wayback"
-                    if full and len(full) >= 120:
-                        wayback_hits += 1
-
-            # 3) archive.today als zweites Archiv (separat von Wayback)
-            if not full or len(full) < 120:
-                at_html = _barrikade_archive_today_fetch(link, timeout=12)
-                if at_html:
-                    soup = BeautifulSoup(at_html, "html.parser")
-                    for s in soup(["script","style","nav","footer","header","aside","form"]): s.decompose()
-                    content_el = (soup.select_one("div.texte-article") or
-                                  soup.select_one("article") or
-                                  soup.select_one("main") or
-                                  soup.body)
-                    if content_el:
-                        full = content_el.get_text(" ", strip=True)
-                        source_strategy = "archive.today"
-
-            # 4) SEARCH-SNIPPET als allerletzter Content-Quelle
-            #    Wenn alle Fetch-Wege scheitern: Titel + Snippet aus dem
-            #    Suchmaschinen-Index nehmen. Snippet hat oft 150-300 Zeichen,
-            #    reicht für smart_classify und gibt zumindest einen Aggregat-
-            #    Eintrag in die DB. Quelle: barrikade.info-URL (ohne Inhalt).
-            if (not full or len(full) < 120) and link in search_meta:
-                meta = search_meta[link]
-                title = meta.get("title","")
-                snippet = meta.get("snippet","")
-                snippet_full = (title + " — " + snippet).strip()
-                if len(snippet_full) > 50:
-                    full = snippet_full
-                    source_strategy = f"search-snippet-{meta.get('src','?')}"
-
-            # 5) Gemeinsamer Save-Pfad — egal woher full kommt
-            if full:
-                if len(full) < 120:
-                    if verbose:
-                        url_results.append({"url": link, "ok": False, "reason": "too_short",
-                                            "len": len(full), "strategy": source_strategy})
-                elif not any(kw in full.lower() for kw in BARRIKADE_RELEVANCE_KWS):
-                    if verbose:
-                        url_results.append({"url": link, "ok": False, "reason": "no_relevance_kw",
-                                            "len": len(full), "strategy": source_strategy})
-                elif is_false_positive(full):
-                    if verbose:
-                        url_results.append({"url": link, "ok": False, "reason": "false_positive",
-                                            "strategy": source_strategy})
-                else:
-                    ai = smart_classify(full)
-                    if not ai:
-                        if verbose:
-                            url_results.append({"url": link, "ok": False, "reason": "classify_failed",
-                                                "strategy": source_strategy, "len": len(full)})
-                    else:
-                        saved = save_incident(ai, full, "barrikade.info", link, date_from_url(link))
-                        if saved:
-                            inserted += 1
-                            if verbose:
-                                url_results.append({"url": link, "ok": True, "strategy": source_strategy,
-                                                    "category": ai.get("kategorie",""), "len": len(full)})
-                        else:
-                            if verbose:
-                                url_results.append({"url": link, "ok": False, "reason": "duplicate_or_filter",
-                                                    "strategy": source_strategy,
-                                                    "category": ai.get("kategorie","")})
-            time.sleep(0.3)
-        except Exception as e:
-            log.info(f"barrikade wayback link={link}: {str(e)[:120]}")
-            if verbose:
-                url_results.append({"url": link, "ok": False, "exc": str(e)[:120]})
-
-        if progress_callback:
-            progress_callback({
-                "tried_urls": idx + 1,
-                "discovered_total": len(urls),
-                "inserted": inserted,
-                "url_results": list(url_results),  # copy so caller sees live snapshot
-            })
-
-    log.info(f"barrikade wayback-only: {inserted} inserted from {min(len(urls), max_articles)} attempts "
-             f"(direct_fetch_ok={direct_hits} wayback_fetch_ok={wayback_hits})")
-    # Strategie-Counter aus url_results aufdröseln (welche Strategie hat tatsächlich erfolgreich gespeichert?)
-    saved_by_strategy = {}
-    for r in url_results:
-        if r.get("ok"):
-            s = r.get("strategy", "unknown")
-            saved_by_strategy[s] = saved_by_strategy.get(s, 0) + 1
-    final = {"inserted": inserted, "tried_urls": min(len(urls), max_articles),
-             "discovered_total": len(urls), "url_results": url_results,
-             "strategy_counter": saved_by_strategy,
-             "fetch_counter": {"direct_fetch_ok": direct_hits, "wayback_fetch_ok": wayback_hits}}
     if progress_callback:
         progress_callback({"status": "done", "done": True, **final})
     if verbose:
@@ -6467,7 +5898,8 @@ def crawl_barrikade_range(start_id, stop_id):
     inserted = 0
 
     # Helper: trenne barrikade.info vs publish.barrikade.info im source_health
-    _ALLOWED_HOSTS = {"barrikade.info", "publish.barrikade.info", "www.barrikade.info"}
+    _ALLOWED_HOSTS = {"barrikade.info", "publish.barrikade.info",
+                      "beta.barrikade.info", "www.barrikade.info"}
     def _src_from_url(u):
         try:
             host = _up(u).netloc.lower()
@@ -6487,11 +5919,10 @@ def crawl_barrikade_range(start_id, stop_id):
         except Exception as e:
             log.warning(f"barrikade authed crawler: {str(e)[:160]} — fallback to public")
 
-    # 1) Multi-URL-Discovery (RSS, Atom, Sitemap, Homepage, SPIP, Suchmaschinen, Wayback)
+    # 1) Multi-URL-Discovery (RSS, Atom, Sitemap, Homepage, SPIP, Suchmaschinen)
     discovered = _barrikade_discover_urls()
     if discovered:
         log.info(f"barrikade: {len(discovered)} URLs from discovery — processing ALL")
-        wayback_used = 0
         # Commit AC: kein [:80]-Slice — User-Direktive "alles crawlen".
         # is_seen() pro Hash blockt schon Doppelverarbeitung.
         for link in discovered:
@@ -6503,22 +5934,9 @@ def crawl_barrikade_range(start_id, stop_id):
                     full = get_text(link)
                 except Exception as fe:
                     log.info(f"barrikade direct-fetch failed for {link}: {str(fe)[:120]}")
-                # Wayback-Fallback: wenn direct fetch leer/zu kurz/exception,
-                # versuchen wir den Wayback-Snapshot. Cloudflare blockt
-                # barrikade.info gerne aus bestimmten IP-Ranges — Wayback ist
-                # nicht hinter CF und cached die Inhalte zuverlässig.
-                if not full or len(full) < 200:
-                    wb_html = _barrikade_wayback_fetch(link, timeout=20)
-                    if wb_html:
-                        # Aus dem Wayback-HTML den sichtbaren Text extrahieren
-                        try:
-                            from bs4 import BeautifulSoup as _BS
-                            soup = _BS(wb_html, "html.parser")
-                            for s in soup(["script","style","nav","footer","header"]): s.decompose()
-                            full = soup.get_text(" ", strip=True)
-                            wayback_used += 1
-                        except Exception:
-                            full = wb_html
+                # User 2026-05-28: "mach ohne wayback ist zu buggy" —
+                # Wayback-Fallback aus dem Default-Pfad entfernt.
+                # Direct cloudscraper-Fetch oder skip.
                 if not full or len(full) < 60: continue
                 if not any(kw in full.lower() for kw in BARRIKADE_RELEVANCE_KWS):
                     continue
@@ -6530,8 +5948,6 @@ def crawl_barrikade_range(start_id, stop_id):
                 time.sleep(0.4)
             except Exception as e:
                 log.info(f"barrikade link={link}: {str(e)[:100]}")
-        if wayback_used:
-            log.info(f"barrikade: {wayback_used} URLs via Wayback-Fallback")
         # Commit AC: discovery+ID-sweep ergänzen sich (kein Early-Return)
         if inserted > 0:
             log.info(f"barrikade discovery path saved {inserted} new incidents — proceeding to ID sweep")
@@ -11191,52 +10607,10 @@ async def admin_barrikade_test(_=Depends(require_admin)):
     except Exception as e:
         diag["3_spip_public"] = {"error": str(e)[:300]}
 
-    # 4) Search-Engine-Discovery (12s budget)
-    try:
-        urls = _barrikade_search_engine_discover(max_results=20, per_query_timeout=4, overall_budget_s=12)
-        diag["4_search_engine"] = {
-            "urls_found": len(urls),
-            "sample": urls[:5],
-        }
-    except Exception as e:
-        diag["4_search_engine"] = {"error": str(e)[:300]}
-
-    # 5) Wayback Machine probe — versuche mehrere Test-URLs, die mit hoher
-    #    Wahrscheinlichkeit einen Snapshot haben. Wenn eine davon im Wayback
-    #    indexiert ist, gilt die Strategie als verfügbar.
-    wb_test_urls = []
-    # Bevorzuge URLs die der SPIP-Auth gerade gefunden hat (real-existent + neu)
-    auth_sample = (diag.get("1_spip_auth", {}).get("discovery", {}).get("sample", [])
-                   if isinstance(diag.get("1_spip_auth"), dict) else [])
-    wb_test_urls.extend(auth_sample[:2])
-    # Fallback: Homepage und ein paar als sicher-archivierte known-good URLs
-    wb_test_urls.extend([
-        "https://barrikade.info/",
-        "https://barrikade.info/article/1",
-        "https://barrikade.info/article/100",
-    ])
-    wb_ok = False
-    wb_url = None
-    wb_len = 0
-    for t_url in wb_test_urls:
-        try:
-            wb = _barrikade_wayback_fetch(t_url, timeout=8)
-            if wb:
-                wb_ok = True
-                wb_url = t_url
-                wb_len = len(wb)
-                break
-        except Exception:
-            continue
-    diag["5_wayback"] = {
-        "ok": wb_ok,
-        "test_url": wb_url,
-        "html_len": wb_len,
-        "tested": len(wb_test_urls),
-    }
-
     # Aggregat: Wie viele Strategien funktionieren?
-    working = sum(1 for k in ("1_spip_auth","2_standard_discovery","3_spip_public","4_search_engine","5_wayback")
+    # (DDG/Bing/Wayback aus dem Default-Pfad entfernt — siehe Commit
+    # 2026-05-28 Wayback-Cleanup)
+    working = sum(1 for k in ("1_spip_auth","2_standard_discovery","3_spip_public")
                   if k in diag and (
                       diag[k].get("session_acquired") or
                       (diag[k].get("urls_found",0) > 0) or
@@ -11281,75 +10655,26 @@ async def admin_barrikade_fullcrawl(request: Request, _=Depends(require_admin)):
         log.error(f"barrikade full-crawl error: {e}", exc_info=True)
         return JSONResponse({"status": "error", "error": str(e)[:300], "inserted": 0}, status_code=500)
 
-@app.post("/admin/api/barrikade-wayback")
-async def admin_barrikade_wayback(_=Depends(require_admin)):
-    """SOFORT-WAYBACK-CRAWL: skippt Auth komplett, holt URLs+Inhalte
-    NUR aus archive.org. Funktioniert auch wenn publish.barrikade.info
-    von der Render-IP komplett unerreichbar ist (Cloudflare-Block).
-    Liefert detaillierten Per-URL-Bericht im selben Format wie
-    /admin/api/barrikade-crawl."""
-    try:
-        result = _crawl_barrikade_wayback_only(verbose=True, max_articles=80)
-        if isinstance(result, int):
-            result = {"inserted": result, "url_results": []}
-        return JSONResponse({
-            "status": "ok",
-            "path": "wayback_only",
-            "inserted": result.get("inserted", 0),
-            "tried_urls": result.get("tried_urls", 0),
-            "discovered_total": result.get("discovered_total", 0),
-            "strategy_counter": result.get("strategy_counter", {}),
-            "url_results": result.get("url_results", []),
-            "reason": result.get("reason", None),
-        })
-    except Exception as e:
-        log.error(f"barrikade wayback crawl error: {e}", exc_info=True)
-        return JSONResponse({"status": "error", "error": str(e)[:300], "inserted": 0}, status_code=500)
-
 @app.post("/admin/api/barrikade-crawl")
 async def admin_barrikade_crawl(_=Depends(require_admin)):
     """Synchroner Barrikade-Crawl mit detailliertem Per-URL-Bericht.
 
-    Pipeline:
-      1) Versuche Auth-Pfad (publish.barrikade.info Login + ?exec=article)
-      2) Wenn Auth fehlschlägt ODER 0 Inserts: Wayback-Only-Fallback.
-         Holt URLs aus CDX-API und Snapshots aus archive.org — funktioniert
-         AUCH wenn Cloudflare ALLE Direkt-Zugriffe blockt.
-    Liefert kombinierten Per-URL-Bericht zurück.
-    Max-Laufzeit ~150s (80 URLs × 2 Pfade)."""
+    Pipeline (User 2026-05-28: kein Wayback mehr — zu buggy):
+      1) Auth-Pfad (publish.barrikade.info Login + ?exec=article)
+    Liefert den Per-URL-Bericht des Auth-Pfads zurück. Max-Laufzeit ~80s."""
     try:
-        # 1) Auth-Pfad versuchen
         result_a = _crawl_barrikade_authed(verbose=True)
-        if isinstance(result_a, int):  # legacy compat
+        if isinstance(result_a, int):
             result_a = {"inserted": result_a, "url_results": []}
-
-        # 2) Wayback-Only Fallback wenn Auth scheitert ODER 0 Inserts
-        run_wb = (result_a.get("inserted", 0) == 0)
-        wb_result = None
-        if run_wb:
-            log.info("barrikade: Auth-Pfad lieferte 0 Inserts → starte Wayback-Only-Fallback")
-            wb_result = _crawl_barrikade_wayback_only(verbose=True, max_articles=80)
-
-        # Kombiniere die Outputs
-        total_inserted = result_a.get("inserted", 0)
-        all_url_results = list(result_a.get("url_results", []))
-        all_strategy_counter = dict(result_a.get("strategy_counter", {}))
-        if wb_result:
-            total_inserted += wb_result.get("inserted", 0)
-            all_url_results.extend(wb_result.get("url_results", []))
-            for k, v in wb_result.get("strategy_counter", {}).items():
-                all_strategy_counter[k] = all_strategy_counter.get(k, 0) + v
-
         return JSONResponse({
             "status": "ok",
-            "inserted": total_inserted,
-            "tried_urls": result_a.get("tried_urls", 0) + (wb_result.get("tried_urls",0) if wb_result else 0),
-            "discovered_total": result_a.get("discovered_total", 0) + (wb_result.get("discovered_total",0) if wb_result else 0),
-            "strategy_counter": all_strategy_counter,
-            "url_results": all_url_results,
+            "inserted": result_a.get("inserted", 0),
+            "tried_urls": result_a.get("tried_urls", 0),
+            "discovered_total": result_a.get("discovered_total", 0),
+            "strategy_counter": result_a.get("strategy_counter", {}),
+            "url_results": result_a.get("url_results", []),
             "auth_path": {"inserted": result_a.get("inserted", 0),
                           "reason": result_a.get("reason", "ran")},
-            "wayback_fallback_used": run_wb,
         })
     except Exception as e:
         log.error(f"barrikade authed crawl error: {e}", exc_info=True)
