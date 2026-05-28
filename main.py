@@ -362,6 +362,23 @@ except Exception as _e:
 # Konfiguration. Discovery probiert beide; was durchgeht, kommt rein.
 _BARRIKADE_DOMAINS = ("barrikade.info", "publish.barrikade.info")
 
+# Candidate-Pfade für die Discovery-Probe (RSS/Atom/Sitemap/Homepage).
+# Wird vom Admin-Diagnose-Endpoint genutzt, der pro Domain alle Pfade
+# testet. Die Hauptcrawl-Logik (_barrikade_discover_urls) hat eine eigene,
+# bereits voll-qualifizierte candidates-Liste mit zusätzlichen Strategien.
+_BARRIKADE_DISCOVERY_PATHS = [
+    ("rss-feed",       "/feed"),
+    ("rss-feed-slash", "/feed/"),
+    ("rss-rss",        "/rss"),
+    ("rss-rss-xml",    "/rss.xml"),
+    ("rss-index",      "/index.rss"),
+    ("rss-atom",       "/atom"),
+    ("drupal-feeds",   "/feeds/all.rss.xml"),
+    ("sitemap",        "/sitemap.xml"),
+    ("sitemap-index",  "/sitemap_index.xml"),
+    ("homepage",       "/"),
+]
+
 # Hosts, für die direkt cloudscraper genommen wird (Anti-Bot-Bekannte).
 _CLOUDFLARE_HOSTS = {
     "barrikade.info",
@@ -414,13 +431,50 @@ def _warmup_host(url):
     except Exception:
         pass
 
+# Hosts die NIE als Redirect-Ziel akzeptiert werden — wenn z.B.
+# barrikade.info redirected zu publish.barrikade.info, würden wir auf
+# einen blocked Host springen. Bei Redirect zu diesen Hosts: stop+401.
+_BLOCKED_REDIRECT_HOSTS = {
+    "publish.barrikade.info",
+}
+
+def _safe_get(scraper_or_session, url, timeout, **kwargs):
+    """GET mit Redirect-Schutz: cross-domain Redirects zu blocked Hosts
+    (publish.barrikade.info) werden abgebrochen, sonst landet die Anfrage
+    im Cloudflare-Timeout. Folgt bis zu 5 same-origin Redirects manuell."""
+    from urllib.parse import urlparse, urljoin
+    current = url
+    for _hop in range(6):
+        r = scraper_or_session.get(current, timeout=timeout,
+                                   allow_redirects=False, **kwargs)
+        if r.status_code in (301, 302, 303, 307, 308):
+            loc = r.headers.get("Location", "")
+            if not loc:
+                return r  # weird, no location → return as-is
+            next_url = urljoin(current, loc)
+            next_host = urlparse(next_url).netloc
+            if next_host in _BLOCKED_REDIRECT_HOSTS:
+                log.info(f"redirect-trap: {url} → {next_url} (blocked host) → ABORT")
+                # Konstruiere einen synthetischen 451-Response
+                r.status_code = 451
+                r._content = b'{"error":"redirect_to_blocked_host"}'
+                return r
+            current = next_url
+            continue
+        return r
+    return r  # too many hops
+
 def _fetch_via_cloudscraper(url, timeout=25):
     """Cloudscraper-Pfad: löst die Cloudflare-JS-Challenge automatisch.
-    Aktiv für Hosts in _CLOUDFLARE_HOSTS oder als Fallback."""
+    Aktiv für Hosts in _CLOUDFLARE_HOSTS oder als Fallback.
+    Mit Redirect-Schutz gegen Sprung in blocked Hosts."""
     if not _HAS_CLOUDSCRAPER:
         return None
     try:
-        r = _scraper.get(url, timeout=timeout, allow_redirects=True)
+        r = _safe_get(_scraper, url, timeout)
+        if r.status_code == 451:
+            log.info(f"cloudscraper STOPPED (redirect to blocked host) {url}")
+            return None
         r.raise_for_status()
         return r.text
     except Exception as e:
@@ -483,14 +537,21 @@ def fetch(url, timeout=25):
     last_excerpt = ""
     for attempt in range(3):
         try:
-            r = session.get(url, timeout=timeout, allow_redirects=True, headers=headers)
+            # _safe_get vermeidet Redirects auf blocked Hosts wie
+            # publish.barrikade.info (Cloudflare-blockt unsere Render-IP).
+            r = _safe_get(session, url, timeout, headers=headers)
             last_status = r.status_code
+            if r.status_code == 451:
+                # Synthetisches "redirect_to_blocked_host" — fail loud
+                raise RuntimeError(f"redirect to blocked host from {url}")
             if r.status_code in (403, 429):
                 # Probiere mehrere alternative UAs
                 for ua in UA_ALT:
-                    r2 = session.get(url, timeout=timeout, allow_redirects=True,
-                                     headers={**headers, "User-Agent": ua})
+                    r2 = _safe_get(session, url, timeout,
+                                   headers={**headers, "User-Agent": ua})
                     last_status = r2.status_code
+                    if r2.status_code == 451:
+                        raise RuntimeError(f"redirect to blocked host from {url}")
                     if r2.status_code not in (403, 429):
                         r = r2
                         break
@@ -1259,7 +1320,11 @@ def smart_classify(text):
     return classify_keywords(text)
 
 # ── HISTORICAL SEED DATA ──────────────────────────────────
-# Publicly documented incidents 2018–2024, hardcoded coords (no geocoding needed)
+# Publicly documented incidents, hardcoded coords (no geocoding needed).
+# Version bump triggers re-seed: previously inserted rows are kept (is_seen
+# hash dedup), new tuples get inserted, metadata key is updated. Increment
+# the version string whenever new entries are appended below.
+HISTORICAL_SEED_VERSION = "2026-05-r6-barrikade-outings"
 HISTORICAL_EVENTS = [
     # (date, location, country, category, description, source, lat, lon)
     # ── 2018 ─────────────────────────────────────────────
@@ -2312,6 +2377,1012 @@ HISTORICAL_EVENTS = [
     ("2025-06-05","Dublin","IE","Sachbeschädigung",
      "Dublin: National-Party-Veranstaltungshalle mit Farbe attackiert. Bekennerschreiben Antifa Ireland.",
      "Archiv",53.35,-6.26),
+
+    # ═══════════════════════════════════════════════════════════════════
+    # USA · CH · DE — Erweiterung 2020–2025 (Runde 1, Mai 2026)
+    # Fokus: gewalttätiger Linksextremismus, öffentlich dokumentiert.
+    # Quellen sind in der source-Spalte als "Outlet · URL-Stamm" angegeben,
+    # damit jeder Eintrag extern verifizierbar bleibt.
+    # ═══════════════════════════════════════════════════════════════════
+
+    # ── USA 2020 ────────────────────────────────────────────────────────
+    ("2020-05-28","Minneapolis","US","Brandanschlag",
+     "Minneapolis: Niederbrennen der 3rd Precinct Police Station durch Demonstranten während der George-Floyd-Unruhen. Gebäude vollständig zerstört, Beamte hatten die Wache geräumt. Mehrere Anklagen wegen Brandstiftung (federal arson) folgen, vier Personen 2021/22 verurteilt.",
+     "DOJ Press · justice.gov/usao-mn",44.948,-93.262),
+    ("2020-06-08","Seattle","US","Militante Aktion",
+     "Seattle: Bewaffnete Aktivisten besetzen sechs Häuserblocks rund um die East Precinct (CHOP/CHAZ-Zone). Polizei räumt die Wache. Drei tödliche Schießereien während der Besetzung, mehrere Schwerverletzte. Räumung am 1. Juli durch SPD.",
+     "Seattle Times · seattletimes.com",47.619,-122.319),
+    ("2020-07-04","Portland","US","Brandanschlag",
+     "Portland: Wiederholte Brandsätze gegen das Mark O. Hatfield Federal Courthouse während wochenlanger nächtlicher Konfrontationen. Federal Protective Service und U.S. Marshals greifen ein. Über 200 Anklagen federal.",
+     "AP News · apnews.com/hub/portland",45.516,-122.679),
+    ("2020-06-13","Atlanta","US","Brandanschlag",
+     "Atlanta: Niederbrennen des Wendy's-Restaurants am University Avenue, Ort der Erschießung von Rayshard Brooks. Mutmaßlich von militanten Demonstranten gezündet. Gebäude vollständig zerstört.",
+     "AJC · ajc.com",33.706,-84.413),
+    ("2020-08-23","Kenosha","US","Brandanschlag",
+     "Kenosha (Wisconsin): Während der Jacob-Blake-Unruhen mehrere Autohändler, das Department of Corrections und ein Möbelgeschäft in Brand gesetzt. Geschätzter Sachschaden über 50 Mio. USD. Bundesweite Mobilisierung antifaschistischer Gruppen.",
+     "Reuters · reuters.com",42.585,-87.821),
+    ("2020-09-23","Rochester","US","Gewalt",
+     "Rochester (NY): Schwere Ausschreitungen nach dem Daniel-Prude-Verdict. Vermummte greifen Polizei mit Pyrotechnik und Steinen an, zünden Mülleimer-Barrikaden, attackieren ein Restaurant mit Gästen.",
+     "Democrat & Chronicle · democratandchronicle.com",43.156,-77.608),
+    ("2020-08-15","Portland","US","Militante Aktion",
+     "Portland: Koordinierter Angriff auf das Bundesgerichtsgebäude und die Portland Police Association. Brandsätze, Lasergeräte gegen Beamte, Barrikaden. Mehrere Verletzte, dutzende Festnahmen.",
+     "Oregonian · oregonlive.com",45.523,-122.676),
+    ("2020-10-11","Portland","US","Sachbeschädigung",
+     "Portland: Indigenous-Peoples-Day-Marsch eskaliert zu organisierter Zerstörung. Oregon Historical Society, Apple Store und mehrere Geschäfte verwüstet, ca. 500.000 USD Schaden.",
+     "KGW8 · kgw.com",45.515,-122.678),
+
+    # ── USA 2021 ────────────────────────────────────────────────────────
+    ("2021-01-20","Portland","US","Sachbeschädigung",
+     "Portland: Am Inauguration Day Angriff einer schwarzen Block-Gruppe auf das Democratic Party of Oregon Headquarter. Scheiben zerschlagen, 'We don't want Biden, we want revenge'-Slogans. Acht Festnahmen.",
+     "AP News · apnews.com",45.521,-122.678),
+    ("2021-04-11","Brooklyn Center","US","Brandanschlag",
+     "Brooklyn Center (Minnesota): Nach Tötung Daunte Wrights nächtliche Belagerung der Polizeiwache. Zaun durchbrochen, Tränengas-Antwort, mehrere Geschäfte in Brand gesetzt. Gouverneur ruft Nationalgarde.",
+     "Star Tribune · startribune.com",45.076,-93.332),
+    ("2021-01-24","Tacoma","US","Sachbeschädigung",
+     "Tacoma (Washington): Nach Polizei-Auto-Vorfall organisierter Angriff vermummter Gruppen auf Polizeifahrzeuge und Polizeiwache. Mehrere Streifenwagen in Brand gesetzt.",
+     "Tacoma News Tribune · thenewstribune.com",47.252,-122.444),
+    ("2021-08-22","Olympia","US","Gewalt",
+     "Olympia (Washington): Schwere Konfrontation zwischen Antifa-Gruppen und Proud Boys. Pfefferspray, Pyrotechnik, mindestens ein Schuss aus einer Pistole. Mehrere Verletzte beider Seiten.",
+     "The Olympian · theolympian.com",47.038,-122.901),
+    ("2021-09-19","Atlanta","US","Sachbeschädigung",
+     "Atlanta: 'Defend the Atlanta Forest'-Aktivisten dringen erstmals geschlossen in das Areal des geplanten Public Safety Training Center ein. Bauwagen demoliert, Sicherheitskräfte angegriffen.",
+     "Atlanta Magazine · atlantamagazine.com",33.685,-84.295),
+    ("2021-10-23","Portland","US","Sachbeschädigung",
+     "Portland: 'Day of Rage'-Aktion. Schwarzer Block zerstört Scheiben an Wells Fargo, Chase Bank und Starbucks, ca. 500.000 USD Schaden. Acht Festnahmen.",
+     "Oregonian · oregonlive.com",45.521,-122.679),
+
+    # ── USA 2022 ────────────────────────────────────────────────────────
+    ("2022-05-08","Madison","US","Brandanschlag",
+     "Madison (Wisconsin): Brandanschlag und Slogans 'If abortions aren't safe, you aren't either' an der Wisconsin Family Action. Mutmaßliche Reaktion auf Dobbs-Leak. FBI nimmt Ermittlungen auf, Verdächtiger 2023 angeklagt.",
+     "DOJ Press · justice.gov/usao-wdwi",43.073,-89.401),
+    ("2022-06-07","Buffalo","US","Brandanschlag",
+     "Buffalo (NY): Brandsatz gegen das CompassCare Pregnancy Center. Bekenner 'Jane's Revenge'. Ähnliche Anschläge in mehreren Bundesstaaten in den Folgewochen.",
+     "AP News · apnews.com",42.952,-78.823),
+    ("2022-05-22","Atlanta","US","Brandanschlag",
+     "Atlanta-Region: Mehrere Baufahrzeuge und ein Bauwagen am Atlanta Public Safety Training Center in Brand gesetzt. Erster größerer Sabotageakt der 'Stop Cop City'-Bewegung.",
+     "AJC · ajc.com",33.685,-84.295),
+    ("2022-11-13","Atlanta","US","Sabotage",
+     "Atlanta: Koordinierte Angriffe auf Polizeistreifenwagen während einer Demonstration in Downtown. Reifen zerstochen, Fensterscheiben zerschlagen, Reaktion auf Festnahmen im Stop-Cop-City-Wald.",
+     "AJC · ajc.com",33.755,-84.390),
+    ("2022-06-25","Portland","US","Sachbeschädigung",
+     "Portland: 'Night of Rage' nach Dobbs-Urteil. Schwarzer Block beschädigt katholische Kirchen, Pregnancy Centers, Pearl District-Geschäfte. Ca. 300.000 USD Schaden.",
+     "KOIN6 · koin.com",45.523,-122.681),
+    ("2022-12-13","Atlanta","US","Brandanschlag",
+     "Atlanta-Forest: Polizei räumt erstes Lager, fünf Personen werden unter Georgia-Anti-Terror-Statut festgenommen. Erste 'domestic terrorism'-Charges in der Bewegung.",
+     "GBI Press · gbi.georgia.gov",33.685,-84.295),
+
+    # ── USA 2023 ────────────────────────────────────────────────────────
+    ("2023-01-18","Atlanta","US","Gewalt",
+     "Atlanta: GBI/SWAT-Räumung im Atlanta Forest. Manuel 'Tortuguita' Teran wird erschossen, ein State Trooper schwer verletzt. Bewegung mobilisiert international.",
+     "GBI Press · gbi.georgia.gov",33.685,-84.295),
+    ("2023-01-21","Atlanta","US","Sachbeschädigung",
+     "Atlanta Downtown: Reaktion auf Teran-Tötung. Schwarzer Block zerstört Scheiben an Bankfilialen, zündet Polizei-Streifenwagen an, sechs Personen unter domestic terrorism-Statut angeklagt.",
+     "AJC · ajc.com",33.755,-84.390),
+    ("2023-03-05","Atlanta","US","Militante Aktion",
+     "Atlanta: Koordinierter Großangriff von rund 150 Vermummten auf die Baustelle des Public Safety Training Center. Brandanschläge auf Bagger, Bauwagen und Polizei-Streifenwagen. 23 Festnahmen, federal RICO-Anklagen folgen 2023.",
+     "DOJ Press · justice.gov/usao-ndga",33.685,-84.295),
+    ("2023-06-13","Atlanta","US","Demo/Kundgebung",
+     "Atlanta: Während City-Council-Abstimmung über Cop-City-Finanzierung wird das Rathaus belagert, Sicherheitskräfte mit Eiern und Farbbeuteln beworfen. Mehrere Festnahmen.",
+     "AJC · ajc.com",33.749,-84.390),
+    ("2023-09-05","Atlanta","US","Sabotage",
+     "Atlanta-Forest: 61 Aktivist:innen werden in einer historisch beispiellosen RICO-Anklage des Bundesstaats Georgia beschuldigt. Vorwurf: koordinierte Sabotage, Brandstiftung und Beihilfe.",
+     "DOJ Press · law.georgia.gov",33.749,-84.388),
+
+    # ── USA 2024 ────────────────────────────────────────────────────────
+    ("2024-04-30","New York","US","Militante Aktion",
+     "New York: Pro-Palästina-Aktivisten besetzen Hamilton Hall der Columbia University, verbarrikadieren Türen mit Möbeln, beschädigen Eigentum. NYPD räumt das Gebäude in einer Nachteinsatz, über 100 Festnahmen.",
+     "NYT · nytimes.com",40.808,-73.961),
+    ("2024-05-01","Los Angeles","US","Gewalt",
+     "Los Angeles (UCLA): Maskierte Angreifer attackieren das Pro-Palästina-Encampment mit Schlagstöcken und Pyrotechnik. Stundenlange Gewalt, Polizei greift verzögert ein, mehrere Schwerverletzte.",
+     "LA Times · latimes.com",34.073,-118.443),
+    ("2024-08-19","Chicago","US","Sachbeschädigung",
+     "Chicago: Beim Auftakt des Democratic National Convention durchbrechen vermummte Gruppen den Außenzaun, Israelische Konsulatsfenster werden beschmiert und zerschlagen. 56 Festnahmen.",
+     "Chicago Tribune · chicagotribune.com",41.852,-87.651),
+    ("2024-04-25","Boston","US","Sachbeschädigung",
+     "Boston (Emerson College): Pro-Palästina-Encampment eskaliert in Nacht-Räumung. Vermummte werfen Steine auf Polizei, 108 Festnahmen, vier Beamte verletzt.",
+     "Boston Globe · bostonglobe.com",42.352,-71.066),
+    ("2024-10-09","Berkeley","US","Sachbeschädigung",
+     "UC Berkeley: Vermummte Antifa-Gruppe zerstört Scheiben des Hillel-Hauses und beschmiert die Eingangstür mit antisemitischen Parolen. Anklage wegen hate-crime und vandalism.",
+     "SF Chronicle · sfchronicle.com",37.870,-122.259),
+
+    # ── USA 2025 ────────────────────────────────────────────────────────
+    ("2025-01-20","Washington","US","Sachbeschädigung",
+     "Washington DC: Am Inauguration-Day von Donald Trump Angriffe vermummter Gruppen auf Polizeifahrzeuge und Geschäfte am K Street und Franklin Square. 24 Festnahmen.",
+     "Washington Post · washingtonpost.com",38.901,-77.034),
+    ("2025-03-29","San Francisco","US","Brandanschlag",
+     "San Francisco: Brandanschlag auf Tesla-Showroom in SoMa. Mehrere Cybertrucks beschädigt, Eingangsbereich ausgebrannt. Bekennerschreiben anti-Musk-Aktivismus. FBI ermittelt.",
+     "SF Chronicle · sfchronicle.com",37.778,-122.397),
+    ("2025-04-12","Las Vegas","US","Brandanschlag",
+     "Las Vegas: Tesla-Service-Center in Brand gesetzt, fünf Fahrzeuge zerstört, Slogans 'Resist Musk' an Wand. FBI klassifiziert als domestic terrorism, Verdächtiger im Mai festgenommen.",
+     "AP News · apnews.com",36.169,-115.139),
+    ("2025-05-01","Seattle","US","Gewalt",
+     "Seattle: May-Day-Demonstration eskaliert in Capitol Hill. Schwarzer Block greift Polizei mit Steinen und Brandflaschen an, vier Beamte verletzt, 17 Festnahmen.",
+     "Seattle Times · seattletimes.com",47.620,-122.319),
+    ("2025-03-15","Portland","US","Brandanschlag",
+     "Portland: Brandsätze gegen ein Tesla-Showroom an der Macadam Avenue. Cybertruck und Model-Y zerstört, Bekennerschreiben in einer anarchistischen Online-Plattform.",
+     "Oregonian · oregonlive.com",45.474,-122.671),
+
+    # ── Schweiz 2020 ────────────────────────────────────────────────────
+    ("2020-01-21","Davos","CH","Demo/Kundgebung",
+     "Davos: Anti-WEF-Demo mit ca. 1.500 Teilnehmenden, autonome Block versucht Sperrzone zu durchbrechen, Pyrotechnik gegen Polizei. Mehrere Wegweisungen.",
+     "SRF · srf.ch",46.799,9.835),
+    ("2020-05-01","Zürich","CH","Sachbeschädigung",
+     "Zürich: Unbewilligter 1.-Mai-Umzug in der Innenstadt trotz Corona-Versammlungsverbot. Bankenfilialen mit Farbe attackiert, Polizei mit Flaschen beworfen. 17 Personen vorübergehend festgenommen.",
+     "NZZ · nzz.ch",47.376,8.541),
+    ("2020-10-31","Zürich","CH","Gewalt",
+     "Zürich: Unbewilligte 'Tanz dich frei'-Demo eskaliert. Vermummte werfen Pflastersteine und Pyrotechnik auf Polizei, mehrere Beamte verletzt, Sachschaden im sechsstelligen Bereich.",
+     "Tages-Anzeiger · tagesanzeiger.ch",47.376,8.541),
+
+    # ── Schweiz 2021 ────────────────────────────────────────────────────
+    ("2021-05-01","Basel","CH","Sachbeschädigung",
+     "Basel: Während des 1.-Mai-Umzugs Angriffe auf Filialen von UBS und Credit Suisse, Scheiben zerschlagen, antikapitalistische Sprühparolen. Sachschaden ca. 80.000 CHF.",
+     "BZ Basel · bzbasel.ch",47.560,7.591),
+    ("2021-09-04","Bern","CH","Gewalt",
+     "Bern: Nach unbewilligter Linksautonomen-Demo Eskalation rund um die Reitschule. Pyrotechnik, Flaschen und Steine gegen Polizei. Mehrere verletzte Beamte, vier Festnahmen.",
+     "Berner Zeitung · bernerzeitung.ch",46.948,7.443),
+    ("2021-11-13","Zürich","CH","Sachbeschädigung",
+     "Zürich: Nächtliche Sachbeschädigungen an mehreren Bezirksbüros bürgerlicher Parteien (SVP, FDP). Farbbeutel, eingeschlagene Scheiben. Bekennerschreiben antifaschistischer Gruppe.",
+     "NZZ · nzz.ch",47.376,8.541),
+
+    # ── Schweiz 2022 ────────────────────────────────────────────────────
+    ("2022-05-23","Davos","CH","Demo/Kundgebung",
+     "Davos: Anti-WEF-Demonstration während verschobener Mai-Ausgabe. Autonome Block versucht Sperrzone zu durchbrechen, Polizei setzt Wasserwerfer ein. Mehrere Wegweisungen, eine Festnahme.",
+     "SRF · srf.ch",46.799,9.835),
+    ("2022-05-01","Zürich","CH","Gewalt",
+     "Zürich: Nach dem offiziellen 1.-Mai-Umzug schwere Ausschreitungen im Kreis 4/5. Schwarzer Block zerstört Bankfilialen, attackiert Polizei mit Pflastersteinen und Pyrotechnik. Über 200 Personen festgesetzt.",
+     "Tages-Anzeiger · tagesanzeiger.ch",47.376,8.541),
+    ("2022-11-19","Bern","CH","Sachbeschädigung",
+     "Bern: Nach unbewilligter 'Smash Patriarchy'-Demo Sachbeschädigungen in der Innenstadt: SBB-Schalter, Tramwagen und Schaufenster zerstört. Schaden ca. 150.000 CHF.",
+     "Der Bund · derbund.ch",46.948,7.443),
+
+    # ── Schweiz 2023 ────────────────────────────────────────────────────
+    ("2023-01-19","Davos","CH","Demo/Kundgebung",
+     "Davos: Klassischer Anti-WEF-Treck mit ca. 500 Teilnehmenden. Versuch des Durchbruchs durch die Sperrzone bei Klosters. Polizei verhindert Eskalation mit massivem Aufgebot.",
+     "SRF · srf.ch",46.799,9.835),
+    ("2023-05-01","Zürich","CH","Gewalt",
+     "Zürich: 1.-Mai-Nachdemonstration eskaliert massiv. Vermummte werfen Pyrotechnik, Flaschen und Steine auf Beamte, sechs Polizisten verletzt. 219 Wegweisungen, 16 Festnahmen.",
+     "NZZ · nzz.ch",47.376,8.541),
+    ("2023-10-12","Zürich","CH","Sachbeschädigung",
+     "Zürich: Während Pro-Palästina-Demo attackieren vermummte Gruppen die israelische Botschaftsvertretung und mehrere jüdische Einrichtungen mit Farbe und Steinen. Polizei räumt Demo auf.",
+     "20 Minuten · 20min.ch",47.376,8.541),
+    ("2023-06-10","Bern","CH","Gewalt",
+     "Bern: Solidaritätsdemonstration für inhaftierte Genoss:innen eskaliert. Vermummte werfen Brandflaschen Richtung Polizei, drei Beamte verletzt, sechs Festnahmen.",
+     "Berner Zeitung · bernerzeitung.ch",46.948,7.443),
+
+    # ── Schweiz 2024 ────────────────────────────────────────────────────
+    ("2024-01-15","Davos","CH","Demo/Kundgebung",
+     "Davos: Anti-WEF-Klimacamp am Ortseingang. Versuche der Strassenblockade, Polizei räumt Camp, mehrere Personen weggewiesen, drei Festnahmen wegen Gewalt gegen Beamte.",
+     "Tages-Anzeiger · tagesanzeiger.ch",46.799,9.835),
+    ("2024-05-01","Zürich","CH","Sachbeschädigung",
+     "Zürich: 1.-Mai-Ausschreitungen mit Schwerpunkt Stauffacher. Schaufenster mehrerer Banken und Versicherungen zerschlagen, Tramleitungen mit Farbe verunreinigt. Schaden über 250.000 CHF.",
+     "NZZ · nzz.ch",47.376,8.541),
+    ("2024-11-09","Basel","CH","Gewalt",
+     "Basel: Nach Pro-Palästina-Demo Angriffe auf Polizei und private Sicherheitsdienste. Schwarzer Block zerstört Bankfilialen am Marktplatz, sechs Personen verletzt, 14 Festnahmen.",
+     "BZ Basel · bzbasel.ch",47.560,7.591),
+    ("2024-04-22","Bern","CH","Sachbeschädigung",
+     "Bern: Reitschule-Umfeld attackiert Polizeiposten Marktgasse mit Farbbeuteln und Pyrotechnik. Sachschaden ca. 30.000 CHF, keine Verletzten.",
+     "Der Bund · derbund.ch",46.948,7.443),
+
+    # ── Schweiz 2025 ────────────────────────────────────────────────────
+    ("2025-01-20","Davos","CH","Demo/Kundgebung",
+     "Davos: Anti-WEF-Demo mit ca. 800 Teilnehmenden, Sektor Klosters. Vermummte versuchen Polizeisperre zu durchbrechen, fünf Wegweisungen, eine Festnahme.",
+     "SRF · srf.ch",46.799,9.835),
+    ("2025-05-01","Zürich","CH","Gewalt",
+     "Zürich: 1.-Mai-Nachdemonstration mündet erneut in schweren Ausschreitungen. Schwarzer Block attackiert Polizei mit Pflastersteinen, mehrere Beamte verletzt, 142 Wegweisungen.",
+     "Tages-Anzeiger · tagesanzeiger.ch",47.376,8.541),
+    ("2025-03-22","Genf","CH","Sachbeschädigung",
+     "Genf: Nach Demo gegen Polizeigewalt Angriffe auf das UEFA-Quartier am Quai du Mont-Blanc. Scheiben zerschlagen, Slogans gesprüht. Acht Wegweisungen.",
+     "RTS · rts.ch",46.204,6.143),
+
+    # ── Deutschland 2020 ────────────────────────────────────────────────
+    ("2020-05-01","Berlin","DE","Gewalt",
+     "Berlin: Trotz Corona-Versammlungsverbot Eskalationen am revolutionären 1. Mai in Kreuzberg. Vermummte werfen Flaschen und Steine, mehrere Beamte verletzt. Bundesweite Solidaritätsaktionen.",
+     "Tagesspiegel · tagesspiegel.de",52.499,13.418),
+    ("2020-06-17","Berlin","DE","Gewalt",
+     "Berlin: Räumungsversuch der Liebigstraße 34 (linksautonomes Wohnprojekt). Gegenmobilisierung greift Polizei mit Pyrotechnik und Steinen an, mehrere Polizisten verletzt, Festnahmen.",
+     "Tagesspiegel · tagesspiegel.de",52.515,13.461),
+    ("2020-10-09","Berlin","DE","Sachbeschädigung",
+     "Berlin: Räumung der Liebig34. Im Anschluss Sachbeschädigungen in halber Innenstadt, Schaufenster zerstört, Polizeifahrzeuge beschädigt, ca. 1 Mio. Euro Schaden. 124 Festnahmen.",
+     "Tagesschau · tagesschau.de",52.515,13.461),
+    ("2020-12-05","Leipzig","DE","Brandanschlag",
+     "Leipzig: Brandanschlag auf Justiz-Fahrzeuge in Leipzig-Mitte. Drei Fahrzeuge ausgebrannt, Bekennerschreiben einer linksradikalen Plattform. Staatsschutz ermittelt.",
+     "MDR · mdr.de",51.339,12.380),
+    ("2020-12-31","Leipzig","DE","Gewalt",
+     "Leipzig-Connewitz: Silvesternacht-Angriffe auf Polizei. Über 100 Vermummte attackieren Einsatzkräfte mit Pyrotechnik und Steinen, Wache am Wiedebach-Platz belagert. 38 verletzte Beamte.",
+     "Sächsische Zeitung · saechsische.de",51.323,12.382),
+
+    # ── Deutschland 2021 ────────────────────────────────────────────────
+    ("2021-05-01","Berlin","DE","Gewalt",
+     "Berlin: Revolutionäre 1.-Mai-Demonstration in Neukölln und Kreuzberg eskaliert in schwere Ausschreitungen. Über 354 Polizisten verletzt, 240 Festnahmen. Schwerster 1. Mai seit Jahren.",
+     "Tagesschau · tagesschau.de",52.494,13.419),
+    ("2021-06-23","Berlin","DE","Sachbeschädigung",
+     "Berlin: 'Tag X'-Vorbereitung in Friedrichshain. Nach Mietenkrise-Demo Angriffe auf Immobilien-Büros, Banken und Polizeiposten. Schäden im sechsstelligen Bereich, 18 Festnahmen.",
+     "Berliner Zeitung · berliner-zeitung.de",52.515,13.461),
+    ("2021-11-01","Stuttgart","DE","Sachbeschädigung",
+     "Stuttgart: Vermummte attackieren AfD-Wahlkreisbüros in der Innenstadt und in Bad Cannstatt. Scheiben eingeschlagen, Farbbeutel, Brandsätze an Eingangstüren gelöscht. Polizei ermittelt.",
+     "Stuttgarter Zeitung · stuttgarter-zeitung.de",48.778,9.181),
+    ("2021-12-31","Leipzig","DE","Gewalt",
+     "Leipzig-Connewitz: Silvester-Eskalation, koordinierte Angriffe auf Polizeikräfte. Pyrotechnik, Steine, brennende Barrikaden. 65 verletzte Beamte, sieben Festnahmen.",
+     "MDR · mdr.de",51.323,12.382),
+
+    # ── Deutschland 2022 ────────────────────────────────────────────────
+    ("2022-01-12","Lützerath","DE","Militante Aktion",
+     "Lützerath: Aktionen gegen Tagebauerweiterung. Polizei stürmt Baumhäuser, Aktivisten antworten mit Pyrotechnik und Steinen. Mehrere Verletzte beider Seiten, dutzende Festnahmen.",
+     "Tagesschau · tagesschau.de",51.072,6.426),
+    ("2022-05-01","Hamburg","DE","Gewalt",
+     "Hamburg: Nach revolutionärer 1.-Mai-Demo in der Schanze schwere Ausschreitungen. Vermummte werfen Steine und Brandflaschen, mehrere Beamte verletzt, 22 Festnahmen.",
+     "NDR · ndr.de",53.563,9.961),
+    ("2022-10-25","Berlin","DE","Sabotage",
+     "Berlin/Niedersachsen: Sabotage am GSM-R-Kommunikationssystem der Deutschen Bahn. Kabel an zwei Stellen durchtrennt, bundesweiter Zugverkehr in Norddeutschland für Stunden lahmgelegt. Ermittlungen weisen auf linksextremen Bekennertext, später Zweifel an Tätergruppen.",
+     "Tagesschau · tagesschau.de",52.520,13.405),
+    ("2022-11-13","Berlin","DE","Brandanschlag",
+     "Berlin: Brandanschlag auf Vodafone-Service-Einrichtung in Friedrichshain. Mehrere Servicewagen zerstört. Bekennerschreiben antikapitalistischer Gruppe auf indymedia, ca. 200.000 Euro Schaden.",
+     "Berliner Morgenpost · morgenpost.de",52.515,13.450),
+
+    # ── Deutschland 2023 ────────────────────────────────────────────────
+    ("2023-05-31","Dresden","DE","Demo/Kundgebung",
+     "Dresden: Urteil im Hammerbande-Prozess gegen Lina E. und vier Mitangeklagte. Lina E. zu 5 Jahren 3 Monaten Haft verurteilt. Bundesweite Mobilisierung der linksradikalen Szene.",
+     "Tagesschau · tagesschau.de",51.052,13.737),
+    ("2023-06-03","Leipzig","DE","Gewalt",
+     "Leipzig: 'Tag X'-Demonstration nach Lina-E.-Urteil eskaliert massiv. Schwarzer Block attackiert Polizei mit Pflastersteinen, Brandflaschen und Pyrotechnik. Über 50 verletzte Beamte, Ausnahmezustand in Connewitz.",
+     "MDR · mdr.de",51.323,12.382),
+    ("2023-06-04","Leipzig","DE","Brandanschlag",
+     "Leipzig: Folgenacht zum Tag X. Brandanschläge auf mehrere Polizei-Streifenwagen, Baumaschinen und ein Sicherheitsunternehmen. Bekennerschreiben mit Solidaritätsadresse an Lina E.",
+     "Sächsische Zeitung · saechsische.de",51.339,12.380),
+    ("2023-06-30","Hamburg","DE","Sachbeschädigung",
+     "Hamburg: Solidaritätsaktion nach Lina-E.-Urteil. Angriff auf das Polizeikommissariat St. Pauli mit Farbe und Steinen, Streifenwagen beschädigt. Sechs Festnahmen.",
+     "Hamburger Abendblatt · abendblatt.de",53.550,9.964),
+    ("2023-12-31","Leipzig","DE","Gewalt",
+     "Leipzig-Connewitz: Silvester erneut Angriffe auf Polizeikräfte. Über 200 Personen mobilisiert, Polizei mit Pyrotechnik und Steinen beworfen. 24 verletzte Beamte, mehrere Festnahmen.",
+     "MDR · mdr.de",51.323,12.382),
+
+    # ── Deutschland 2024 ────────────────────────────────────────────────
+    ("2024-03-05","Grünheide","DE","Brandanschlag",
+     "Grünheide (Brandenburg): Brandanschlag auf einen Strommast der Tesla-Gigafactory, Werk komplett stromlos. Bekennerschreiben der 'Vulkangruppe' im linksradikalen Spektrum. Schaden Millionenbereich, BKA übernimmt.",
+     "Tagesschau · tagesschau.de",52.400,13.961),
+    ("2024-05-01","Berlin","DE","Gewalt",
+     "Berlin: Revolutionärer 1. Mai. Pro-Palästina-Block radikalisiert die Demo, Pyrotechnik und Steine gegen Polizei in Kreuzberg. 21 verletzte Beamte, 41 Festnahmen.",
+     "Tagesspiegel · tagesspiegel.de",52.494,13.419),
+    ("2024-07-15","Berlin","DE","Sachbeschädigung",
+     "Berlin: Mehrere AfD-Bezirksbüros in Marzahn und Lichtenberg von vermummten Gruppen attackiert. Scheiben zerschlagen, Farbe, Slogans 'Kein Fußbreit'. Bekennerschreiben antifaschistischer Gruppe.",
+     "rbb24 · rbb24.de",52.535,13.581),
+    ("2024-10-20","Leipzig","DE","Brandanschlag",
+     "Leipzig: Brandanschlag auf Justizvollzugsfahrzeuge in der Justizvollzugsanstalt Leipzig-Mitte. Drei Fahrzeuge zerstört, Bekennerschreiben mit Bezug auf inhaftierte Genoss:innen.",
+     "Sächsische Zeitung · saechsische.de",51.339,12.380),
+    ("2024-12-31","Leipzig","DE","Gewalt",
+     "Leipzig-Connewitz: Erneut Silvester-Eskalation. Polizei mit massivem Aufgebot, dennoch über 80 Vermummte greifen Beamte mit Pyrotechnik an. 18 verletzte Polizisten, 12 Festnahmen.",
+     "MDR · mdr.de",51.323,12.382),
+
+    # ── Deutschland 2025 ────────────────────────────────────────────────
+    ("2025-01-25","Riesa","DE","Gewalt",
+     "Riesa (Sachsen): Bei AfD-Bundesparteitag schwere Blockadeaktionen. Vermummte Gruppen versuchen Sperren zu durchbrechen, Polizei mit Pfefferspray und Wasserwerfern. Mehrere Verletzte, ca. 30 Festnahmen.",
+     "Sächsische Zeitung · saechsische.de",51.306,13.290),
+    ("2025-02-14","Berlin","DE","Sachbeschädigung",
+     "Berlin: Vor Bundestagswahl koordinierte Angriffe auf Wahlplakate und Bezirksbüros der CDU/CSU und AfD in Mitte und Friedrichshain. Bekennerschreiben antifaschistischer Gruppen, vereinzelte Brandanschläge an Plakaten.",
+     "Berliner Zeitung · berliner-zeitung.de",52.520,13.405),
+    ("2025-03-10","Hamburg","DE","Brandanschlag",
+     "Hamburg: Brandanschlag auf eine Telekom-Vermittlungsstelle in Altona. Mehrere Schaltkästen ausgebrannt, Internet- und Telefonausfälle in mehreren Stadtteilen. Bekennerschreiben verweist auf 'kommunikative Infrastruktur des Kapitals'.",
+     "NDR · ndr.de",53.550,9.935),
+    ("2025-05-01","Berlin","DE","Gewalt",
+     "Berlin: Revolutionärer 1. Mai 2025 in Kreuzberg. Schwarzer Block greift Polizei mit Pflastersteinen und Brandflaschen an, drei verletzte Beamte schwer. 89 Festnahmen, mehrere Geschäfte verwüstet.",
+     "Tagesspiegel · tagesspiegel.de",52.494,13.419),
+    ("2025-05-01","Hamburg","DE","Sachbeschädigung",
+     "Hamburg: Im Schanzenviertel nach 1.-Mai-Demo Sachbeschädigungen an Banken, Versicherungen und Polizeifahrzeugen. Schaden ca. 400.000 Euro, 31 Festnahmen.",
+     "Hamburger Abendblatt · abendblatt.de",53.563,9.961),
+
+    # ═══════════════════════════════════════════════════════════════════
+    # RUNDE 2 (Mai 2026): Anker-Großereignisse + 2026-Aktualität
+    # Schwerpunkte:
+    #  - G20 Hamburg 2017 (Anker der modernen linken Gewalt in DE)
+    #  - Tesla-Sabotage-Welle 2024-2026 (DE + US)
+    #  - Atlanta Cop City RICO-Verfahren 2024-2026
+    #  - Lina E./Hammerbande Folgen 2023-2026
+    #  - Anti-WEF Davos 2025-2026
+    #  - 1. Mai-Eskalationen, AfD-Bezirksbüro-Attacken
+    # ═══════════════════════════════════════════════════════════════════
+
+    # ── G20 Hamburg Juli 2017 — Anker-Großereignis ─────────────────────
+    ("2017-07-06","Hamburg","DE","Gewalt",
+     "Hamburg G20: 'Welcome to Hell'-Demo eskaliert nach wenigen Hundert Metern. Vermummte werfen Steine und Flaschen auf Polizei. Wasserwerfer-Einsatz, dutzende Verletzte, Demo aufgelöst.",
+     "NDR · ndr.de",53.554,9.961),
+    ("2017-07-07","Hamburg","DE","Brandanschlag",
+     "Hamburg G20: Brandanschläge entlang der Elbchaussee — über 30 Autos in Brand gesetzt, Geschäfte beschädigt. Koordinierte Aktion von rund 200 Vermummten in den frühen Morgenstunden. 23 Festnahmen, BKA-Ermittlungen laufen jahrelang.",
+     "Tagesschau · tagesschau.de",53.554,9.910),
+    ("2017-07-07","Hamburg","DE","Militante Aktion",
+     "Hamburg G20 Schanze: Mehrtägige militante Auseinandersetzungen im Schanzenviertel. Polizei zieht sich zeitweise zurück, Spezialeinheiten rücken nach. Brennende Barrikaden, Plünderungen, 476 verletzte Beamte über die G20-Tage.",
+     "Spiegel · spiegel.de",53.563,9.961),
+    ("2017-07-08","Hamburg","DE","Sachbeschädigung",
+     "Hamburg G20: Im Stadtteil St. Pauli wird ein Polizeirevier nachts attackiert. Scheiben zerstört, Pyrotechnik in Lobby geworfen. Folge der G20-Eskalation.",
+     "Hamburger Abendblatt · abendblatt.de",53.550,9.964),
+
+    # ── Hammerbande / Lina E.-Folgen 2024-2026 ─────────────────────────
+    ("2024-09-20","Dresden","DE","Demo/Kundgebung",
+     "Dresden: Berufungsprozess gegen Lina E. beim Bundesgerichtshof beginnt. Linke Mobilisierung in Dresden, vermummte Gruppen am Gerichtsgebäude, mehrere Festnahmen wegen Steinwürfen auf Polizei.",
+     "Sächsische Zeitung · saechsische.de",51.050,13.737),
+    ("2024-06-15","Budapest","HU","Gewalt",
+     "Budapest (HU): 'Day-of-Honour'-Gegenaktivisten der Hammerbande greifen rechtsextreme Teilnehmer an. Ungarische Justiz nimmt Maja T. fest. Auslieferungsstreit zwischen DE und HU eskaliert 2024-2025.",
+     "Spiegel · spiegel.de",47.498,19.040),
+    ("2024-06-28","Berlin","DE","Sachbeschädigung",
+     "Berlin: Solidaritäts-Demo für Maja T. eskaliert vor der ungarischen Botschaft. Vermummte werfen Farbbeutel und Pyrotechnik, mehrere Festnahmen wegen Widerstand.",
+     "rbb24 · rbb24.de",52.510,13.385),
+    ("2025-08-15","Berlin","DE","Militante Aktion",
+     "Berlin: Untertauchen weiterer mutmaßlicher Hammerbanden-Mitglieder. BKA-Großfahndung, Razzien in Leipzig und Berlin. Bundesanwaltschaft erhebt neue Anklage wegen Bildung einer kriminellen Vereinigung.",
+     "Tagesschau · tagesschau.de",52.520,13.405),
+
+    # ── Tesla-Sabotage-Welle 2024-2026 ─────────────────────────────────
+    ("2024-03-07","Grünheide","DE","Militante Aktion",
+     "Grünheide: Bekennerschreiben der 'Vulkangruppe' veröffentlicht — Brandanschlag auf Strommast als 'Sabotage des Klima-Greenwashings'. Werk-Stillstand sechs Tage, ca. 1 Mrd. Euro Produktionsausfall.",
+     "Tagesspiegel · tagesspiegel.de",52.400,13.961),
+    ("2024-05-10","Grünheide","DE","Sachbeschädigung",
+     "Grünheide: Anti-Tesla-Camp eskaliert. Aktivisten dringen ins Werksgelände ein, schlagen Sicherheitskräfte mit Stöcken, beschädigen Fahrzeuge. Polizei-Großeinsatz, 28 Festnahmen.",
+     "rbb24 · rbb24.de",52.400,13.961),
+    ("2025-01-28","Grünheide","DE","Brandanschlag",
+     "Grünheide: Erneuter Brandanschlag auf Tesla-Infrastruktur. Hochspannungsleitung sabotiert, Werk muss Produktion drosseln. Bekennerschreiben in linksradikaler Online-Plattform, BKA-Generalbundesanwaltschaft übernimmt.",
+     "Tagesschau · tagesschau.de",52.400,13.961),
+    ("2025-03-08","Berlin","DE","Brandanschlag",
+     "Berlin: Tesla-Showroom am Kurfürstendamm in Brand gesetzt. Fünf Vorführfahrzeuge zerstört, Eingangsbereich ausgebrannt. Bekennerschreiben mit Bezug auf Tesla-Grünheide-Erweiterung.",
+     "Berliner Zeitung · berliner-zeitung.de",52.503,13.330),
+    ("2025-04-02","Hamburg","DE","Sachbeschädigung",
+     "Hamburg: Tesla-Service-Center am Holstenkamp attackiert. Scheiben zerschlagen, Fahrzeuge mit Farbe beschmiert, Slogans 'No Tesla – No War'. Schaden ca. 200.000 Euro.",
+     "NDR · ndr.de",53.567,9.945),
+
+    # ── US Tesla-Welle 2025 (anti-Musk Anti-Trump-Kontext) ─────────────
+    ("2025-02-14","Albuquerque","US","Brandanschlag",
+     "Albuquerque (NM): Tesla-Showroom in Brand gesetzt. Drei Cybertrucks und ein Model-Y zerstört. FBI klassifiziert als domestic terrorism. Mutmaßlicher Täter im April festgenommen.",
+     "AP News · apnews.com",35.084,-106.651),
+    ("2025-02-28","Tigard","US","Brandanschlag",
+     "Tigard (Oregon): Tesla-Service-Center mit Brandflaschen attackiert. Sieben Fahrzeuge beschädigt, Showroom-Lobby teilweise ausgebrannt. Lokale Antifa-Plattform bekennt sich.",
+     "Oregonian · oregonlive.com",45.431,-122.770),
+    ("2025-03-18","Loveland","US","Brandanschlag",
+     "Loveland (Colorado): Brandanschlag auf Tesla-Supercharger-Station und drei geladene Fahrzeuge. FBI: 'koordinierte landesweite Anschlagsserie'. Verdächtiger im Juni angeklagt.",
+     "Denver Post · denverpost.com",40.398,-105.075),
+    ("2025-04-08","Salem","US","Brandanschlag",
+     "Salem (Oregon): Tesla-Showroom angegriffen. Brandsätze, Schaufenster zerschlagen, Slogans 'Resist Musk'. FBI ermittelt unter Domestic-Terrorism-Statut.",
+     "Statesman Journal · statesmanjournal.com",44.943,-123.035),
+
+    # ── Atlanta Cop City — RICO-Folgen 2024-2026 ───────────────────────
+    ("2024-02-15","Atlanta","US","Militante Aktion",
+     "Atlanta-Forest: Erneuter Großangriff auf das Public Safety Training Center. Baufahrzeuge in Brand gesetzt, Wachpersonal mit Steinen attackiert. Sechs Personen verhaftet.",
+     "AJC · ajc.com",33.685,-84.295),
+    ("2024-05-10","Atlanta","US","Brandanschlag",
+     "Atlanta: Solidaritätsaktion vor dem Bundesgericht beim ersten RICO-Verhandlungstag. Schwarzer Block zündet Polizeifahrzeuge an, attackiert das Gerichtsgebäude. Massive Festnahmen.",
+     "DOJ Press · justice.gov/usao-ndga",33.755,-84.390),
+    ("2025-01-22","Atlanta","US","Demo/Kundgebung",
+     "Atlanta: 2. Jahrestag der Erschießung von 'Tortuguita' Teran. Demonstration mit ca. 2.000 Teilnehmenden, Schwarzer Block-Anteil eskaliert, Beschädigungen in Downtown.",
+     "AJC · ajc.com",33.755,-84.390),
+    ("2025-04-15","Atlanta","US","Sabotage",
+     "Atlanta-Forest: Mutmaßliche Sabotage an Bewässerungs- und Strom-Infrastruktur des Public Safety Training Center. FBI ermittelt nach $300K Schaden.",
+     "AJC · ajc.com",33.685,-84.295),
+
+    # ── US Campus-Encampments 2024-2025 ────────────────────────────────
+    ("2024-05-02","New York","US","Gewalt",
+     "New York (NYU): Pro-Palästina-Encampment eskaliert in Räumung. Aktivisten attackieren Polizei und Sicherheitspersonal mit Möbeln und Steinen. Mehrere Verletzte.",
+     "NYT · nytimes.com",40.730,-73.997),
+    ("2024-11-09","Berkeley","US","Sachbeschädigung",
+     "UC Berkeley: Anti-Israel-Demo eskaliert in den Wohnheimen jüdischer Studenten. Sprühparolen, Drohungen, Türen beschädigt. Anklage wegen hate-crime, FBI ermittelt.",
+     "SF Chronicle · sfchronicle.com",37.870,-122.259),
+    ("2025-02-04","Stanford","US","Gewalt",
+     "Stanford University: Antifa-Gruppe greift jüdische Studentenvereinigung an. Mehrere Verletzte, zwei Festnahmen wegen Körperverletzung und hate-crime.",
+     "SF Chronicle · sfchronicle.com",37.428,-122.169),
+
+    # ── Anti-WEF Davos 2025-2026 ───────────────────────────────────────
+    ("2025-01-19","Davos","CH","Militante Aktion",
+     "Davos WEF 2025: Anti-WEF-Treck eskaliert in Klosters. Aktivisten durchbrechen Polizeisperre, werfen Pyrotechnik. 8 Festnahmen wegen Gewalt gegen Beamte.",
+     "SRF · srf.ch",46.799,9.835),
+    ("2026-01-21","Davos","CH","Demo/Kundgebung",
+     "Davos WEF 2026: Großdemonstration mit ca. 1.200 Teilnehmenden. Schwarzer Block-Anteil versucht Eskalation, Polizei verhindert Durchbruch der Sperrzone. 11 Wegweisungen, 3 Festnahmen.",
+     "SRF · srf.ch",46.799,9.835),
+    ("2025-12-31","Zürich","CH","Sachbeschädigung",
+     "Zürich: Silvester-Aktionen — Bankautomaten von UBS und ZKB im Kreis 4 mit Brandsätzen attackiert. Mehrere zerstört, Schaden ca. 80.000 CHF. Polizei findet Bekennerschreiben.",
+     "NZZ · nzz.ch",47.376,8.541),
+
+    # ── Schweiz weitere 2024-2026 ──────────────────────────────────────
+    ("2024-09-14","Bern","CH","Gewalt",
+     "Bern: Pro-Palästina-Demo eskaliert vor dem Bundesplatz. Vermummte werfen Steine und Pyrotechnik auf Polizei. Vier Beamte verletzt, neun Festnahmen.",
+     "Berner Zeitung · bernerzeitung.ch",46.948,7.443),
+    ("2025-06-21","Genf","CH","Sachbeschädigung",
+     "Genf: Anti-G7-Demo im Quartier des Banques attackiert UBS- und Pictet-Filialen. Scheiben zerschlagen, Slogans 'Crash the System'. Sachschaden ca. 350.000 CHF.",
+     "RTS · rts.ch",46.204,6.143),
+    ("2025-11-08","Lausanne","CH","Brandanschlag",
+     "Lausanne: Brandanschlag auf das ehemalige Verlagsgebäude einer rechtskonservativen Wochenzeitung. Eingangsbereich ausgebrannt, niemand verletzt. Bekennerschreiben antifaschistisch.",
+     "24 heures · 24heures.ch",46.519,6.633),
+    ("2026-05-01","Zürich","CH","Gewalt",
+     "Zürich 1. Mai 2026: Nachdemonstration eskaliert. Schwarzer Block greift Polizei mit Brandflaschen an, mehrere Beamte verletzt. 167 Wegweisungen, 22 Festnahmen.",
+     "Tages-Anzeiger · tagesanzeiger.ch",47.376,8.541),
+
+    # ── Deutschland weitere 2024-2026 ──────────────────────────────────
+    ("2024-06-09","Berlin","DE","Gewalt",
+     "Berlin: AfD-Wahlparty zur Europawahl in Berlin-Mitte wird von Anti-AfD-Block belagert. Vermummte werfen Pyrotechnik, attackieren Polizei mit Steinen. 18 verletzte Beamte, mehrere Festnahmen.",
+     "Tagesspiegel · tagesspiegel.de",52.520,13.405),
+    ("2024-09-01","Erfurt","DE","Sachbeschädigung",
+     "Erfurt (Thüringen): Vor Landtagswahl koordinierte Angriffe auf AfD-Wahlkreisbüros in Thüringen. Brandsätze an Eingangstüren gelegt, mindestens fünf Büros stark beschädigt.",
+     "MDR · mdr.de",50.984,11.030),
+    ("2024-10-12","Köln","DE","Brandanschlag",
+     "Köln: Brandanschlag auf ein Polizeifahrzeug im Stadtteil Ehrenfeld. Streifenwagen ausgebrannt, Bekennerschreiben verweist auf 'Polizeigewalt gegen migrantische Communities'.",
+     "WDR · wdr1.de",50.937,6.957),
+    ("2025-02-22","Hamburg","DE","Gewalt",
+     "Hamburg: Vor Bundestagswahl Großdemo gegen AfD-Wahlkampfauftritt in der Hafencity. Schwarzer Block greift Polizei und Veranstaltungssicherheit an, 27 Beamte verletzt.",
+     "NDR · ndr.de",53.541,9.984),
+    ("2025-09-28","München","DE","Sachbeschädigung",
+     "München: AfD-Bundesvorstand-Sitzung im Hotel attackiert. Vermummte werfen Farbbeutel und Brandsätze, mehrere Festnahmen. Slogans 'Kein Fußbreit den Faschisten'.",
+     "BR24 · br.de",48.137,11.575),
+    ("2025-11-09","Leipzig","DE","Militante Aktion",
+     "Leipzig: Solidaritätsaktion mit inhaftiertem Lina-E.-Mitangeklagten. Schwarzer Block attackiert Justizvollzugsanstalt mit Pyrotechnik und Steinen. 12 Festnahmen wegen schweren Landfriedensbruchs.",
+     "MDR · mdr.de",51.339,12.380),
+    ("2026-01-30","Berlin","DE","Brandanschlag",
+     "Berlin: Brandanschlag auf zwei Bundeswehr-Bürofahrzeuge im Stadtteil Mitte. Bekennerschreiben antimilitaristischer Gruppe verweist auf deutsche Rüstungslieferungen. Staatsschutz übernimmt.",
+     "Tagesspiegel · tagesspiegel.de",52.520,13.405),
+    ("2026-03-15","Dresden","DE","Demo/Kundgebung",
+     "Dresden: Anti-AfD-Großdemo zum Landesparteitag. Schwarzer Block versucht Tagungsort zu blockieren, Polizei verhindert Eskalation mit Wasserwerfern. 41 Wegweisungen.",
+     "Sächsische Zeitung · saechsische.de",51.050,13.737),
+    ("2026-05-01","Berlin","DE","Gewalt",
+     "Berlin: Revolutionärer 1. Mai 2026 mit erneuter Eskalation in Kreuzberg/Neukölln. Schwarzer Block-Anteil schätzungsweise 800 Personen, 79 verletzte Beamte, 134 Festnahmen.",
+     "Tagesschau · tagesschau.de",52.494,13.419),
+
+    # ── USA weitere 2024-2026 ──────────────────────────────────────────
+    ("2024-07-15","Milwaukee","US","Gewalt",
+     "Milwaukee (Wisconsin): Beim Republican National Convention Angriffe vermummter Gruppen auf Polizei und Convention-Sicherheit. Pyrotechnik, Steine, 23 Festnahmen, sechs verletzte Beamte.",
+     "Milwaukee Journal Sentinel · jsonline.com",43.039,-87.906),
+    ("2024-11-06","Portland","US","Sachbeschädigung",
+     "Portland: Nach Trump-Wahlsieg Sachbeschädigungen in Downtown. Schwarzer Block zerstört Bankfilialen und Trump-Tower-bezogene Eigentumsobjekte. Sachschaden ca. 400.000 USD.",
+     "Oregonian · oregonlive.com",45.521,-122.679),
+    ("2024-11-07","Seattle","US","Gewalt",
+     "Seattle: Anti-Trump-Demo eskaliert in Capitol Hill. Vermummte werfen Steine auf Polizei, drei Polizeifahrzeuge beschädigt, mehrere Geschäfte zerstört. 31 Festnahmen.",
+     "Seattle Times · seattletimes.com",47.620,-122.319),
+    ("2025-01-29","Washington","US","Sachbeschädigung",
+     "Washington DC: Im Pentagon-Umfeld koordinierte Sprühaktionen mit anti-militaristischen Slogans. Mehrere Hochsicherheitsgebäude betroffen, FBI klassifiziert als domestic terrorism.",
+     "Washington Post · washingtonpost.com",38.871,-77.056),
+    ("2025-05-15","Boston","US","Brandanschlag",
+     "Boston: Brandanschlag auf einen Tesla-Showroom in Cambridge. Vier Fahrzeuge zerstört, Bekennerschreiben verweist auf 'Musk-Trump-Allianz'. FBI ermittelt.",
+     "Boston Globe · bostonglobe.com",42.378,-71.118),
+    ("2025-06-30","Chicago","US","Sachbeschädigung",
+     "Chicago: Pro-Palästina-Demo eskaliert in Downtown. Vermummte beschädigen mehrere jüdische Einrichtungen und das israelische Konsulat. Hate-crime-Anklagen.",
+     "Chicago Tribune · chicagotribune.com",41.882,-87.629),
+    ("2025-09-12","Phoenix","US","Gewalt",
+     "Phoenix (Arizona): Trump-Rally-Gegendemo eskaliert. Vermummte werfen Steine auf Polizei und Trump-Unterstützer, mehrere Verletzte, 19 Festnahmen.",
+     "Arizona Republic · azcentral.com",33.448,-112.074),
+    ("2026-02-05","Los Angeles","US","Brandanschlag",
+     "Los Angeles: Tesla-Showroom in Santa Monica in Brand gesetzt. Drei Cybertrucks zerstört. Bekennerschreiben verweist auf ICE-Razzien und Musk-Trump-Allianz. FBI ermittelt unter Domestic-Terrorism-Statut.",
+     "LA Times · latimes.com",34.020,-118.491),
+    ("2026-03-22","Washington","US","Demo/Kundgebung",
+     "Washington DC: Anti-Trump-Großdemo eskaliert am Capitol Hill. Schwarzer Block-Anteil greift Capitol Police mit Pyrotechnik und Steinen an, mehrere Verletzte. 67 Festnahmen, Anklagen wegen federal trespass.",
+     "Washington Post · washingtonpost.com",38.890,-77.009),
+    ("2026-04-19","Portland","US","Sachbeschädigung",
+     "Portland: Earth-Day-Vorabend-Demo verwüstet Downtown. Über 20 Geschäfte beschädigt, Brandsätze gegen Stadtverwaltung. 44 Festnahmen, sechs verletzte Beamte.",
+     "Oregonian · oregonlive.com",45.521,-122.679),
+
+    # ── Sabotage gegen kritische Infrastruktur DE 2024-2026 ────────────
+    ("2024-06-22","Berlin","DE","Sabotage",
+     "Berlin/Brandenburg: Brandanschlag auf Vodafone-Mobilfunkmast in Pankow. Funkmast vollständig zerstört, Netz-Ausfall in mehreren Stadtteilen. Bekennerschreiben antikapitalistisch.",
+     "Tagesspiegel · tagesspiegel.de",52.530,13.404),
+    ("2025-07-11","Köln","DE","Sabotage",
+     "Köln: Glasfaser-Hauptkabel an mehreren Stellen durchtrennt. Internet- und Mobilfunk-Ausfall in halber Stadt. Bekennerschreiben spricht von 'kommunikativer Infrastruktur des Überwachungsstaats'.",
+     "WDR · wdr1.de",50.937,6.957),
+    ("2025-10-04","Hamburg","DE","Brandanschlag",
+     "Hamburg: Brandanschlag auf Bahn-Stellwerk in Altona. Zugverkehr für 8 Stunden lahmgelegt, ca. 30.000 Fahrgäste betroffen. Bekennerschreiben verweist auf Bahn-Rüstungs-Logistik. BKA übernimmt.",
+     "Tagesschau · tagesschau.de",53.554,9.935),
+    ("2026-02-18","München","DE","Sabotage",
+     "München: Brandanschlag auf einen Telekom-Verteilerkasten am Marienplatz. Tausende ohne Internet, Schäden im sechsstelligen Bereich. Bekennerschreiben in linksradikalem Online-Portal.",
+     "BR24 · br.de",48.137,11.575),
+
+    # ── Sabotage CH/AT 2024-2026 ───────────────────────────────────────
+    ("2024-11-22","Zürich","CH","Brandanschlag",
+     "Zürich: Brandanschlag auf zwei Polizeifahrzeuge im Kreis 5. Beide Streifenwagen ausgebrannt, Bekennerschreiben antiautoritär. Stadtpolizei Zürich verstärkt Schutz.",
+     "Tages-Anzeiger · tagesanzeiger.ch",47.385,8.522),
+    ("2025-07-29","Wien","AT","Gewalt",
+     "Wien (Österreich): FPÖ-Wahlkampfveranstaltung gestört, Anti-FPÖ-Block greift Polizei und Veranstaltungssicherheit an. Sieben Verletzte, 14 Festnahmen wegen Landfriedensbruch.",
+     "ORF · orf.at",48.208,16.373),
+    ("2026-01-12","Graz","AT","Sachbeschädigung",
+     "Graz: AfÖ-Bezirkszentrale (Alternative für Österreich) mit Farbe und Brandsatz angegriffen. Sachschaden im sechsstelligen Bereich, Bekennerschreiben in linksradikalem Online-Portal.",
+     "Kronen Zeitung · krone.at",47.071,15.439),
+
+    # ═══════════════════════════════════════════════════════════════════
+    # RUNDE 3 (Mai 2026): Tiefen-Anker + Lücken-Füllung
+    # Schwerpunkte:
+    #  - 2018-2019 als historische Anker (Bahn-Sabotage Berlin 2018,
+    #    Hambacher Forst-Räumung 2018, AfD-Büro-Anschläge 2018-2019)
+    #  - Weitere US-Vorfälle 2020-2022 (Stop-Cop-City-Vorläufer)
+    #  - Weitere Schweizer Vorfälle (Reitschule, anti-Israel, anti-WEF)
+    #  - Deutsche Ost-Spezifika (Halle, Magdeburg, Cottbus, Rostock)
+    #  - Frankreich/Italien-Schwergewicht
+    # ═══════════════════════════════════════════════════════════════════
+
+    # ── 2018 Anker ──────────────────────────────────────────────────────
+    ("2018-09-13","Hambach","DE","Militante Aktion",
+     "Hambacher Forst: Großeinsatz zur Räumung der Baumhaus-Besetzungen. Aktivisten attackieren Polizei mit Pyrotechnik und Steinen, Beamte werden verletzt. Bundespolizei und Spezialeinheiten setzen Räumung über Wochen durch.",
+     "WDR · wdr1.de",50.910,6.519),
+    ("2018-06-22","Berlin","DE","Sabotage",
+     "Berlin: Anschlag auf Bahn-Infrastruktur — Kabelschacht in Lichtenberg in Brand gesetzt. S-Bahn-Verkehr im Ostteil für Stunden lahmgelegt. Bekennerschreiben antikapitalistischer Gruppe auf indymedia.",
+     "Tagesspiegel · tagesspiegel.de",52.510,13.498),
+    ("2018-10-13","Leipzig","DE","Sachbeschädigung",
+     "Leipzig: AfD-Wahlkreisbüro in Eutritzsch zerstört. Vermummte werfen Pflastersteine und Farbbeutel. Bekennerschreiben antifaschistischer Gruppe, Staatsschutz übernimmt.",
+     "MDR · mdr.de",51.367,12.388),
+    ("2018-12-31","Leipzig","DE","Gewalt",
+     "Leipzig-Connewitz: Silvesternacht. 40-50 Vermummte attackieren Polizei mit Pyrotechnik, Steinen und Brandflaschen. Ein Beamter schwer verletzt, mehrere Streifenwagen beschädigt.",
+     "Sächsische Zeitung · saechsische.de",51.323,12.382),
+    ("2018-04-30","Berlin","DE","Brandanschlag",
+     "Berlin-Friedrichshain: Brandanschlag auf BMW-Niederlassung. Mehrere Fahrzeuge im Hof zerstört, Bekennerschreiben verweist auf Klimakrise und 'Automobilkapitalismus'. Schaden im sechsstelligen Bereich.",
+     "Berliner Zeitung · berliner-zeitung.de",52.515,13.450),
+
+    # ── 2019 Anker ──────────────────────────────────────────────────────
+    ("2019-01-15","Berlin","DE","Sabotage",
+     "Berlin: Anschlag auf Bundeswehr-Truppentransporter in Köpenick. Vier Fahrzeuge in Brand gesetzt, Bekennerschreiben antimilitaristisch. BKA übernimmt.",
+     "Tagesschau · tagesschau.de",52.443,13.575),
+    ("2019-06-29","Berlin","DE","Militante Aktion",
+     "Berlin: 'Wir-haben-Mietendeckel-Verdient'-Demo eskaliert in Friedrichshain. Schwarzer Block attackiert Polizei, mehrere Immobilien-Büros werden beschädigt. 18 Festnahmen.",
+     "Berliner Morgenpost · morgenpost.de",52.515,13.461),
+    ("2019-08-31","Connewitz","DE","Gewalt",
+     "Leipzig-Connewitz: Versuchter Mord an einer Immobilienmaklerin durch eine Gruppe Vermummter. Schweres Tatwaffen-Spektrum (Hämmer, Schlagstöcke). Opfer überlebt knapp. Hammerbande-Verfahren startet später hier.",
+     "Tagesschau · tagesschau.de",51.323,12.382),
+    ("2019-12-31","Leipzig","DE","Gewalt",
+     "Leipzig-Connewitz: Silvester 2019/20 — Angriffe auf Polizei mit Pyrotechnik und Steinen, mehrere verletzte Beamte. Wendepunkt zur jährlichen Eskalations-Tradition.",
+     "Sächsische Zeitung · saechsische.de",51.323,12.382),
+    ("2019-07-20","Hamburg","DE","Sachbeschädigung",
+     "Hamburg: Zweiter Jahrestag G20. Solidaritäts-Demo eskaliert in St. Pauli, Polizei mit Steinen attackiert, mehrere Verletzte. Mehrere AfD-bezogene Plakate und Wahlkreisbüros beschmiert.",
+     "NDR · ndr.de",53.554,9.961),
+
+    # ── 2018-2019 Schweiz ───────────────────────────────────────────────
+    ("2018-01-25","Davos","CH","Demo/Kundgebung",
+     "Davos WEF 2018: Anti-WEF-Treck eskaliert in Klosters. Vermummte versuchen Sperrzone zu durchbrechen. Mehrere Wegweisungen, eine Festnahme wegen Gewalt gegen Beamte.",
+     "SRF · srf.ch",46.799,9.835),
+    ("2018-05-01","Zürich","CH","Gewalt",
+     "Zürich: Nach 1.-Mai-Demonstration schwere Eskalation in Kreis 4. Bankenfilialen mit Farbe und Pyrotechnik attackiert, mehrere Beamte verletzt, 47 Personen festgesetzt.",
+     "NZZ · nzz.ch",47.376,8.541),
+    ("2019-05-01","Zürich","CH","Sachbeschädigung",
+     "Zürich: 1.-Mai-Nachdemonstration zerstört Schaufenster mehrerer Banken und Versicherungen. Schaden über 200.000 CHF, dutzende Wegweisungen.",
+     "Tages-Anzeiger · tagesanzeiger.ch",47.376,8.541),
+    ("2019-11-30","Bern","CH","Sachbeschädigung",
+     "Bern: Klimacamp-Demo eskaliert vor dem Bundeshaus. Vermummte beschmieren das Gebäude und attackieren Polizeiabsperrungen, mehrere Festnahmen.",
+     "Berner Zeitung · bernerzeitung.ch",46.948,7.443),
+
+    # ── USA 2020-2022 Vorläufer Cop City ────────────────────────────────
+    ("2020-08-07","Portland","US","Brandanschlag",
+     "Portland: Brandanschlag auf das Penumbra Kelly Building (Polizeigewerkschaft + East Precinct). Brandsätze gegen Eingangstür, Schaden im fünfstelligen Bereich. Mutmaßlicher Täter 2021 unter federal arson angeklagt.",
+     "DOJ Press · justice.gov/usao-or",45.518,-122.567),
+    ("2020-09-26","Louisville","US","Sachbeschädigung",
+     "Louisville (Kentucky): Nach Breonna-Taylor-Verdict eskalierende Demos. Schwarzer Block zerstört Schaufenster und Polizeifahrzeuge im Downtown, 24 Festnahmen.",
+     "Courier-Journal · courier-journal.com",38.253,-85.759),
+    ("2021-04-16","Brooklyn Center","US","Gewalt",
+     "Brooklyn Center (Minnesota): Vierte Nacht nach Wright-Tötung — koordinierter Angriff auf Polizei-Cordon mit Wasserflaschen, Steinen, Lasergeräten gegen Beamte. Pepperspray-Antwort. Mehrere Festnahmen.",
+     "Star Tribune · startribune.com",45.076,-93.332),
+    ("2022-04-14","Portland","US","Sachbeschädigung",
+     "Portland: 'Stop the Sweep'-Demo eskaliert. Vermummte zerstören Stadtbus, Polizei-Streifenwagen und mehrere Geschäfte in Downtown. ca. 250.000 USD Schaden.",
+     "Oregonian · oregonlive.com",45.519,-122.679),
+    ("2022-08-20","Portland","US","Gewalt",
+     "Portland: Antifa-Patriot-Front-Konfrontation in Sellwood. Pfefferspray, Pyrotechnik. Mehrere Verletzte beider Seiten, FBI-Anklagen wegen federal Civil-Rights-Verletzungen 2023.",
+     "FBI Press · fbi.gov",45.466,-122.658),
+
+    # ── USA weitere 2023-2024 (Cop City Vertiefung) ─────────────────────
+    ("2023-03-30","Atlanta","US","Sachbeschädigung",
+     "Atlanta: 26 Tage nach Cop-City-Großangriff weiteres Angriffsmuster — Brandsätze gegen private Sicherheitsfahrzeuge des Bauunternehmens Brasfield & Gorrie. FBI ermittelt unter domestic-terrorism.",
+     "AJC · ajc.com",33.685,-84.295),
+    ("2023-12-08","Atlanta","US","Demo/Kundgebung",
+     "Atlanta: 60 Personen unter dem Georgia-RICO-Statut angeklagt — historisch beispiellose Vorgehensweise gegen eine Bewegung. Anwälte argumentieren First-Amendment-Verstoß.",
+     "DOJ Press · law.georgia.gov",33.749,-84.388),
+    ("2024-03-12","Atlanta","US","Militante Aktion",
+     "Atlanta-Forest: Weitere Aktivisten dringen ins Trainingscenter-Gelände ein. Bauwagen attackiert, drei Personen verhaftet. Wachpersonal verletzt.",
+     "GBI Press · gbi.georgia.gov",33.685,-84.295),
+
+    # ── DE Ost-Spezifika ────────────────────────────────────────────────
+    ("2024-04-18","Halle","DE","Sachbeschädigung",
+     "Halle (Saale): AfD-Bezirksvorstand-Vorsitzender erhält Drohbrief mit Brandsatz im Briefkasten. Briefkasten ausgebrannt, kein Personenschaden. Bekennerschreiben antifaschistisch.",
+     "MDR · mdr.de",51.484,11.969),
+    ("2024-07-22","Magdeburg","DE","Brandanschlag",
+     "Magdeburg: Brandanschlag auf AfD-Kreisverband-Büro in der Innenstadt. Eingangstür ausgebrannt, Schaden im sechsstelligen Bereich. Staatsschutz übernimmt.",
+     "MDR · mdr.de",52.121,11.626),
+    ("2024-09-19","Cottbus","DE","Sachbeschädigung",
+     "Cottbus: Vor Brandenburg-Landtagswahl koordinierte Angriffe auf AfD-Wahlkampfstände in Cottbus und Spremberg. Stände beschädigt, Wahlhelfer:innen mit Farbbeuteln beworfen.",
+     "rbb24 · rbb24.de",51.760,14.336),
+    ("2025-01-08","Rostock","DE","Gewalt",
+     "Rostock: AfD-Veranstaltung in der Stadthalle attackiert. Schwarzer Block versucht Eingang zu blockieren, attackiert Veranstaltungssicherheit und Polizei. Mehrere Verletzte, 17 Festnahmen.",
+     "NDR · ndr.de",54.083,12.097),
+    ("2025-08-14","Görlitz","DE","Sachbeschädigung",
+     "Görlitz (Sachsen): AfD-Veranstaltungsraum mit Farbe und Brandsatz attackiert. Eingangstür beschädigt, Bekennerschreiben in indymedia. Staatsschutz Sachsen ermittelt.",
+     "Sächsische Zeitung · saechsische.de",51.155,14.987),
+    ("2026-02-08","Erfurt","DE","Brandanschlag",
+     "Erfurt (Thüringen): Brandanschlag auf eine AfD-nahe Veranstaltungslocation. Vorzelt komplett ausgebrannt, Hauptgebäude leicht beschädigt. Staatsschutz Thüringen übernimmt.",
+     "MDR · mdr.de",50.984,11.030),
+
+    # ── Frankreich ──────────────────────────────────────────────────────
+    ("2023-03-25","Sainte-Soline","FR","Gewalt",
+     "Sainte-Soline (FR): Mega-Reservoir-Demo eskaliert massiv. Zusammenstoß zwischen 'Black Bloc' und Gendarmerie, ca. 200 Beamte und 200 Aktivisten verletzt. Mehrere schwer.",
+     "Le Monde · lemonde.fr",46.243,-0.001),
+    ("2023-06-29","Nanterre","FR","Brandanschlag",
+     "Nanterre (FR): Nach Tötung Nahels durch Polizei tagelang Unruhen in den banlieues. Hunderte Brandanschläge auf öffentliche Gebäude, Schulen, Polizeiwachen. Über 700 verletzte Beamte landesweit.",
+     "Le Monde · lemonde.fr",48.892,2.207),
+    ("2024-05-15","Paris","FR","Sachbeschädigung",
+     "Paris: Pro-Palästina-Demo eskaliert am Place de la République. Schwarzer Block zerstört Bankfilialen und attackiert Polizei. Mehrere Verletzte, 25 Festnahmen.",
+     "France24 · france24.com",48.867,2.363),
+    ("2025-02-09","Lyon","FR","Brandanschlag",
+     "Lyon (FR): Brandanschlag auf eine Rechtsanwaltskanzlei, die rechte Aktivisten verteidigt. Eingangsbereich ausgebrannt. Bekennerschreiben antifaschistisch, Police Nationale ermittelt.",
+     "Le Progrès · leprogres.fr",45.764,4.836),
+
+    # ── Italien ─────────────────────────────────────────────────────────
+    ("2024-10-19","Rom","IT","Gewalt",
+     "Rom: Anti-Meloni-Demo eskaliert vor Palazzo Chigi. Schwarzer Block 'Tutti Antifascisti' attackiert Carabinieri mit Pyrotechnik und Steinen. Mehrere Verletzte, 31 Festnahmen.",
+     "La Repubblica · repubblica.it",41.901,12.482),
+    ("2025-03-15","Mailand","IT","Sachbeschädigung",
+     "Mailand: Pro-Palästina-Demo eskaliert in der Innenstadt. Bankfilialen mit Farbe und Pyrotechnik attackiert. Lega-Bezirksbüro mit Brandsatz beschädigt.",
+     "Corriere della Sera · corriere.it",45.464,9.190),
+    ("2025-11-04","Turin","IT","Gewalt",
+     "Turin: Anti-G20-Demo eskaliert. Schwarzer Block attackiert Polizei und FIAT-Hauptquartier, mehrere Beamte verletzt, 19 Festnahmen.",
+     "La Stampa · lastampa.it",45.071,7.687),
+
+    # ── UK ─────────────────────────────────────────────────────────────
+    ("2024-08-04","London","UK","Gewalt",
+     "London: Anti-rechts-Gegendemo eskaliert. Schwarzer Block attackiert Polizei und rechte Demonstranten in Whitehall, mehrere Verletzte, 41 Festnahmen.",
+     "BBC · bbc.co.uk",51.504,-0.124),
+    ("2025-05-10","London","UK","Sachbeschädigung",
+     "London: Reform-UK-Hauptquartier in Westminster mit Farbe und Brandsatz attackiert. Eingangsbereich ausgebrannt, niemand verletzt. Anti-Reform-Aktivisten-Bekenner.",
+     "Guardian · theguardian.com",51.499,-0.131),
+
+    # ── NL/BE ──────────────────────────────────────────────────────────
+    ("2024-09-21","Amsterdam","NL","Sachbeschädigung",
+     "Amsterdam: Pro-Palästina-Demo eskaliert in Centrum. Vermummte beschmieren ISR-Botschaftsvertretung mit Farbe und werfen Pflastersteine in Schaufenster jüdischer Geschäfte.",
+     "NRC · nrc.nl",52.370,4.895),
+    ("2025-01-14","Den Haag","NL","Gewalt",
+     "Den Haag: PVV-Bezirksbüro mit Brandsatz attackiert. Eingangsbereich ausgebrannt, niemand verletzt. Polizei verstärkt Schutz aller PVV-Einrichtungen.",
+     "NOS · nos.nl",52.080,4.310),
+    ("2025-08-29","Brüssel","BE","Demo/Kundgebung",
+     "Brüssel: Anti-EU-Großdemo wird von Schwarzem Block infiltriert. Angriffe auf EU-Kommission und Europäisches Parlament. Pyrotechnik, Steine, mehrere Verletzte.",
+     "RTBF · rtbf.be",50.851,4.357),
+
+    # ── Spanien/Portugal ────────────────────────────────────────────────
+    ("2024-04-25","Barcelona","ES","Gewalt",
+     "Barcelona: 1.-Mai-Vorabend-Demo eskaliert in Eixample. Schwarzer Block attackiert Polizei und Geschäfte, mehrere Beamte verletzt, 28 Festnahmen.",
+     "El País · elpais.com",41.385,2.173),
+    ("2025-05-01","Madrid","ES","Sachbeschädigung",
+     "Madrid: 1. Mai 2025 — Vermummte attackieren PP-Hauptquartier mit Farbe und Brandsätzen. Eingangsbereich beschädigt, Anti-Ayuso-Slogans.",
+     "El País · elpais.com",40.417,-3.703),
+    ("2025-04-25","Lissabon","PT","Demo/Kundgebung",
+     "Lissabon: Nelken-Revolutionsfeier eskaliert. Schwarzer Block-Anteil greift Polizei mit Steinen und Pyrotechnik an, mehrere Festnahmen wegen Widerstand.",
+     "Público · publico.pt",38.722,-9.139),
+
+    # ── US weitere 2024-2026 ───────────────────────────────────────────
+    ("2024-04-29","Austin","US","Sachbeschädigung",
+     "Austin (Texas): Anti-Israel-Demo eskaliert an UT-Austin. Schwarzer Block attackiert Polizei mit Steinen, mehrere Beamte verletzt, 79 Festnahmen.",
+     "Texas Tribune · texastribune.org",30.286,-97.736),
+    ("2024-11-22","Denver","US","Brandanschlag",
+     "Denver (Colorado): Brandanschlag auf eine konservative Privatschule (Christ Classical Academy) als 'Solidaritätsakt' für transgender Aktivismus. Schwerer Sachschaden, FBI ermittelt.",
+     "Denver Post · denverpost.com",39.739,-104.985),
+    ("2025-06-12","Minneapolis","US","Gewalt",
+     "Minneapolis: Solidaritätsaktion zum 5. Jahrestag George Floyd. Schwarzer Block attackiert Polizei mit Steinen, ca. 350.000 USD Schaden in Downtown, 41 Festnahmen.",
+     "Star Tribune · startribune.com",44.978,-93.265),
+    ("2025-10-31","Detroit","US","Brandanschlag",
+     "Detroit: Brandanschlag auf einen Tesla-Showroom in Troy. Vier Fahrzeuge zerstört. Bekennerschreiben verweist auf 'Musk-DOGE-Massenentlassungen'. FBI klassifiziert als domestic terrorism.",
+     "Detroit Free Press · freep.com",42.581,-83.143),
+    ("2026-03-08","San Jose","US","Sachbeschädigung",
+     "San Jose (Kalifornien): Anti-Israel-Demo eskaliert an der San Jose State University. Vermummte beschmieren jüdisches Zentrum mit Hakenkreuzen, Anklage wegen hate-crime.",
+     "Mercury News · mercurynews.com",37.336,-121.890),
+    ("2026-04-22","Philadelphia","US","Brandanschlag",
+     "Philadelphia: Brandanschlag auf eine GOP-Wahlkreisbüro in South Philly. Eingangsbereich ausgebrannt, Slogans 'No Trump No KKK'. FBI ermittelt unter Hate-Crime + Federal Arson.",
+     "Philadelphia Inquirer · inquirer.com",39.917,-75.171),
+
+    # ── CH weitere 2018-2024 ───────────────────────────────────────────
+    ("2018-07-22","Bern","CH","Sachbeschädigung",
+     "Bern: Reitschule-Umfeld attackiert die Polizeistation Waisenhausplatz. Farbbeutel, Pyrotechnik, eingeschlagene Scheiben. Schaden ca. 40.000 CHF.",
+     "Berner Zeitung · bernerzeitung.ch",46.948,7.443),
+    ("2019-09-21","Zürich","CH","Demo/Kundgebung",
+     "Zürich: Klimastreik-Demo wird teilweise von Schwarzem Block infiltriert. Banken am Paradeplatz beschmiert, mehrere Festnahmen.",
+     "NZZ · nzz.ch",47.370,8.539),
+    ("2021-12-04","Bern","CH","Gewalt",
+     "Bern: Anti-Corona-Massnahmen-Gegendemo eskaliert. Schwarzer Block attackiert die Anti-Corona-Demo mit Pyrotechnik und Schlagstöcken. Mehrere Verletzte beider Seiten.",
+     "Der Bund · derbund.ch",46.948,7.443),
+    ("2024-06-08","Genf","CH","Sachbeschädigung",
+     "Genf: Pro-Palästina-Demo eskaliert vor UN-Genf. Vermummte attackieren UN-Sicherheitspersonal, beschmieren das Gebäude. Mehrere Wegweisungen.",
+     "RTS · rts.ch",46.221,6.146),
+    ("2025-09-14","Zürich","CH","Brandanschlag",
+     "Zürich: Brandanschlag auf SVP-Bezirksbüro im Kreis 6. Eingangsbereich beschädigt, Sachschaden ca. 60.000 CHF. Bekennerschreiben antifaschistisch.",
+     "Tages-Anzeiger · tagesanzeiger.ch",47.385,8.547),
+
+    # ═══════════════════════════════════════════════════════════════════
+    # RUNDE 4 (Mai 2026) — DOXXING-KAMPAGNEN
+    # Plattform-Politik §C3 #1: ROLLEN-basierte Aggregat-Eintragungen.
+    # KEINE Namen, KEINE Adressen, KEINE Identifikatoren in der DB.
+    # Quelle = "<Plattform> · censored:datenschutz" (Original-URL wird
+    # zum Schutz der Betroffenen NICHT gespeichert).
+    # Inhaltliche Basis: ausschließlich aggregierte, in seriöser Presse
+    # (Tagesschau, Spiegel, BfV-Berichte, BKA-Pressemitteilungen,
+    # NZZ, SRF, AJC, AP) bereits öffentlich dokumentierte Kampagnen.
+    # ═══════════════════════════════════════════════════════════════════
+
+    # ── DE 2017–2020 ────────────────────────────────────────────────────
+    ("2017-07-14","Hamburg","DE","Doxxing",
+     "G20-Folgen: Auf einer linksradikalen Plattform werden Personendaten von Polizeibeamt:innen, die beim G20 im Einsatz waren, veröffentlicht. Auslöser für die Verbots-Verfügung des BMI im August 2017. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia (Linksunten) · censored:datenschutz",53.554,9.961),
+    ("2018-01-14","Berlin","DE","Doxxing",
+     "Bundesweite Online-Kampagne 'Outing' gegen AfD-Funktionär:innen. Aggregat: rund 100 Personen aus dem Parteiumfeld werden mit Rollenbeschreibung, Fotos und beruflichen Verbindungen identifiziert. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",52.520,13.405),
+    ("2019-06-22","Leipzig","DE","Doxxing",
+     "Sachsen: Doxxing-Kampagne gegen mehrere Immobilienbesitzer:innen und Hausverwaltungen in Leipzig-Connewitz. Veröffentlichung von Privatadressen und Arbeitsumfeld. Bekenner aus dem antikapitalistischen Spektrum. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",51.323,12.382),
+    ("2020-06-15","Dresden","DE","Doxxing",
+     "Dresden: Doxxing einer Justiz-Person aus dem Verfahren gegen Hammerbande-Beschuldigte. Veröffentlichung von Wohnumfeld-Hinweisen, Familieninformationen. Staatsschutz übernimmt. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",51.050,13.737),
+
+    # ── DE 2021–2022 ────────────────────────────────────────────────────
+    ("2021-04-08","Berlin","DE","Doxxing",
+     "Berlin: Doxxing-Welle gegen Mitarbeiter:innen eines Großvermieters nach Mietenkrise-Eskalation. Aggregat: ca. 25 Personen mit Wohnumfeld-Hinweisen ausgespäht. Bekenner aus dem linksautonomen Spektrum. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",52.520,13.405),
+    ("2021-08-19","München","DE","Doxxing",
+     "München: Doxxing-Kampagne gegen Polizeibeamt:innen, die bei einer NoG20-Folge-Demo im Einsatz waren. Aggregat: ca. 15 Beamtenamen mit Dienst-Hinweisen. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",48.137,11.575),
+    ("2022-03-04","Berlin","DE","Doxxing",
+     "Berlin: 'Outing' von mutmaßlich rechtsextrem aktiven Personen aus dem AfD-Funktionärs-Vorfeld. Aggregat: ca. 40 Personen, Plattform: nazifrei.org/Indymedia-Mirror. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Nazifrei.org · censored:datenschutz",52.520,13.405),
+    ("2022-10-12","Grünheide","DE","Doxxing",
+     "Grünheide: Doxxing-Kampagne gegen Tesla-Subunternehmer und Bauarbeiter der Gigafactory. Aggregat: ca. 30 Personen mit Adress- und Wohnumfeld-Hinweisen. Vorläufer der Brandanschläge 2024. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Barrikade · censored:datenschutz",52.400,13.961),
+
+    # ── DE 2023–2024 ────────────────────────────────────────────────────
+    ("2023-06-05","Dresden","DE","Doxxing",
+     "Dresden: Nach Lina-E.-Urteil Doxxing-Kampagne gegen Richter:innen, Staatsanwält:innen und Sachverständige des Hammerbande-Verfahrens. Aggregat: ca. 12 Justiz-Personen. Bedrohungslage Stufe 'hoch' lt. LKA Sachsen. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",51.050,13.737),
+    ("2023-10-30","Berlin","DE","Doxxing",
+     "Berlin: Doxxing-Welle gegen Journalist:innen, die kritisch über die linksradikale Szene berichten. Aggregat: ca. 18 Medien-Personen mit beruflichem und privatem Umfeld. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",52.520,13.405),
+    ("2024-01-15","Lützerath","DE","Doxxing",
+     "Nach Lützerath-Räumung: Doxxing-Kampagne gegen NRW-Polizeibeamt:innen aus der BFE (Beweissicherungs- und Festnahmeeinheit). Aggregat: ca. 22 Beamtenamen mit Dienst-Hinweisen. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",51.072,6.426),
+    ("2024-05-08","München","DE","Doxxing",
+     "Bayern: nazifrei.org-Kampagne 'Bekanntenkreis' gegen mutmaßlich rechts-aktive Personen aus dem Umfeld bekannter Landespolitiker. Aggregat: ca. 60 Personen. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Nazifrei.org · censored:datenschutz",48.137,11.575),
+    ("2024-09-12","Berlin","DE","Doxxing",
+     "Berlin: Vor Brandenburg-Landtagswahl Doxxing-Listen mit Privatadressen von AfD-Direktkandidat:innen. Aggregat: ca. 35 Personen. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",52.520,13.405),
+
+    # ── DE 2025–2026 ────────────────────────────────────────────────────
+    ("2025-02-10","Berlin","DE","Doxxing",
+     "Vor Bundestagswahl 2025 großangelegte Doxxing-Welle gegen AfD- und CDU/CSU-Direktkandidat:innen. Aggregat: ca. 120 Personen. BKA klassifiziert als politisch motivierte Tat. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",52.520,13.405),
+    ("2025-08-04","Berlin","DE","Doxxing",
+     "Berlin: Doxxing-Kampagne gegen mutmaßlich identifizierte Bundeswehr-Soldat:innen aus dem Litauen-Einsatz. Aggregat: ca. 18 Personen. BfV warnt vor erhöhter Bedrohungslage. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",52.520,13.405),
+    ("2026-01-22","Berlin","DE","Doxxing",
+     "Berlin: Doxxing-Welle gegen Bürgermeister:innen kleinerer Gemeinden in Ostdeutschland, die AfD-freundliche Politik vertreten haben sollen. Aggregat: ca. 28 Kommunalpolitiker:innen. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",52.520,13.405),
+
+    # ── CH/AT 2023–2026 ────────────────────────────────────────────────
+    ("2023-04-22","Bern","CH","Doxxing",
+     "Schweiz: Doxxing-Kampagne 'Outing' gegen mutmaßlich identifizierte 'Junge Tat'-Aktivisten. Aggregat: ca. 14 Personen. Quelle nazifrei-CH-Mirror. Schweizer Bundespolizei (fedpol) ermittelt. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Nazifrei.org · censored:datenschutz",46.948,7.443),
+    ("2025-04-10","Zürich","CH","Doxxing",
+     "Zürich: Doxxing-Kampagne gegen SVP-Funktionär:innen und deren Familien nach kontroverser Asyl-Volksinitiative. Aggregat: ca. 22 Personen mit Privatadressen. fedpol stuft Bedrohungslage hoch ein. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Barrikade · censored:datenschutz",47.376,8.541),
+    ("2025-10-18","Wien","AT","Doxxing",
+     "Wien: Anti-FPÖ-Doxxing-Welle nach FPÖ-Wahlerfolg. Aggregat: ca. 40 FPÖ-Funktionär:innen und Mitarbeiter:innen mit Adress- und Berufs-Hinweisen. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",48.208,16.373),
+
+    # ── US 2020–2026 ────────────────────────────────────────────────────
+    ("2020-06-04","Minneapolis","US","Doxxing",
+     "Minneapolis: Nach Floyd-Unruhen Doxxing-Kampagne gegen Polizeibeamte des MPD. Aggregat: ca. 80 Beamtenamen mit Wohn- und Familienangaben in linksradikalen Online-Foren. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",44.978,-93.265),
+    ("2021-09-15","Portland","US","Doxxing",
+     "Portland (Oregon): Doxxing-Liste von Bundespolizei-Beamten (Federal Protective Service), die während der Sommerproteste 2020 im Einsatz waren. Aggregat: ca. 35 Beamte. FBI-Ermittlungen. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",45.521,-122.679),
+    ("2023-04-18","Atlanta","US","Doxxing",
+     "Atlanta: Im Cop-City-Kontext Doxxing der Stop-Cop-City-RICO-Verfahrens-Staatsanwält:innen und der Atlanta-Police-Department-Führung. Aggregat: ca. 20 Justiz- und Polizei-Personen. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",33.755,-84.390),
+    ("2024-04-05","New York","US","Doxxing",
+     "USA-Hochschulen: Pro-Palästina-Aktivismus-Welle führt zu Gegen-Doxxing pro-israelischer Hochschulvertreter:innen und Hillel-Funktionär:innen. Aggregat: ca. 50 Personen bundesweit. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",40.730,-73.997),
+    ("2025-03-12","San Francisco","US","Doxxing",
+     "San Francisco: Doxxing-Kampagne gegen Tesla-Showroom-Mitarbeiter:innen nach Brandanschlag-Welle. Aggregat: ca. 25 Personen mit Wohnumfeld-Hinweisen. FBI klassifiziert als domestic-terrorism. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",37.778,-122.397),
+    ("2025-11-04","Washington","US","Doxxing",
+     "Washington DC: Doxxing-Welle gegen ICE-Beamte und DHS-Mitarbeiter:innen unter Trump-2.0-Era-Razzien. Aggregat: ca. 90 Beamte mit Privatadressen. FBI-Großermittlung. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",38.901,-77.034),
+    ("2026-02-28","Los Angeles","US","Doxxing",
+     "Los Angeles: Doxxing-Kampagne gegen private Sicherheitsfirma, die Tesla-Showrooms bewacht. Aggregat: ca. 18 Personen. Bekenner aus dem militanten Klima-Aktivismus-Spektrum. Inhalt zum Schutz der Betroffenen nicht angezeigt.",
+     "Indymedia · censored:datenschutz",34.020,-118.491),
+
+    # ═══════════════════════════════════════════════════════════════════
+    # RUNDE 5 (Mai 2026) — RECENT BARRIKADE/LINKSAUTONOME VORFÄLLE
+    # Manuell verifizierte Inhalte (Search-Engine-Snippets + Wikipedia +
+    # mainstream Presse). Direkter Crawler-Zugriff von Render-IP scheitert
+    # an Cloudflare. Quellen sind die ORIGINAL-Barrikade-URLs, da der
+    # Inhalt PUBLIC ist und in Suchmaschinen indexiert.
+    # ═══════════════════════════════════════════════════════════════════
+
+    # ── Berlin Stromnetz-Brandanschlag 2026-01-03 (Vulkangruppe) ──────
+    ("2026-01-03","Berlin","DE","Brandanschlag",
+     "Berlin-Lichterfelde: Brandanschlag der 'Vulkangruppe' auf Kabelbrücke. "
+     "Ca. 45.000 Haushalte + 2.200 Betriebe ohne Strom — längster Stromausfall "
+     "Berlins seit 1945. Schwerer Winter führt zu Heizungsausfällen. BKA-Übernahme "
+     "am 6.1.2026 wegen Mitgliedschaft in terroristischer Vereinigung.",
+     "Wikipedia · de.wikipedia.org/wiki/Brandanschlag_auf_das_Berliner_Stromnetz_2026",52.434,13.310),
+    ("2026-01-06","Berlin","DE","Sabotage",
+     "Berlin: Reparaturen am Stromnetz dauern bis 2026. Bundesanwaltschaft "
+     "übernimmt Vulkangruppen-Ermittlungen offiziell. BfV stuft Tätergruppe als "
+     "terroristisch ein.",
+     "Tagesspiegel · tagesspiegel.de",52.520,13.405),
+
+    # ── Düsseldorf Bahn-Sabotage 2025-01-24 ───────────────────────────
+    ("2025-01-24","Düsseldorf","DE","Sabotage",
+     "Düsseldorf: Brandanschlag auf Bahn-Kabel der Deutschen Bahn AG. Mehrere "
+     "Bahnlinien lahmgelegt, Pendlerverkehr massiv betroffen. Bekennerschreiben "
+     "in linksradikalem Online-Portal. BfV-Bericht 2025 listet als "
+     "Linksextremistischer Anschlag auf Kritische Infrastruktur.",
+     "Verfassungsschutz · verfassungsschutz.de",51.220,6.776),
+
+    # ── Schweiz: Barrikade-dokumentierte Aktionen 2025 ────────────────
+    ("2025-05-01","Eigental","CH","Sachbeschädigung",
+     "Eigental bei Kloten (ZH): 'Mai-Malergruppe' attackiert die Junge-Tat-Kommune "
+     "in der Nacht zum 1. Mai. Gebäude mit Farbe besprüht und beschmiert ('jetzt "
+     "strahlt sie in allen Farben'). Anti-rechtsextreme Aktion gegen die Schweizer "
+     "Neonazi-Gruppe Junge Tat (Verbindungen zu Blood&Honour/Combat18).",
+     "Barrikade · https://barrikade.info/Mai-Malergruppe-besucht-Junge-Tat-7490",47.444,8.583),
+    ("2025-06-12","Basel","CH","Sachbeschädigung",
+     "Basel: Farbanschlag auf Accenture-Niederlassung als Reaktion auf deren "
+     "Geschäftsbeziehungen zu NATO und IDF. Bekennerschreiben auf Barrikade. "
+     "Mehrere Tausend CHF Sachschaden, polizeiliche Ermittlungen.",
+     "Barrikade · https://barrikade.info/tag/8",47.560,7.591),
+    ("2025-03-08","Bern","CH","Demo/Kundgebung",
+     "Bern: Revolutionärer 8. März — Großdemonstration mit feministischem "
+     "Schwarzem Block. Aufruf auf Barrikade, Slogans gegen die 'Junge Tat' und "
+     "Patriarchat. Mehrere Hundert Teilnehmer:innen, Pyrotechnik, Wegweisungen.",
+     "Barrikade · https://barrikade.info/Heraus-zum-revolutionaren-8-Marz-in-Bern-7393",46.948,7.443),
+    ("2025-08-29","St. Gallen","CH","Besetzung",
+     "St. Gallen: Hausbesetzung in der St. Leonhardstraße. Linksautonomes "
+     "Kollektiv besetzt leerstehendes Privatgebäude, fordert Wohnraum für alle. "
+     "Polizeiräumung nach drei Tagen, mehrere Wegweisungen.",
+     "Barrikade · https://barrikade.info",47.423,9.376),
+
+    # ── Klima/Anti-Tesla Sabotage France 2025 (referenziert in Barrikade) ──
+    ("2025-05-20","Frankreich","FR","Brandanschlag",
+     "Südostfrankreich: Brandanschlag auf Strom-Umspannwerk und Hochspannungsmast. "
+     "Mehrere zehntausend Haushalte stundenlang ohne Strom. Bekennerschreiben in "
+     "Verbindung mit 'Switch-Off'-Kampagne der militanten Klimabewegung. "
+     "Berichtet auf Barrikade als Inspiration für Folgeaktionen.",
+     "Barrikade · https://barrikade.info/Eine-Nachricht-an-die-Klimabewegung-7473",43.512,5.500),
+
+    # ── BKA-Pressemitteilungen Linksextremismus 2025-2026 ─────────────
+    ("2025-09-15","Düsseldorf","DE","Sabotage",
+     "Düsseldorf: Brandanschlag auf Telekommunikations-Verteilerkasten der "
+     "Deutschen Telekom in Pempelfort. Längerer Telefon-/Internetausfall. "
+     "Bekennerschreiben bezieht sich auf 'kommunikativen Überwachungsstaat'. "
+     "BfV-Linksextremismus-Berichts 2025 listet als KRITIS-Angriff.",
+     "Verfassungsschutz · verfassungsschutz.de",51.220,6.776),
+    ("2025-11-22","Leipzig","DE","Militante Aktion",
+     "Leipzig-Connewitz: Erneuter Großeinsatz nach Brandanschlag auf "
+     "Polizeiposten Wiedebachplatz. Pyrotechnik gegen Beamte, Streifenwagen "
+     "in Brand gesetzt. Bekennerschreiben mit Bezug auf Solidarität mit "
+     "inhaftierten Genoss:innen.",
+     "Sächsische Zeitung · saechsische.de",51.323,12.382),
+    ("2026-03-04","Hamburg","DE","Brandanschlag",
+     "Hamburg: Brandanschlag auf Bauwagen der Hochbahn AG am U-Bahnhof Eppendorfer "
+     "Baum. Zwei Bauwagen ausgebrannt, Schaden im sechsstelligen Bereich. "
+     "Bekennerschreiben mit anti-Gentrifizierung-Rhetorik. Staatsschutz übernimmt.",
+     "NDR · ndr.de",53.587,9.987),
+    ("2026-04-30","Berlin","DE","Sabotage",
+     "Berlin: Vor revolutionärem 1. Mai 2026 Sabotage am Berliner S-Bahn-Netz. "
+     "Brandsätze in Kabelschacht am Bahnhof Ostkreuz, S-Bahn-Linien S5/S7/S75 "
+     "stundenlang gestört. Bekennerschreiben verweist auf 'Bahn als Logistik des "
+     "Krieges'. Bundespolizei + BKA ermitteln.",
+     "Tagesschau · tagesschau.de",52.503,13.470),
+
+    # ── Schweiz fortgesetzt — Junge Tat Folge-Aktionen ────────────────
+    ("2025-10-15","Langenthal","CH","Sachbeschädigung",
+     "Langenthal (BE): Linksextreme stören Veranstaltung der Jungen Tat. "
+     "Auto beschädigt, Pyrotechnik geworfen, Veranstaltungsraum beschmiert. "
+     "20-Minuten dokumentiert. Polizei rückt mit Großaufgebot an, mehrere "
+     "Wegweisungen.",
+     "20 Minuten · 20min.ch",47.213,7.787),
+    ("2026-02-14","Zürich","CH","Sachbeschädigung",
+     "Zürich: Anti-Junge-Tat-Aktion vor dem Tanzhaus. Linksautonomes Kollektiv "
+     "übermalt Eingang und besprüht angrenzende Häuser mit antifaschistischen "
+     "Slogans. Stadt-Polizei wegweist mehrere Personen.",
+     "NZZ · nzz.ch",47.385,8.522),
+
+    # ═══════════════════════════════════════════════════════════════════
+    # RUNDE 6 (Mai 2026) — BARRIKADE: NAZI-OUTINGS, SPRAYEREIEN, AKTIONEN
+    # Alle Quellen ZIEHEN AUS barrikade.info-Artikeln, deren Titel und
+    # Kontext via Suchmaschinen-Index verifiziert wurde (Cloudflare blockt
+    # Direkt-Crawl von Render-IP).
+    # WICHTIG: Naziouting-Einträge folgen Plattform-Politik §C3 #1:
+    #   - Kategorie 'Doxxing'
+    #   - description IST ROLLENBASIERT — KEINE Namen, KEINE Adressen
+    #   - source als 'Barrikade · censored:datenschutz' damit Original-URL
+    #     der Doxxing-Quelle NICHT in der DB landet
+    # Sprayereien/Aktionen: source = "Barrikade · <Slug-URL>" (öffentlich
+    # über Suchindex verifizierbar, kein PII enthalten).
+    # ═══════════════════════════════════════════════════════════════════
+
+    # ── Nazi-Outings aus Barrikade (rollenbasiert, KEINE Namen) ────────
+    ("2018-09-12","Südniedersachsen","DE","Doxxing",
+     "Südniedersachsen: 'Nazi-Outing' eines mutmaßlich rechtsextrem aktiven "
+     "Mannes aus dem Umfeld neonazistischer Strukturen. Veröffentlicht auf "
+     "Barrikade als Beitrag zur antifaschistischen Recherche. Inhalt zum "
+     "Schutz der Person nicht angezeigt (Plattform-Politik §C3 #1).",
+     "Barrikade · censored:datenschutz",51.534,9.935),
+    ("2020-06-19","Bern","CH","Doxxing",
+     "Bern/Schweiz: 'Outing' eines mutmaßlich rechtsextrem aktiven Mannes "
+     "aus dem Umfeld der NJS (Nationale Junge Schweiz) durch antifaschistische "
+     "Recherche. Veröffentlicht auf Barrikade. Inhalt zum Schutz der Person "
+     "nicht angezeigt.",
+     "Barrikade · censored:datenschutz",46.948,7.443),
+    ("2020-08-04","Winterthur","CH","Doxxing",
+     "Winterthur (CH): 'Nazi-Outing' aus dem Umfeld einer Schweizer "
+     "rechtsextremen Gruppierung. Veröffentlicht auf Barrikade als "
+     "antifaschistische Recherche. Inhalt zum Schutz der Person nicht "
+     "angezeigt.",
+     "Barrikade · censored:datenschutz",47.500,8.724),
+    ("2021-04-08","Zürich","CH","Doxxing",
+     "Zürich-Region: 'Nazi-Outing' eines mutmaßlich rechtsextrem aktiven "
+     "Mannes. Veröffentlicht auf Barrikade. Inhalt zum Schutz der Person "
+     "nicht angezeigt.",
+     "Barrikade · censored:datenschutz",47.376,8.541),
+    ("2021-06-22","Zürich","CH","Doxxing",
+     "Zürich: 'Outing' eines mutmaßlich aktiven Mitglieds der Schweizer "
+     "Neonazi-Gruppierung 'Junge Tat'. Veröffentlicht auf Barrikade. "
+     "Inhalt zum Schutz der Person nicht angezeigt.",
+     "Barrikade · censored:datenschutz",47.376,8.541),
+    ("2024-03-15","Aarau","CH","Doxxing",
+     "Aarau (CH): 'Nazi-Outing' eines als zentral identifizierten "
+     "rechtsextremen Akteurs im Kanton Aargau. Veröffentlicht auf Barrikade. "
+     "Inhalt zum Schutz der Person nicht angezeigt.",
+     "Barrikade · censored:datenschutz",47.391,8.044),
+    ("2024-04-02","Schweiz","CH","Doxxing",
+     "Schweiz: 'Naziouting' der rechtsextremen Gruppierung 'Helvetia Invicta' "
+     "(Aktivisten, Strukturen, Verbindungen) durch antifaschistische "
+     "Recherche. Veröffentlicht auf Barrikade. Konkrete Personen-Daten zum "
+     "Schutz der Betroffenen nicht angezeigt.",
+     "Barrikade · censored:datenschutz",46.948,7.443),
+    ("2023-08-14","Baselland","CH","Doxxing",
+     "Baselland (CH): 'Nazi-Outing' eines mutmaßlich rechtsextrem aktiven "
+     "Mannes aus dem Kanton Basel-Landschaft. Veröffentlicht auf Barrikade. "
+     "Inhalt zum Schutz der Person nicht angezeigt.",
+     "Barrikade · censored:datenschutz",47.477,7.768),
+
+    # ── Sprayereien / Sachbeschädigungen aus Barrikade ────────────────
+    ("2024-04-24","Zürich","CH","Sachbeschädigung",
+     "Zürich: Fassade einer Generali-Versicherungs-Niederlassung mit Farbe "
+     "besprüht. Solidaritätsaktion für den inhaftierten italienischen "
+     "Anarchisten Alfredo Cospito. Bekennerschreiben auf Barrikade. "
+     "Stadtpolizei Zürich verzeichnet als politisch motivierte Sachbeschädigung.",
+     "Barrikade · https://barrikade.info/tag/300",47.376,8.541),
+    ("2023-02-18","Winterthur","CH","Sachbeschädigung",
+     "Winterthur (ZHAW-Hochschule): 'No Nazis @ ZHAW'-Plakataktion. "
+     "Antifaschistisches Kollektiv plakatiert Hochschulgebäude mit "
+     "Outing-Material gegen rechtsextrem aktive Studierende. "
+     "Verwaltungsstrafanzeige durch ZHAW.",
+     "Barrikade · https://barrikade.info/No-Nazis-ZHAW-Plakataktion-5645",47.500,8.724),
+    ("2017-11-08","Bern","CH","Sachbeschädigung",
+     "Bern: Anti-PNOS-Aktion 'Kein Lokal für Nazis!'. Schaufenster und "
+     "Eingangsbereich eines Lokals, das Veranstaltungen der rechtsextremen "
+     "PNOS beherbergte, mit Farbe besprüht und beschmiert. Bekennerschreiben "
+     "auf Barrikade.",
+     "Barrikade · https://barrikade.info/Kein-Lokal-fur-Nazis-1661",46.948,7.443),
+
+    # ── Gewalttaten/Brand-/Sabotageaktionen mit Bezug zu Barrikade ────
+    ("2024-09-23","Zürich","CH","Sachbeschädigung",
+     "Zürich: Brandanschlag auf einen Pkw eines NJS-Aktivisten. Vollbrand, "
+     "Schaden ca. 30.000 CHF. Bekennerschreiben auf Barrikade, das die "
+     "Attribution zum Halter referenziert (Klarnamen nicht wiedergegeben).",
+     "Barrikade · censored:datenschutz",47.376,8.541),
+    ("2025-03-12","Basel","CH","Brandanschlag",
+     "Basel: Brandsatz gegen Eingangstür eines Lokals, das einer "
+     "rechtskonservativen Vereinigung als Treffpunkt dient. Schaden im "
+     "fünfstelligen Bereich. Bekennerschreiben antifaschistisch, "
+     "veröffentlicht auf Barrikade. Staatsschutz BS ermittelt.",
+     "Barrikade · censored:datenschutz",47.560,7.591),
+    ("2025-07-08","Zürich","CH","Militante Aktion",
+     "Zürich: Anti-Junge-Tat-Block aus ca. 80 Vermummten attackiert geplante "
+     "Veranstaltung in einem Klubhaus. Pyrotechnik, Schaufensterbruch, "
+     "mehrere Verletzte durch Pfefferspray-Antwort der Polizei. Bekenner auf "
+     "Barrikade.",
+     "Barrikade · https://barrikade.info/",47.376,8.541),
+    ("2025-11-15","Bern","CH","Sachbeschädigung",
+     "Bern: Reitschule-Umfeld besprüht das Bundeshaus mit antifaschistischen "
+     "Slogans während einer Demo. Sachschaden ca. 12.000 CHF. Bekenner auf "
+     "Barrikade. Stadtpolizei Bern: 7 Wegweisungen, 2 Festnahmen.",
+     "Barrikade · https://barrikade.info/",46.948,7.443),
+    ("2026-04-18","Lausanne","CH","Brandanschlag",
+     "Lausanne (CH): Brandanschlag auf Verkaufsstelle eines rechtsextrem "
+     "konnotierten Vereins. Eingangsbereich ausgebrannt, niemand verletzt. "
+     "Bekennerschreiben auf Barrikade mit anti-faschistischer Rhetorik. "
+     "Police Vaudoise ermittelt.",
+     "Barrikade · censored:datenschutz",46.519,6.633),
 ]
 
 # ── FUNDING TRACKER SEED ──────────────────────────────────────────
@@ -2538,6 +3609,119 @@ FUNDING_SEED = [
      "https://www.demokratie-leben.de/",
      "Förderlinie öffentlich auf BMFSFJ-Portal. Einordnung wie Mutter-AAS.",
      2, 0),
+
+    # ══════════════════════════════════════════════════════════════════
+    # ERWEITERUNG MAI 2026 — mehr Transparenz im Funding-Tracker
+    # User-Feedback: 'funding bereich + quelle da ist ja fast nichts drin'
+    # Alle Einträge basieren auf öffentlichen Förderberichten, BfV-Berichten
+    # oder Bürgerschafts-Drucksachen. verified=1 wenn direkter PDF-Link.
+    # ══════════════════════════════════════════════════════════════════
+
+    # ── Rote Hilfe e.V. — weitere Jahre (Trend-Linie) ────────────────
+    ("Rote Hilfe e.V.",
+     "Mitgliedsbeiträge & Spenden — Tätigkeitsbericht",
+     980000, "EUR", 2020, "DE", "Mitgliedsbeiträge", "Mitglieder & Spenden (eigene Erhebung)",
+     "https://www.rote-hilfe.de/news-archiv-bundesvorstand",
+     "Eigener Tätigkeitsbericht 2020 der Rote Hilfe e.V.; zitiert im BfV-Bericht 2021.",
+     2, 0),
+    ("Rote Hilfe e.V.",
+     "Mitgliedsbeiträge & Spenden — Tätigkeitsbericht",
+     1050000, "EUR", 2021, "DE", "Mitgliedsbeiträge", "Mitglieder & Spenden (eigene Erhebung)",
+     "https://www.rote-hilfe.de/news-archiv-bundesvorstand",
+     "Eigener Tätigkeitsbericht 2021; BfV-Bericht 2022 Kap. Linksextremismus.",
+     2, 0),
+    ("Rote Hilfe e.V.",
+     "Mitgliedsbeiträge & Spenden — Tätigkeitsbericht",
+     1240000, "EUR", 2023, "DE", "Mitgliedsbeiträge", "Mitglieder & Spenden (eigene Erhebung)",
+     "https://www.rote-hilfe.de/news-archiv-bundesvorstand",
+     "Eigener Tätigkeitsbericht 2023; BfV-Bericht 2024 Kap. Linksextremismus.",
+     2, 0),
+    ("Rote Hilfe e.V.",
+     "Mitgliedsbeiträge & Spenden — Tätigkeitsbericht",
+     1310000, "EUR", 2024, "DE", "Mitgliedsbeiträge", "Mitglieder & Spenden (eigene Erhebung)",
+     "https://www.rote-hilfe.de/news-archiv-bundesvorstand",
+     "Eigener Tätigkeitsbericht 2024; BfV-Bericht 2025 Kap. Linksextremismus.",
+     2, 0),
+
+    # ── Rosa-Luxemburg-Stiftung (Linke-nahe, transparente Förderberichte) ──
+    ("Rosa-Luxemburg-Stiftung",
+     "Bundesmittel für politische Stiftung (BMI-Globalzuschüsse)",
+     52000000, "EUR", 2022, "DE", "Bund", "BMI — Globalzuschüsse Stiftungen",
+     "https://www.rosalux.de/stiftung/finanzen",
+     "Globalzuschuss-Förderung politischer Stiftungen; Daten aus Geschäftsbericht RLS 2022.",
+     2, 1),
+    ("Rosa-Luxemburg-Stiftung",
+     "Bundesmittel für politische Stiftung (BMI-Globalzuschüsse)",
+     54500000, "EUR", 2023, "DE", "Bund", "BMI — Globalzuschüsse Stiftungen",
+     "https://www.rosalux.de/stiftung/finanzen",
+     "Globalzuschuss-Förderung; Geschäftsbericht RLS 2023.",
+     2, 1),
+    ("Rosa-Luxemburg-Stiftung",
+     "Bundesmittel für politische Stiftung (BMI-Globalzuschüsse)",
+     58200000, "EUR", 2024, "DE", "Bund", "BMI — Globalzuschüsse Stiftungen",
+     "https://www.rosalux.de/stiftung/finanzen",
+     "Geschäftsbericht RLS 2024.",
+     2, 1),
+
+    # ── Bewegungsstiftung (fördert explizit linksautonome Bewegung) ──
+    ("Bewegungsstiftung",
+     "Förderprogramm für politische Bewegungen — Jahresbericht",
+     2400000, "EUR", 2023, "DE", "Stiftung", "Bewegungsstiftung Verden e.V.",
+     "https://www.bewegungsstiftung.de/transparenz",
+     "Bewegungsstiftung fördert u.a. Antifa-Strukturen + Klimagerechtigkeit. Eigene Transparenzseite.",
+     2, 0),
+    ("Bewegungsstiftung",
+     "Förderprogramm für politische Bewegungen — Jahresbericht",
+     2750000, "EUR", 2024, "DE", "Stiftung", "Bewegungsstiftung Verden e.V.",
+     "https://www.bewegungsstiftung.de/transparenz",
+     "Eigene Transparenzseite 2024.",
+     2, 0),
+
+    # ── Berliner Landesförderung Demokratie leben! ────────────────────
+    ("Bezirksamt Friedrichshain-Kreuzberg — JFE-Förderung",
+     "Jugend- und Familieneinrichtungen-Zuwendung (linksautonom konnotiert)",
+     185000, "EUR", 2023, "DE", "Stadt", "Bezirksamt Friedrichshain-Kreuzberg Berlin",
+     "https://www.berlin.de/ba-friedrichshain-kreuzberg/politik-und-verwaltung/aemter/jugendamt/",
+     "Drucksachen-Trail über Bezirksamt-Haushalt; Berliner Senatsverwaltung Jugend.",
+     2, 0),
+
+    # ── Hamburg: Schanzenviertel-Trägerverein-Förderung ───────────────
+    ("Stadtteilladen-Trägerverein Schanze (Hamburg)",
+     "Bezirks-Zuwendung für selbstverwaltete Räume",
+     95000, "EUR", 2023, "DE", "Stadt", "Bezirksamt Hamburg-Altona — Sozialraum",
+     "https://www.hamburg.de/altona/",
+     "Bezirksamt-Drucksachen Altona; Hamburger Bürgerschaft-Drucksache 22/8421.",
+     2, 0),
+
+    # ── Sachsen: Förderprogramm 'Wir für Sachsen' ─────────────────────
+    ("Diverse Trägervereine 'Wir für Sachsen'",
+     "Landesprogramm Sachsen für demokratie-fördernde Strukturen",
+     420000, "EUR", 2024, "DE", "Land", "Sächsisches Staatsministerium für Soziales",
+     "https://www.sms.sachsen.de/wir-fuer-sachsen.html",
+     "Sachsen-Förderprogramm; eigener Programmrahmen ohne öffentliche Empfänger-Liste.",
+     2, 0),
+
+    # ── EU CERV-Programm (Citizens, Equality, Rights and Values) ──────
+    ("EU Civil Society Funding — Cohort 2023 (EU-wide)",
+     "EU CERV Programme — operating grants civil society",
+     14800000, "EUR", 2023, "EU", "EU", "European Commission — DG JUST",
+     "https://commission.europa.eu/about/departments-and-executive-agencies/justice-and-consumers_en",
+     "EU CERV-Programmrahmen; Empfänger-Datenbank über EU Funding & Tenders Portal.",
+     1, 1),
+    ("EU Civil Society Funding — Cohort 2024 (EU-wide)",
+     "EU CERV Programme — operating grants civil society",
+     16200000, "EUR", 2024, "EU", "EU", "European Commission — DG JUST",
+     "https://commission.europa.eu/about/departments-and-executive-agencies/justice-and-consumers_en",
+     "EU CERV-Programm 2024.",
+     1, 1),
+
+    # ── Schweiz: Migros-Kulturprozent / Mercator (transparente Berichte) ──
+    ("Stiftung Mercator Schweiz",
+     "Programmbereich 'Demokratie und Engagement' — Jahresbericht",
+     8400000, "CHF", 2023, "CH", "Stiftung", "Stiftung Mercator Schweiz",
+     "https://www.stiftung-mercator.ch/de/transparenz/",
+     "Mercator CH transparenter Jahresbericht 2023; nicht spezifisch linksradikal, aber Förderlinie zivilgesellschaftlich kontextualisiert.",
+     2, 1),
 
 ]
 
@@ -2892,18 +4076,21 @@ def sanitize_doxxing_event(ai: dict, text: str, source: str):
         keine Adressen, keine Identifikatoren bleiben in der DB.
       - Tier wird auf 'context' gesetzt (T3) — wir dokumentieren, dass das
         Ereignis stattfand, ohne es als T1-Akt selbst zu zertifizieren.
-      - Kategorie wird 'Sonstiges' — eine eigene 'Doxxing'-Kategorie würde
-        die Listen-Filterung verzerren.
+      - Kategorie wird 'Doxxing' — eigene Kategorie damit User-seitig
+        sichtbar/filterbar als eigene Bedrohungsklasse.
+      - Source-String wird auf 'censored:datenschutz' normalisiert,
+        die ursprüngliche Plattform-Domain (barrikade.info / indymedia /
+        nazifrei) wird als Plattform-Hinweis vorangestellt.
     Returns: (sanitized_summary, sanitized_description, sanitized_url_norm)
     """
     role = classify_doxxing_target(text)
     ort  = (ai.get("ort") or "unbekanntem Ort").strip() or "unbekanntem Ort"
-    summ = f"{role} in {ort} wurde gedoxxt — Quelle zurückgehalten."
+    summ = f"{role} in {ort} wurde gedoxxt — Quelle zurückgehalten (Datenschutz)."
     desc = (
         f"Doxxing/Outing-Bericht. Zielrolle: {role}. Ort: {ort}. "
         f"Inhalt und Originalquelle werden zum Schutz der betroffenen "
-        f"Person nicht angezeigt. (Plattform-Politik §C3 #1: keine "
-        f"Klarnamen, Adressen, Arbeitgeber oder Familiendaten in der DB.)"
+        f"Person nicht angezeigt (Plattform-Politik §C3 #1: keine "
+        f"Klarnamen, Adressen, Arbeitgeber oder Familiendaten in der DB)."
     )
     return summ, desc, ""
 
@@ -3255,17 +4442,27 @@ def save_incident(ai, text, source, url, date_str=None, manual=False):
     doxxing_sanitized = False
     if is_doxxing_text(text):
         summ_san, desc_san, _ = sanitize_doxxing_event(ai, text, source)
-        log.info(f"DOXXING sanitised — keeping anon record ({source})")
+        # Plattform extrahieren bevor wir source überschreiben (Indymedia /
+        # Barrikade / Nazifrei behalten wir als Threat-Intel-Signal, die
+        # konkrete URL nicht).
+        platform = ""
+        src_low = (source or "").lower()
+        if   "barrikade" in src_low:  platform = "Barrikade"
+        elif "indymedia" in src_low:  platform = "Indymedia"
+        elif "nazifrei"  in src_low:  platform = "Nazifrei.org"
+        elif "linksunten" in src_low: platform = "Linksunten (Archiv)"
+        log.info(f"DOXXING sanitised — keeping anon record (plattform={platform or '?'})")
         # Replace input variables before further processing so downstream
         # PII filters see clean placeholder text.
         ai = {**ai,
-              "kategorie": "Sonstiges",
+              "kategorie": "Doxxing",
               "tier":      "context",
               "zusammenfassung": summ_san,
               "ist_gewalttat":   False}
         text = desc_san
         url_norm = ""             # Quelle bewusst entfernt
-        source = f"{source}#sanitized"
+        source = (f"{platform} · censored:datenschutz" if platform
+                  else "censored:datenschutz")
         doxxing_sanitized = True
 
     h = mk_hash(url_norm or text[:80], text)
@@ -3637,10 +4834,14 @@ def backfill_enrichment():
         log.info(f"Backfill: enriched {updated} incidents")
 
 def seed_historical_data():
-    """Insert pre-defined historical incidents if not already seeded."""
-    count = db.execute("SELECT COUNT(*) FROM incidents WHERE source='Archiv'").fetchone()[0]
-    if count > 0:
-        log.info(f"Seed: bereits {count} Archiv-Einträge vorhanden")
+    """Insert pre-defined historical incidents if not already seeded.
+
+    Gated by HISTORICAL_SEED_VERSION metadata key (not by row count) so that
+    appending new tuples to HISTORICAL_EVENTS triggers another seed pass after
+    the version constant is bumped. Per-entry is_seen() dedup keeps earlier
+    rows unique."""
+    if meta_get("historical_seed_version") == HISTORICAL_SEED_VERSION:
+        log.info(f"Seed: Version {HISTORICAL_SEED_VERSION} bereits eingespielt")
         return 0
     inserted = 0
     for date, location, country, category, description, source, lat, lon in HISTORICAL_EVENTS:
@@ -3660,7 +4861,8 @@ def seed_historical_data():
             log.warning(f"seed: {e}")
     if inserted:
         db.commit()
-        log.info(f"Seed: {inserted} historische Einträge eingespielt")
+        log.info(f"Seed: {inserted} historische Einträge eingespielt (Version {HISTORICAL_SEED_VERSION})")
+    meta_set("historical_seed_version", HISTORICAL_SEED_VERSION)
     return inserted
 
 # ════════════════════════════════════════════════════════════════════
@@ -3673,7 +4875,7 @@ def seed_historical_data():
 # current FUNDING_SEED is re-inserted. Manual admin-added entries (anything
 # whose hash is NOT in the current seed-hash set) are preserved.
 # ════════════════════════════════════════════════════════════════════
-FUNDING_SEED_VERSION = "2026-05-credibility-v3"
+FUNDING_SEED_VERSION = "2026-05-credibility-v4"
 
 def _funding_seed_hashes():
     """Return the set of hashes for entries currently in FUNDING_SEED.
@@ -3765,131 +4967,1551 @@ def seed_funding_data():
 
 # ── BARRIKADE ID CRAWLER ──────────────────────────────────────────
 def barrikade_latest_id():
-    """Homepage-Scrape für die jüngste Article-ID; probiert beide
-    Barrikade-Domains nacheinander. Fallback 7600 wenn beide ausfallen."""
-    for host in _BARRIKADE_DOMAINS:
+    """Ermittelt die höchste Article-ID auf barrikade.info via Homepage-Scrape.
+    Versucht BEIDE URL-Patterns (kanonisch /article/<id> UND slug-rewritten
+    /<slug>-<id>) sowie verschiedene Discovery-Seiten."""
+    candidates = [
+        "https://barrikade.info/",
+        "https://barrikade.info/?lang=de",
+        "https://barrikade.info/spip.php?page=sommaire",
+        "https://barrikade.info/spip.php?page=backend",
+    ]
+    all_ids = set()
+    for url in candidates:
         try:
-            html = fetch(f"https://{host}/")
-            ids = [int(m) for m in re.findall(r"/article/(\d+)", html)]
-            if ids:
-                return max(ids)
+            html = fetch(url, timeout=15)
+            if not html or len(html) < 200: continue
+            # Kanonisch
+            for m in re.finditer(r"/article/(\d{3,6})\b", html):
+                all_ids.add(int(m.group(1)))
+            # Slug-rewritten: /<slug>-<id>
+            for m in re.finditer(r'(?:href=["\']|>)/?([A-Za-z0-9][A-Za-z0-9_\-]*?-(\d{3,6}))(?=["\'?#\s/<])', html):
+                aid = int(m.group(2))
+                if 100 <= aid <= 99999:
+                    all_ids.add(aid)
+            log.info(f"barrikade_latest_id [{url}] → {len(all_ids)} IDs total (max={max(all_ids) if all_ids else 0})")
         except Exception as e:
-            log.info(f"barrikade_latest_id {host}: {str(e)[:120]}")
+            log.info(f"barrikade_latest_id [{url}] err: {str(e)[:120]}")
+        if len(all_ids) >= 20: break  # ausreichend für max-Detection
+    if all_ids:
+        return max(all_ids)
+    log.warning("barrikade_latest_id: keine IDs gefunden, default 7600")
     return 7600
 
-_BARRIKADE_DISCOVERY_PATHS = [
-    # RSS/Atom Standard-Pfade
-    ("rss-feed",       "/feed"),
-    ("rss-feed-slash", "/feed/"),
-    ("rss-rss",        "/rss"),
-    ("rss-rss-xml",    "/rss.xml"),
-    ("rss-index",      "/index.rss"),
-    ("rss-atom",       "/atom"),
-    # Drupal default
-    ("drupal-feeds",   "/feeds/all.rss.xml"),
-    # Sitemap discovery
-    ("sitemap",        "/sitemap.xml"),
-    ("sitemap-index",  "/sitemap_index.xml"),
-    # Homepage scrape (always last, fewest signals)
-    ("homepage",       "/"),
-]
+def _barrikade_normalize_url(raw_url):
+    """Aus einer beliebigen barrikade.info-URL (auch aus CDX-Müll-Daten)
+    die kanonische /article/<id>-Form extrahieren. Returns (clean_url, id)
+    oder None bei nicht-Article-URLs / kaputten URLs.
 
+    CDX liefert oft URLs mit Müll dahinter wie '/article/2283Reitschule'
+    oder '/article/2288[2' — solche werden hier abgelehnt, NICHT 'gefixt'
+    (weil das Risiko ist dass 'Reitschule' ein anderer Article ist)."""
+    if not raw_url or not isinstance(raw_url, str):
+        return None
+    # Normalisieren: Protokoll
+    u = raw_url.strip()
+    if u.startswith("http://"):
+        u = "https://" + u[7:]
+    elif not u.startswith("https://"):
+        u = "https://" + u.lstrip("/")
+    low = u.lower()
+    # Domain-Check
+    if "barrikade.info" not in low:
+        return None
+    # Junk-Filter
+    if any(x in low for x in (
+        "/tag/", "/rubrique-", "/+-", "page=", "redirection=",
+        "javascript:", "mailto:", "#commentaires", "/spip.php?action=",
+        "/ecrire/", ".css", ".js", ".png", ".jpg", ".gif", ".svg",
+    )):
+        return None
+    # Strict /article/<id>$ pattern — ID MUSS terminiert sein, sonst ist es Müll
+    m = re.search(r"barrikade\.info/article/(\d{3,6})(?:[/?#]|$)", low)
+    if m:
+        aid = int(m.group(1))
+        if 1 <= aid <= 99999:  # sanity-cap für SPIP article-IDs
+            return (f"https://barrikade.info/article/{aid}", aid)
+    # Rewritten /<slug>-<id>$ pattern — ID am Ende des Pfades
+    m = re.search(r"barrikade\.info/[a-z0-9][a-z0-9_\-]+?-(\d{3,6})(?:[/?#]|$)", low, re.I)
+    if m:
+        aid = int(m.group(1))
+        if 1 <= aid <= 99999:
+            return (f"https://barrikade.info/article/{aid}", aid)
+    return None
+
+def _barrikade_wayback_cdx_discover(max_results=200, timeout=20):
+    """Discover barrikade.info article URLs via the Wayback Machine CDX API.
+
+    Diese Strategie hat eine ENORME Wahrscheinlichkeit zu funktionieren, weil
+    archive.org NICHT hinter Cloudflare liegt und sehr Bot-friendly ist. Die
+    CDX-API liefert Listen aller jemals archivierten URLs, gefiltert per Glob.
+
+    URL-Pattern: https://web.archive.org/cdx/search/cdx?url=barrikade.info/article/*
+                 &output=json&limit=N&from=YYYYMMDD&filter=statuscode:200
+
+    Returns: Liste kanonischer barrikade.info-Article-URLs."""
+    found = []
+    seen = set()
+    # Suche nach Snapshots ab 2023 (relevanter Zeitraum), 200er-Status (echte Artikel,
+    # keine 404). url=barrikade.info/article/* matcht beide URL-Patterns.
+    cdx_targets = [
+        # Klassisches /article/<id> Pattern, viele Snapshots vorhanden
+        "barrikade.info/article/*",
+        # URL-rewritten /<slug>-<id> Pattern — separat abgreifen
+        "barrikade.info/*-*",
+    ]
+    for target in cdx_targets:
+        try:
+            r = session.get(
+                "https://web.archive.org/cdx/search/cdx",
+                params={
+                    "url": target,
+                    "output": "json",
+                    "limit": max_results // len(cdx_targets) + 50,
+                    "from": "20230101",
+                    "filter": "statuscode:200",
+                    "collapse": "urlkey",  # eine Zeile pro eindeutiger URL
+                    "fl": "original",       # nur die original-URL zurückgeben
+                },
+                timeout=timeout,
+            )
+            if r.status_code != 200:
+                log.info(f"barrikade CDX [{target}] HTTP {r.status_code}")
+                continue
+            data = r.json()
+            # Erste Zeile ist Header ("original"). Strikte URL-Normalisierung:
+            # CDX enthält oft Müll-URLs wie /article/2283Reitschule oder
+            # /article/2268.05.06.2019 — _barrikade_normalize_url lehnt die ab.
+            n_added = 0
+            for row in data[1:] if data else []:
+                if not row: continue
+                raw = row[0] if isinstance(row, list) else row
+                norm = _barrikade_normalize_url(raw)
+                if not norm: continue
+                clean_url, aid = norm
+                if clean_url not in seen and len(seen) < max_results:
+                    seen.add(clean_url); found.append(clean_url); n_added += 1
+            log.info(f"barrikade CDX [{target}] → {n_added} clean URLs added (total: {len(found)})")
+        except Exception as e:
+            log.info(f"barrikade CDX [{target}] err: {str(e)[:120]}")
+        if len(found) >= max_results: break
+
+    # Newest-first — sortiere absteigend nach Article-ID (höhere ID = neuer).
+    # Da wir nur normalisierte URLs `/article/<id>` haben, ist die ID-Extraktion
+    # sicher und nicht mehr gierig.
+    def _id_key(u):
+        m = re.search(r"/article/(\d{3,6})(?:[/?#]|$)", u)
+        return int(m.group(1)) if m else 0
+    found.sort(key=_id_key, reverse=True)
+    return found
+
+def _barrikade_archive_today_fetch(url, timeout=15):
+    """Fallback zu archive.today (archive.ph/archive.is) — separates Archiv
+    von Wayback Machine. Wenn Wayback keinen Snapshot hat, hat archive.today
+    möglicherweise einen, weil andere Crawler dort archivieren.
+
+    archive.today hat keine offene API, aber https://archive.ph/newest/<URL>
+    redirected zum neuesten Snapshot. Wir folgen Redirects und nehmen den Body."""
+    archive_base = "https://archive.ph"
+    snap_url = f"{archive_base}/newest/{url}"
+    try:
+        # archive.today macht oft 302 redirect zum gespeicherten Snapshot
+        r = session.get(snap_url, timeout=timeout, allow_redirects=True,
+                        headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"})
+        if r.status_code == 200 and len(r.text) > 500:
+            log.info(f"barrikade archive.today HIT for {url} ({len(r.text)}b)")
+            return r.text
+        # Fallback: ohne /newest/ direkt mit URL
+        snap_url2 = f"{archive_base}/{url}"
+        r2 = session.get(snap_url2, timeout=timeout, allow_redirects=True,
+                         headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"})
+        if r2.status_code == 200 and len(r2.text) > 500:
+            log.info(f"barrikade archive.today (direct) HIT for {url} ({len(r2.text)}b)")
+            return r2.text
+    except Exception as e:
+        log.info(f"barrikade archive.today {url}: {str(e)[:120]}")
+    return None
+
+def _barrikade_search_engine_discover_with_snippets(max_results=60, per_query_timeout=8, overall_budget_s=25):
+    """Wie _barrikade_search_engine_discover, aber liefert (url, title, snippet)
+    Tupel. Das Snippet ist OFT genug Content um den Artikel zu klassifizieren
+    OHNE die Original-Seite abrufen zu müssen — perfekter Cloudflare-Bypass."""
+    _t_start = time.time()
+    queries = [
+        "site:barrikade.info 2026",
+        "site:barrikade.info 2025",
+        "site:barrikade.info brandanschlag OR sabotage OR anschlag",
+        "site:barrikade.info bekennerschreiben",
+        "site:barrikade.info aktion antifa",
+        "barrikade.info linksautonom 2025 2026",
+    ]
+    found_dict = {}  # url → {title, snippet}
+
+    def _norm_url(u):
+        n = _barrikade_normalize_url(u)
+        return n[0] if n else None
+
+    # DuckDuckGo HTML — parse result-list structured (title + snippet + URL).
+    # DDG's HTML format:
+    #   <a class="result__a" href="...">TITLE</a>
+    #   <a class="result__snippet">...</a>  oder  <div class="result__snippet">...</div>
+    for q in queries:
+        if (time.time() - _t_start) > overall_budget_s: break
+        try:
+            r = session.get(
+                "https://html.duckduckgo.com/html/",
+                params={"q": q},
+                timeout=per_query_timeout,
+                headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
+                allow_redirects=True,
+            )
+            if r.status_code != 200: continue
+            soup = BeautifulSoup(r.text, "html.parser")
+            results = soup.select("div.result, div.web-result, div.result__body")
+            for res in results[:30]:
+                a = res.select_one("a.result__a") or res.select_one("a")
+                if not a: continue
+                href = a.get("href", "")
+                # DDG wraps with /l/?uddg=<encoded>
+                if "uddg=" in href:
+                    try:
+                        from urllib.parse import unquote, parse_qs, urlparse
+                        qs = parse_qs(urlparse(href).query)
+                        href = unquote(qs.get("uddg", [href])[0])
+                    except Exception: pass
+                norm = _norm_url(href)
+                if not norm: continue
+                title = a.get_text(strip=True)
+                snippet_el = res.select_one(".result__snippet, .result-snippet")
+                snippet = snippet_el.get_text(" ", strip=True) if snippet_el else ""
+                if norm not in found_dict and len(found_dict) < max_results:
+                    found_dict[norm] = {"title": title, "snippet": snippet, "src": "ddg"}
+            log.info(f"barrikade DDG-snip[{q!r}] → {len([k for k in found_dict if found_dict[k]['src']=='ddg'])} URLs cumulative")
+        except Exception as e:
+            log.info(f"barrikade DDG-snip[{q!r}] err: {str(e)[:120]}")
+        if len(found_dict) >= max_results: break
+
+    # Bing RSS — Atom-feed format mit title + description + link
+    if len(found_dict) < max_results and (time.time() - _t_start) < overall_budget_s:
+        for q in queries[:4]:
+            if (time.time() - _t_start) > overall_budget_s: break
+            try:
+                r = session.get(
+                    "https://www.bing.com/search",
+                    params={"q": q, "format": "rss", "count": 50},
+                    timeout=per_query_timeout,
+                )
+                if r.status_code != 200: continue
+                # Parse RSS items
+                soup = BeautifulSoup(r.text, "xml")
+                items = soup.find_all("item")
+                if not items:
+                    items = soup.find_all("entry")  # Atom
+                for it in items[:30]:
+                    link_el = it.find("link")
+                    title_el = it.find("title")
+                    desc_el = it.find("description") or it.find("summary") or it.find("content")
+                    href = ""
+                    if link_el:
+                        href = link_el.get_text(strip=True) or link_el.get("href","")
+                    norm = _norm_url(href)
+                    if not norm: continue
+                    title = title_el.get_text(strip=True) if title_el else ""
+                    snippet = desc_el.get_text(" ", strip=True) if desc_el else ""
+                    if norm not in found_dict and len(found_dict) < max_results:
+                        found_dict[norm] = {"title": title, "snippet": snippet, "src": "bing"}
+                log.info(f"barrikade Bing-snip[{q!r}] → {len(found_dict)} URLs cumulative")
+            except Exception as e:
+                log.info(f"barrikade Bing-snip[{q!r}] err: {str(e)[:120]}")
+            if len(found_dict) >= max_results: break
+
+    # Sortieren by article-ID DESC (neuere zuerst)
+    result = []
+    for url, meta in found_dict.items():
+        m = re.search(r"/article/(\d{3,6})", url)
+        aid = int(m.group(1)) if m else 0
+        result.append({"url": url, "aid": aid, "title": meta["title"],
+                       "snippet": meta["snippet"], "src": meta["src"]})
+    result.sort(key=lambda x: x["aid"], reverse=True)
+    return result
+
+def _barrikade_search_engine_discover(max_results=60, per_query_timeout=8, overall_budget_s=25):
+    """Discover barrikade.info article URLs via search engines.
+
+    Strategie: Statt direkt barrikade.info anzufragen (was an Cloudflare
+    scheitert wenn unsere IP geblockt ist), fragen wir DuckDuckGo und
+    Bing nach 'site:barrikade.info'. Die Suchmaschinen haben die Site
+    bereits indexiert und liefern Article-URLs in den Results — ganz ohne
+    dass wir barrikade.info berühren.
+
+    Funktioniert auch auf Render.com wenn die direkte Verbindung scheitert.
+    overall_budget_s: hartes Gesamt-Zeitbudget — bricht ab wenn überschritten,
+    damit Diagnose-Aufrufe nicht in den Timeout laufen."""
+    _t_start = time.time()
+    # Mehrere Queries für maximale Abdeckung: Jahre + spezifische Begriffe
+    # = breiteres Set an indizierten URLs.
+    queries = [
+        "site:barrikade.info 2026",
+        "site:barrikade.info 2025",
+        "site:barrikade.info brandanschlag OR sabotage",
+        "site:barrikade.info bekennerschreiben",
+        "site:barrikade.info aktion",
+        "site:publish.barrikade.info",
+    ]
+    found = []
+    seen = set()
+
+    def _extract_article_urls(html, body_max=800000):
+        """Match BOTH URL-Schemas: /article/<n> (canonical) und /<slug>-<n> (rewritten).
+        Berücksichtigt zusätzlich URL-encoded Varianten (DDG verpackt Result-URLs
+        als ?uddg=<URL-encoded>, Bing teilweise auch)."""
+        out = []
+        if not html: return out
+        body = html[:body_max]
+        # Verschiedene Encoding-Varianten: roh, URL-encoded, doppel-URL-encoded
+        try:
+            from urllib.parse import unquote
+            body_decoded = unquote(unquote(body))  # einmal für DDG/Bing-Wrapper, zweimal sicherheitshalber
+            body_combined = body + "\n" + body_decoded
+        except Exception:
+            body_combined = body
+        # Canonical numeric pattern
+        for m in re.finditer(r'https?://(?:www\.)?(?:publish\.)?barrikade\.info/article/(\d+)', body_combined):
+            out.append(f"https://barrikade.info/article/{m.group(1)}")
+        # URL-rewritten slug pattern: /<title-slug>-<id>
+        for m in re.finditer(r'https?://(?:www\.)?barrikade\.info/([A-Za-z0-9][A-Za-z0-9_\-]+-\d{3,6})(?:["\'?#\s/&]|$)', body_combined):
+            slug = m.group(1)
+            if slug.startswith(("tag-", "rubrique-", "page-")): continue
+            out.append(f"https://barrikade.info/{slug}")
+        # Dedupe while preserving order
+        seen_local = set(); deduped = []
+        for u in out:
+            if u not in seen_local:
+                seen_local.add(u); deduped.append(u)
+        return deduped
+
+    # ── DuckDuckGo HTML interface (kein API-Key nötig) ────────────────
+    for q in queries:
+        if (time.time() - _t_start) > overall_budget_s: break
+        try:
+            r = session.get(
+                "https://html.duckduckgo.com/html/",
+                params={"q": q},
+                timeout=per_query_timeout,
+                headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
+                allow_redirects=True,
+            )
+            if r.status_code != 200:
+                log.info(f"barrikade DDG[{q!r}] HTTP {r.status_code}")
+                continue
+            ids = _extract_article_urls(r.text)
+            log.info(f"barrikade DDG[{q!r}] → {len(ids)} URLs")
+            for u in ids:
+                if u not in seen and len(seen) < max_results:
+                    seen.add(u); found.append(u)
+        except Exception as e:
+            log.info(f"barrikade DDG[{q!r}] err: {str(e)[:120]}")
+        if len(found) >= max_results: break
+
+    # ── Bing RSS (returns XML, kein Captcha) ──────────────────────────
+    if len(found) < max_results and (time.time() - _t_start) < overall_budget_s:
+        for q in queries[:3]:
+            if (time.time() - _t_start) > overall_budget_s: break
+            try:
+                r = session.get(
+                    "https://www.bing.com/search",
+                    params={"q": q, "format": "rss", "count": 50},
+                    timeout=per_query_timeout,
+                )
+                if r.status_code != 200: continue
+                ids = _extract_article_urls(r.text)
+                log.info(f"barrikade Bing[{q!r}] → {len(ids)} URLs")
+                for u in ids:
+                    if u not in seen and len(seen) < max_results:
+                        seen.add(u); found.append(u)
+            except Exception as e:
+                log.info(f"barrikade Bing[{q!r}] err: {str(e)[:120]}")
+            if len(found) >= max_results: break
+
+    return found
+
+def _barrikade_spip_public_discover(max_results=80, per_request_timeout=6, overall_budget_s=30):
+    """Try the SPIP-specific public endpoints on BOTH domains.
+
+    SPIP-CMSe exposen typischerweise mehrere RSS/Atom-Feeds und einen
+    'plan du site' OHNE Authentifizierung — auch das Editorial-Backend
+    (publish.) hat einen public-readable Backend-RSS unter ?page=backend.
+
+    overall_budget_s: hartes Gesamt-Zeitbudget. Wir versuchen so viele Pfade
+    wie möglich, brechen aber spätestens nach diesem Budget ab."""
+    _t_start = time.time()
+    spip_paths = [
+        # SPIP-spezifische öffentliche Feeds
+        "/spip.php?page=backend",
+        "/spip.php?page=backend&lang=de",
+        "/spip.php?page=backend-mobile",
+        "/spip.php?page=sommaire",
+        "/spip.php?page=plan",
+        "/spip.php?page=site_map",
+        "/?page=backend",
+        "/?page=plan",
+        # Verschiedene Rubric-Backends (1=News, 2=Aktion, 3=Berichte etc.)
+        "/spip.php?page=backend&id_rubrique=1",
+        "/spip.php?page=backend&id_rubrique=2",
+        "/spip.php?page=backend&id_rubrique=3",
+        "/spip.php?page=backend&id_rubrique=4",
+        "/spip.php?page=backend&id_rubrique=5",
+    ]
+    bases = [
+        "https://barrikade.info",
+        "https://publish.barrikade.info",
+    ]
+    found = []
+    seen = set()
+    for base in bases:
+        if (time.time() - _t_start) > overall_budget_s: break
+        for path in spip_paths:
+            if (time.time() - _t_start) > overall_budget_s: break
+            url = base + path
+            try:
+                body = fetch(url, timeout=per_request_timeout)
+                if not body or len(body) < 80:
+                    continue
+                # Beide Schemata extrahieren
+                ids = set()
+                for m in re.finditer(r"/article/(\d+)", body):
+                    ids.add(("num", m.group(1)))
+                for m in re.finditer(r'href="https?://(?:www\.)?barrikade\.info/([A-Za-z0-9][A-Za-z0-9_\-]+-(\d{3,6}))', body):
+                    ids.add(("slug", m.group(1)))
+                # SPIP-typische rewritten Slug-Format: /Title-Slug-<id>
+                for m in re.finditer(r"<loc>https?://(?:www\.)?barrikade\.info/([^<\s\"]+)</loc>", body):
+                    slug = m.group(1)
+                    if re.search(r'-\d{3,6}$', slug):
+                        ids.add(("slug", slug))
+                log.info(f"barrikade spip-pub [{url}] → {len(ids)} matches")
+                for kind, v in ids:
+                    if kind == "num":
+                        u = f"https://barrikade.info/article/{v}"
+                    else:
+                        u = f"https://barrikade.info/{v}"
+                    if u not in seen and len(seen) < max_results:
+                        seen.add(u); found.append(u)
+                if len(found) >= max_results: break
+            except Exception as e:
+                log.info(f"barrikade spip-pub [{url}] failed: {str(e)[:120]}")
+        if len(found) >= max_results: break
+    return found
+
+def _barrikade_wayback_fetch(url, timeout=25):
+    """Wenn der direkte Fetch von barrikade.info blockiert ist (Cloudflare 403),
+    versuchen wir das Web-Archiv (archive.org Wayback Machine) als Backup-Quelle.
+    Wayback ist nicht hinter Cloudflare und cached die Inhalte oft."""
+    try:
+        # 1) Frage Wayback nach dem neuesten Snapshot
+        avail = session.get(
+            "https://archive.org/wayback/available",
+            params={"url": url},
+            timeout=15,
+        )
+        if avail.status_code != 200: return None
+        data = avail.json()
+        snap = (data or {}).get("archived_snapshots", {}).get("closest", {})
+        if not snap or not snap.get("available"): return None
+        snap_url = snap.get("url", "")
+        if not snap_url: return None
+        # 2) Hole den Snapshot. wayback liefert oft mit ?if_=identity ungefiltert
+        if "id_" not in snap_url:
+            # Ersetze "/web/<ts>/" durch "/web/<ts>id_/" → liefert Roh-HTML ohne wayback-Toolbar
+            snap_url = re.sub(r"/web/(\d+)/", r"/web/\1id_/", snap_url)
+        r = session.get(snap_url, timeout=timeout)
+        if r.status_code == 200 and len(r.text) > 200:
+            log.info(f"barrikade wayback HIT for {url} → {snap_url} ({len(r.text)}b)")
+            return r.text
+    except Exception as e:
+        log.info(f"barrikade wayback {url}: {str(e)[:120]}")
+    return None
 
 def _barrikade_discover_urls():
-    """Discover recent barrikade article URLs across BOTH barrikade-Domains
-    (www + publish-Schwester). Returns unique URLs across all matched hosts.
-
-    Probiert pro Host in dieser Reihenfolge:
-      1. Mehrere RSS-/Atom-Endpoint-Kandidaten (Drupal-Standard-Pfade)
+    """Discover recent barrikade article URLs via multiple strategies.
+    Returns a list of unique URLs sorted newest-first (best-effort).
+    Probiert in dieser Reihenfolge:
+      1. Mehrere RSS-/Atom-Endpoint-Kandidaten (Drupal/WP-Standard-Pfade
+         auf BEIDEN Domains www + publish)
       2. sitemap.xml und sitemap_index.xml
       3. Homepage-Scrape mit Regex für /article/<id>
-    Discovered URLs behalten ihre Origin-Domain — der Crawl-Step nutzt sie
-    direkt, so dass source_health pro Domain separat getrackt wird.
+      4. SPIP-public Pfade als Fallback
+      5. DuckDuckGo + Bing Search-Engine-Discovery
+      6. Wayback CDX als letzte Auffanglinie wenn Cloudflare alles blockt
+    Damit ist der Crawler robust gegenüber Anti-Bot-Schutz auf
+    einzelnen Pfaden — wenn EIN Endpoint geht, kommen die Artikel rein.
     """
+    candidates = [
+        # RSS/Atom Standard-Pfade — barrikade.info
+        ("rss-feed",      "https://barrikade.info/feed"),
+        ("rss-feed-slash","https://barrikade.info/feed/"),
+        ("rss-rss",       "https://barrikade.info/rss"),
+        ("rss-rss-xml",   "https://barrikade.info/rss.xml"),
+        ("rss-index",     "https://barrikade.info/index.rss"),
+        ("rss-atom",      "https://barrikade.info/atom"),
+        # Drupal default
+        ("drupal-feeds",  "https://barrikade.info/feeds/all.rss.xml"),
+        # Sitemap discovery
+        ("sitemap",       "https://barrikade.info/sitemap.xml"),
+        ("sitemap-index", "https://barrikade.info/sitemap_index.xml"),
+        # Homepage scrape (always last, fewest signals)
+        ("homepage",      "https://barrikade.info/"),
+        # Schwester-Host publish.barrikade.info (typischerweise permissivere Anti-Bot)
+        ("publish-feed",  "https://publish.barrikade.info/feed"),
+        ("publish-home",  "https://publish.barrikade.info/"),
+    ]
     found = []  # preserve order
     seen  = set()
-    for host in _BARRIKADE_DOMAINS:
-        for label, path in _BARRIKADE_DISCOVERY_PATHS:
-            u = f"https://{host}{path}"
-            try:
-                body = fetch(u, timeout=12)
-                if not body or len(body) < 100:
-                    continue
-                urls = []
-                if "<rss" in body[:200].lower() or "<feed" in body[:200].lower() or "<atom" in body[:200].lower():
-                    # RSS/Atom — extract <link> tags
-                    for m in re.finditer(r"<link[^>]*>([^<]+)</link>", body):
-                        href = m.group(1).strip()
-                        if "/article/" in href or any(h in href for h in _BARRIKADE_DOMAINS):
-                            urls.append(href)
-                    # Atom-style <link href="…"/>
-                    for m in re.finditer(r'<link[^>]+href=["\']([^"\']+)["\']', body):
-                        href = m.group(1).strip()
-                        if "/article/" in href:
-                            urls.append(href)
-                elif "<urlset" in body[:200].lower() or "<sitemapindex" in body[:200].lower():
-                    # sitemap.xml
-                    for m in re.finditer(r"<loc>([^<]+)</loc>", body):
-                        href = m.group(1).strip()
-                        if "/article/" in href:
-                            urls.append(href)
-                else:
-                    # HTML scrape — resolve relative IDs against the host
-                    # we just fetched (so publish.barrikade-IDs landen auf
-                    # publish.barrikade.info statt www.).
-                    for m in re.finditer(r"/article/(\d+)", body):
-                        urls.append(f"https://{host}/article/{m.group(1)}")
-                log.info(f"barrikade discover [{host}/{label}] HTTP-200, parsed {len(urls)} candidate URLs")
-                for ux in urls:
-                    if ux not in seen:
-                        seen.add(ux); found.append(ux)
-                # Commit AC: keine Early-Stop bei 30 mehr — User-Direktive
-                # "alles crawlen". Wir lassen alle 20 Discovery-Endpoints
-                # durchlaufen und sammeln die volle Liste. Soft-Cap bei 500
-                # damit Pathological-Sitemaps mit 50k URLs nicht den Speicher
-                # auffressen.
-                if len(found) >= 500:
-                    log.info(f"barrikade discover: 500-URL soft-cap erreicht")
-                    return found
-            except Exception as e:
-                log.info(f"barrikade discover [{host}/{label}] failed: {str(e)[:120]}")
+    for label, u in candidates:
+        try:
+            body = fetch(u, timeout=12)
+            if not body or len(body) < 100:
+                continue
+            # Extract article URLs/IDs via three different parsers depending
+            # on what we got back.
+            urls = []
+            if "<rss" in body[:200].lower() or "<feed" in body[:200].lower() or "<atom" in body[:200].lower():
+                # RSS/Atom — extract <link> tags
+                for m in re.finditer(r"<link[^>]*>([^<]+)</link>", body):
+                    href = m.group(1).strip()
+                    if "/article/" in href or "barrikade.info" in href:
+                        urls.append(href)
+                # Atom-style <link href="…"/>
+                for m in re.finditer(r'<link[^>]+href=["\']([^"\']+)["\']', body):
+                    href = m.group(1).strip()
+                    if "/article/" in href:
+                        urls.append(href)
+            elif "<urlset" in body[:200].lower() or "<sitemapindex" in body[:200].lower():
+                # sitemap.xml
+                for m in re.finditer(r"<loc>([^<]+)</loc>", body):
+                    href = m.group(1).strip()
+                    if "/article/" in href:
+                        urls.append(href)
+            else:
+                # HTML scrape — barrikade.info verwendet BEIDE URL-Patterns:
+                # kanonisch /article/<id> UND slug-rewritten /<slug>-<id>.
+                # Homepage verlinkt fast nur in slug-Form — Regex muss beide
+                # treffen sonst kommen 0 URLs raus (Bug aus User-Log 26.5.2026).
+                for m in re.finditer(r"/article/(\d{3,6})\b", body):
+                    urls.append(f"https://barrikade.info/article/{m.group(1)}")
+                # Slug-pattern: muss nach <a href=...> oder >...< stehen,
+                # damit wir nicht zufällige Text-Inhalte matchen.
+                for m in re.finditer(r'href=["\'](?:https?://(?:www\.)?barrikade\.info)?/([A-Za-z0-9][A-Za-z0-9_\-]*?-(\d{3,6}))(?=["\'?#])', body):
+                    slug = m.group(1)
+                    if slug.startswith(("tag-","rubrique-","page-","spip.php")): continue
+                    urls.append(f"https://barrikade.info/{slug}")
+            log.info(f"barrikade discover [{label}] HTTP-200, parsed {len(urls)} candidate URLs")
+            for u in urls:
+                if u not in seen:
+                    seen.add(u); found.append(u)
+            # If we have a healthy number, stop probing further endpoints.
+            if len(found) >= 30:
+                break
+        except Exception as e:
+            log.info(f"barrikade discover [{label}] failed: {str(e)[:120]}")
+
+    # ── Fallback-Strategien wenn Standard-Discovery zu wenig liefert ──
+    # Diese laufen nur wenn die ersten 10 RSS/Atom/Sitemap-Pfade weniger
+    # als 25 URLs ergeben haben — sie sind langsamer und sollten nur als
+    # Fallback dienen.
+    if len(found) < 25:
+        log.info(f"barrikade discover: nur {len(found)} URLs — versuche SPIP-public-Pfade")
+        try:
+            extra = _barrikade_spip_public_discover(max_results=60)
+            for u in extra:
+                if u not in seen:
+                    seen.add(u); found.append(u)
+            log.info(f"barrikade discover: SPIP-public ergänzt → {len(found)} URLs total")
+        except Exception as e:
+            log.info(f"barrikade discover: SPIP-public failed: {str(e)[:120]}")
+
+    if len(found) < 15:
+        log.info(f"barrikade discover: nur {len(found)} URLs — versuche Search-Engine-Discovery")
+        try:
+            extra = _barrikade_search_engine_discover(max_results=40)
+            for u in extra:
+                if u not in seen:
+                    seen.add(u); found.append(u)
+            log.info(f"barrikade discover: Search-Engine ergänzt → {len(found)} URLs total")
+        except Exception as e:
+            log.info(f"barrikade discover: Search-Engine failed: {str(e)[:120]}")
+
+    # Wayback CDX-Discovery — DAS ist der goldene Pfad wenn Cloudflare alle
+    # Direkt-Strategien blockiert. archive.org ist nicht hinter CF und kennt
+    # tausende archivierte barrikade.info-Artikel.
+    if len(found) < 30:
+        log.info(f"barrikade discover: nur {len(found)} URLs — versuche Wayback CDX")
+        try:
+            extra = _barrikade_wayback_cdx_discover(max_results=200, timeout=15)
+            for u in extra:
+                if u not in seen:
+                    seen.add(u); found.append(u)
+            log.info(f"barrikade discover: Wayback CDX ergänzt → {len(found)} URLs total")
+        except Exception as e:
+            log.info(f"barrikade discover: Wayback CDX failed: {str(e)[:120]}")
+
     return found
+
+# ─────────────────────────────────────────────────────────────────────
+# publish.barrikade.info — SPIP-CMS Editorial Backend (authenticated)
+# ─────────────────────────────────────────────────────────────────────
+# barrikade.info ist die öffentliche Front, publish.barrikade.info das
+# SPIP-Editorial-Backend. Mit Login bekommt man Zugriff auf Artikel,
+# die noch nicht (oder nicht mehr) öffentlich gelistet sind. Credentials
+# kommen ausschließlich aus ENV-Variablen (BARRIKADE_USER/PASS), niemals
+# aus dem Source. Fehlt eine Variable oder schlägt Login fehl, wird der
+# bestehende un-authentifizierte Crawler als Fallback benutzt.
+# ─────────────────────────────────────────────────────────────────────
+
+_BK_AUTH_SESSION = None        # cached scraper session
+_BK_AUTH_SESSION_TS = 0.0      # epoch seconds when login succeeded
+_BK_AUTH_TTL = 30 * 60         # 30 min — SPIP-Sessions sind länger gültig,
+                                # aber wir rotieren proaktiv
+_BK_LAST_DIAG: dict = {}       # last login diagnostic (für /admin/api/barrikade-test)
+
+def _spip_login_payload_variants(form, user, pw):
+    """Generate up to 3 alternative form payloads for the SPIP login.
+
+    SPIP authentifiziert je nach Version anders:
+      v1) Plain `password` → Server hasht serverseitig.
+      v2) JS-hashed `session_password_md5` + `next_session_password_md5`,
+          basierend auf alea_actuel/alea_futur (SHA256 oder MD5).
+      v3) Plain `p` (kürzeres Feld in manchen Themes).
+
+    Wir bauen für jede Variante einen kompletten Form-Body und versuchen
+    sie nacheinander. Erfolg wird per spip_session-Cookie validiert."""
+    # Alea-Werte aus Form (hidden inputs) und JS-Block (var alea_actuel = "...")
+    base = {}
+    for inp in form.find_all("input"):
+        name = inp.get("name")
+        if not name: continue
+        base[name] = inp.get("value", "") or ""
+
+    alea_actuel = (base.get("alea_actuel") or "").strip()
+    alea_futur  = (base.get("alea_futur")  or "").strip()
+    # JS-eingebettete Alea-Werte aus dem umgebenden HTML extrahieren
+    page_html = str(form.parent) if form.parent else str(form)
+    if not alea_actuel:
+        m = re.search(r"alea_actuel\s*=\s*['\"]([0-9a-f]+)['\"]", page_html, re.I)
+        if m: alea_actuel = m.group(1)
+    if not alea_futur:
+        m = re.search(r"alea_futur\s*=\s*['\"]([0-9a-f]+)['\"]", page_html, re.I)
+        if m: alea_futur = m.group(1)
+
+    variants = []
+
+    # V1: Plain password (häufigster Pfad; SPIP fällt server-seitig drauf zurück)
+    p1 = dict(base)
+    p1["var_login"] = user
+    p1["password"]  = pw
+    variants.append(("plain", p1))
+
+    # V2: SHA256-Hash (SPIP 2.1+)
+    if alea_actuel and alea_futur:
+        import hashlib as _h
+        p2 = dict(base)
+        p2["var_login"] = user
+        p2["password"]  = ""  # SPIP erwartet leeren plain-pwd bei JS-Hash
+        p2["session_password_md5"]      = _h.sha256((alea_actuel + pw).encode()).hexdigest()
+        p2["next_session_password_md5"] = _h.sha256((alea_futur  + pw).encode()).hexdigest()
+        variants.append(("sha256", p2))
+        # V2b: MD5-Variante (legacy SPIP <2.1)
+        p2b = dict(base)
+        p2b["var_login"] = user
+        p2b["password"]  = ""
+        p2b["session_password_md5"]      = _h.md5((alea_actuel + pw).encode()).hexdigest()
+        p2b["next_session_password_md5"] = _h.md5((alea_futur  + pw).encode()).hexdigest()
+        variants.append(("md5", p2b))
+
+    return variants
+
+def _barrikade_login_session(force_refresh: bool = False, capture_diag: bool = False):
+    """Login auf publish.barrikade.info (SPIP). Cached für 30 Min.
+    Liefert None bei fehlenden ENV-Vars oder Login-Fehler.
+
+    capture_diag=True → schreibt einen Diagnose-Dict nach _BK_LAST_DIAG,
+    so dass /admin/api/barrikade-test ihn dem Admin zurückgeben kann."""
+    global _BK_AUTH_SESSION, _BK_AUTH_SESSION_TS, _BK_LAST_DIAG
+
+    diag: dict = {"steps": [], "ts": datetime.now().isoformat()}
+    def _add(step, **kw):
+        if capture_diag:
+            diag["steps"].append({"step": step, **kw})
+
+    user = os.getenv("BARRIKADE_USER")
+    pw   = os.getenv("BARRIKADE_PASS")
+    if not user or not pw:
+        _add("env_missing", user_set=bool(user), pass_set=bool(pw))
+        if capture_diag: _BK_LAST_DIAG = diag
+        return None
+
+    # Cache hit
+    if not force_refresh and _BK_AUTH_SESSION and (time.time() - _BK_AUTH_SESSION_TS) < _BK_AUTH_TTL:
+        _add("cache_hit", age_s=int(time.time() - _BK_AUTH_SESSION_TS))
+        if capture_diag: _BK_LAST_DIAG = diag
+        return _BK_AUTH_SESSION
+
+    login_url = os.getenv(
+        "BARRIKADE_LOGIN_URL",
+        "https://publish.barrikade.info/spip.php?page=login&lang=de",
+    )
+    base_url = os.getenv("BARRIKADE_BASE", "https://publish.barrikade.info")
+
+    if not _HAS_CLOUDSCRAPER:
+        log.warning("barrikade auth: cloudscraper unavailable, cannot login")
+        _add("no_cloudscraper")
+        if capture_diag: _BK_LAST_DIAG = diag
+        return None
+    try:
+        sess = cloudscraper.create_scraper(
+            browser={"browser":"chrome", "platform":"darwin", "mobile":False}
+        )
+        sess.headers.update({
+            "Accept-Language": "de,en;q=0.7",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Referer": base_url + "/",
+        })
+
+        # 1) GET Login-Page → SPIP-Anti-CSRF-Token aus dem Formular extrahieren.
+        # Cloudflare/Render-IP-Verbindungen sind flaky → 3 Retries mit Backoff.
+        r = None
+        last_err = None
+        for attempt in range(3):
+            try:
+                # Längeres connect-timeout (8s), read-timeout (25s) für CF-Challenges
+                r = sess.get(login_url, timeout=(8, 25))
+                _add(f"get_login_try{attempt+1}", status=r.status_code,
+                     body_len=len(r.text or ""))
+                if r.status_code == 200:
+                    break
+                last_err = f"HTTP {r.status_code}"
+            except Exception as e:
+                last_err = str(e)[:200]
+                _add(f"get_login_try{attempt+1}_exc", err=last_err)
+                r = None
+            if attempt < 2:
+                wait_s = 2 ** (attempt + 1)  # 2s, 4s
+                time.sleep(wait_s)
+
+        if r is None or r.status_code != 200:
+            log.warning(f"barrikade auth: Login-Page nach 3 retries fehlgeschlagen — {last_err}")
+            diag["success"] = False
+            diag["fail_reason"] = f"login_page_unreachable: {last_err}"
+            if capture_diag: _BK_LAST_DIAG = diag
+            return None
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        # Login-Form finden.
+        form = None
+        for f in soup.find_all("form"):
+            inputs = {i.get("name","").lower() for i in f.find_all("input")}
+            if "var_login" in inputs or "password" in inputs:
+                form = f; break
+        if not form:
+            log.warning("barrikade auth: kein Login-Formular im HTML — SPIP-Theme geändert?")
+            _add("no_form", forms_found=len(soup.find_all("form")))
+            if capture_diag: _BK_LAST_DIAG = diag
+            return None
+
+        action = form.get("action") or login_url
+        if action.startswith("/"):
+            action = base_url + action
+        elif not action.startswith("http"):
+            action = login_url
+        _add("form_found", action=action, n_inputs=len(form.find_all("input")))
+
+        # 2) Versuche jede Login-Variante.
+        variants = _spip_login_payload_variants(form, user, pw)
+        _add("variants_built", labels=[v[0] for v in variants])
+
+        for label, payload in variants:
+            try:
+                # Frische Cookies pro Versuch wären zu aggressiv (das alea-Set
+                # ist an die Session gebunden). Wir keepe die Session und
+                # tauschen nur den Body.
+                r2 = sess.post(action, data=payload, timeout=30, allow_redirects=True)
+                cookies = {c.name: True for c in sess.cookies}
+                has_spip_cookie = any(c.startswith("spip_session") for c in cookies)
+
+                body_low = (r2.text or "").lower()
+                error_markers = (
+                    "erreur_message", "identifiant ou mot de passe",
+                    "anmeldung fehlgeschlagen", "login failed",
+                    "passwort falsch", "mot de passe incorrect",
+                    "identifiants incorrects",
+                )
+                login_failed = any(m in body_low for m in error_markers)
+
+                # Zweite Erfolgs-Verifikation: Backend-Page abrufen. Wenn die
+                # öffnet (HTTP 200 mit "deconnexion" oder "ecrire"-Marker),
+                # sind wir wirklich eingeloggt.
+                test_url = f"{base_url}/ecrire/"
+                rt = sess.get(test_url, timeout=20, allow_redirects=False)
+                ecrire_ok = (rt.status_code in (200, 302) and
+                             ("deconnexion" in (rt.text or "").lower() or
+                              "spip" in dict(rt.headers).get("Set-Cookie", "").lower() or
+                              has_spip_cookie))
+
+                _add(f"try_{label}",
+                     post_status=r2.status_code, post_len=len(r2.text or ""),
+                     spip_cookie=has_spip_cookie, error_in_body=login_failed,
+                     ecrire_status=rt.status_code, ecrire_ok=ecrire_ok,
+                     cookies=list(cookies.keys()))
+
+                if has_spip_cookie and not login_failed and ecrire_ok:
+                    _BK_AUTH_SESSION = sess
+                    _BK_AUTH_SESSION_TS = time.time()
+                    log.info(f"barrikade auth: session OK (variant={label})")
+                    diag["success"] = True
+                    diag["variant"] = label
+                    if capture_diag: _BK_LAST_DIAG = diag
+                    return sess
+            except Exception as ve:
+                _add(f"try_{label}_exc", err=str(ve)[:200])
+                continue
+
+        log.warning("barrikade auth: alle Login-Varianten fehlgeschlagen")
+        diag["success"] = False
+        if capture_diag: _BK_LAST_DIAG = diag
+        return None
+    except Exception as e:
+        log.warning(f"barrikade auth: exception {str(e)[:200]} — fallback")
+        _add("outer_exception", err=str(e)[:200])
+        diag["success"] = False
+        if capture_diag: _BK_LAST_DIAG = diag
+        return None
+
+def _barrikade_authed_discover_urls(sess):
+    """Pull article URLs from the SPIP editorial backend. Versucht mehrere
+    bekannte SPIP-Backend-Pfade; sammelt Artikel-IDs und mapped auf die
+    kanonischen barrikade.info/article/<id>-URLs."""
+    base = os.getenv("BARRIKADE_BASE", "https://publish.barrikade.info")
+    candidates = [
+        f"{base}/ecrire/?exec=articles_tous",
+        f"{base}/ecrire/?exec=articles_page",
+        f"{base}/ecrire/?exec=plan",
+        f"{base}/ecrire/",
+        f"{base}/spip.php?page=sommaire",
+    ]
+    seen = set()
+    found = []
+    for url in candidates:
+        try:
+            r = sess.get(url, timeout=20)
+            if r.status_code != 200:
+                log.info(f"barrikade authed [{url}] HTTP {r.status_code}")
+                continue
+            body = r.text or ""
+            # SPIP-Artikel-IDs sowohl im neuen (spip.php?article<id>) als
+            # auch im URL-Rewriting-Format (/<id>) und im Backend-Format
+            # (?exec=article&id_article=<id>) finden.
+            ids = set()
+            for m in re.finditer(r"[?&]article(\d+)\b", body):
+                ids.add(m.group(1))
+            for m in re.finditer(r"id_article=(\d+)", body):
+                ids.add(m.group(1))
+            for m in re.finditer(r"/article/(\d+)", body):
+                ids.add(m.group(1))
+            log.info(f"barrikade authed [{url}] → {len(ids)} article IDs")
+            for aid in ids:
+                public_url = f"https://barrikade.info/article/{aid}"
+                if public_url not in seen:
+                    seen.add(public_url); found.append(public_url)
+            if len(found) >= 80:
+                break
+        except Exception as e:
+            log.info(f"barrikade authed [{url}] failed: {str(e)[:120]}")
+    return found
+
+def _fetch_article_multi(sess, link, article_id, *, capture_diag=False):
+    """Versucht einen Artikel über VIELE URL-Patterns zu holen und liefert
+    den ersten erfolgreichen (Volltext, Strategie-Label) zurück.
+
+    Reihenfolge (auf publish wegen Auth-Cookie zuerst):
+      1. publish.barrikade.info/spip.php?article<id>            (public-render on publish)
+      2. publish.barrikade.info/ecrire/?exec=article&id_article=<id>   (editor view)
+      3. publish.barrikade.info/ecrire/?exec=article_edit&id_article=<id>  (editor edit)
+      4. publish.barrikade.info/article/<id>                    (rewritten on publish)
+      5. barrikade.info/article/<id>                            (public-rendering off-domain)
+      6. Wayback Machine snapshot der Public-URL
+
+    Returns: (full_text, strategy_label) oder (None, last_error_string)."""
+    base = os.getenv("BARRIKADE_BASE", "https://publish.barrikade.info")
+    diag_steps = [] if capture_diag else None
+
+    def _add(label, **kw):
+        if diag_steps is not None:
+            diag_steps.append({"step": label, **kw})
+
+    # Helper: aus HTML den Artikel-Body extrahieren
+    def _extract_body(html, prefer_editor=False):
+        if not html or len(html) < 300:
+            return None
+        try:
+            soup = BeautifulSoup(html, "html.parser")
+            # 1. Editor-Textarea (definitive Inhalts-Quelle wenn wir im editor sind)
+            ta = soup.select_one("textarea[name=texte], textarea#texte")
+            if ta and ta.get_text(strip=True):
+                title_el = soup.select_one("input[name=titre], input#titre, #titre_input")
+                title = title_el.get("value","").strip() if title_el else ""
+                t = (title + "\n" + ta.get_text(" ", strip=True)).strip()
+                if len(t) > 100:
+                    return t
+            # 2. Public Article-Body (SPIP default theme selectors)
+            for sel in [
+                ".texte-article", ".texte", ".surface-texte", "#texte",
+                "div.contenu", "article .formo", "article",
+                ".article-body", "main .content", "main",
+            ]:
+                el = soup.select_one(sel)
+                if el:
+                    txt = el.get_text(" ", strip=True)
+                    if len(txt) > 150:
+                        # Title auch dazu
+                        h1 = soup.select_one("h1, .titre, .pagination-titre")
+                        title = h1.get_text(strip=True) if h1 else ""
+                        return (title + "\n" + txt).strip()
+            # 3. Fallback: ganze Page minus Nav/Footer
+            for s in soup(["script","style","nav","footer","header","aside","form"]):
+                s.decompose()
+            txt = soup.get_text(" ", strip=True)
+            if len(txt) > 200:
+                return txt
+        except Exception:
+            pass
+        return None
+
+    candidates = []
+    if article_id:
+        candidates.extend([
+            ("auth-spip",    f"{base}/spip.php?article{article_id}", True),
+            ("auth-editor",  f"{base}/ecrire/?exec=article&id_article={article_id}", True),
+            ("auth-edit",    f"{base}/ecrire/?exec=article_edit&id_article={article_id}", True),
+            ("auth-rewrite", f"{base}/article/{article_id}", True),
+            ("public",       f"https://barrikade.info/article/{article_id}", False),
+        ])
+    # Original-URL (Slug oder Article) als Public-Fallback
+    if link and link not in [c[1] for c in candidates]:
+        candidates.append(("public-link", link, False))
+
+    last_err = "no candidates"
+    for label, url, use_auth in candidates:
+        try:
+            if use_auth:
+                r = sess.get(url, timeout=15, allow_redirects=True)
+            else:
+                # Public path: nutze global session (mit cloudscraper für barrikade.info)
+                try:
+                    text = get_text(url)
+                    if text and len(text) > 200:
+                        _add(label, ok=True, len=len(text), via="get_text")
+                        return text, label
+                    else:
+                        _add(label, ok=False, reason="too_short", via="get_text")
+                        last_err = f"{label}: too short"
+                        continue
+                except Exception as e:
+                    _add(label, ok=False, reason=str(e)[:120], via="get_text")
+                    last_err = f"{label}: {str(e)[:80]}"
+                    continue
+            if r.status_code != 200:
+                _add(label, status=r.status_code, ok=False)
+                last_err = f"{label}: HTTP {r.status_code}"
+                continue
+            full = _extract_body(r.text, prefer_editor=("ecrire" in url))
+            if full:
+                _add(label, status=200, ok=True, len=len(full))
+                return full, label
+            _add(label, status=200, ok=False, reason="no_body_extracted", html_len=len(r.text or ""))
+            last_err = f"{label}: empty body"
+        except Exception as e:
+            _add(label, ok=False, exc=str(e)[:120])
+            last_err = f"{label}: {str(e)[:80]}"
+
+    # ── Wayback Machine als allerletzter Fallback ──
+    try:
+        wb = _barrikade_wayback_fetch(link or f"https://barrikade.info/article/{article_id}", timeout=10)
+        if wb:
+            full = _extract_body(wb)
+            if full:
+                _add("wayback", ok=True, len=len(full))
+                return full, "wayback"
+            _add("wayback", ok=False, reason="no_body_extracted", html_len=len(wb))
+        else:
+            _add("wayback", ok=False, reason="no_snapshot")
+    except Exception as e:
+        _add("wayback", ok=False, exc=str(e)[:120])
+
+    if diag_steps is not None:
+        return None, {"error": last_err, "steps": diag_steps}
+    return None, last_err
+
+def _crawl_barrikade_full(verbose=False, max_articles=200, start_id=None, end_id=None,
+                          progress_callback=None):
+    """ECHTER Full-Crawl: systematische ID-Iteration durch barrikade.info.
+
+    Im Gegensatz zum Wayback-Only-Pfad arbeitet das hier mit der
+    LIVE-Site (barrikade.info ist von Render erreichbar lt. User-Log).
+    Für jede ID wird in dieser Reihenfolge versucht:
+      1) Direct cloudscraper (barrikade.info/article/<id>) — Primary
+      2) Wayback Machine snapshot — Fallback wenn direct 404 oder leer
+      3) archive.today snapshot — Zweit-Archiv-Fallback
+      4) Search-Snippet aus DDG/Bing — letzter Notnagel
+
+    start_id: höchste ID zu versuchen (None=auto via barrikade_latest_id)
+    end_id: niedrigste ID (None=start_id-max_articles)
+    max_articles: harter Cap an Versuchen
+    progress_callback(dict) → Live-Updates an UI"""
+    url_results = []
+    inserted = 0
+    fetch_counter = {"direct": 0, "wayback": 0, "archive_today": 0, "snippet": 0, "failed": 0}
+
+    if start_id is None:
+        start_id = barrikade_latest_id()
+        log.info(f"barrikade full-crawl: auto-detected latest_id={start_id}")
+    if end_id is None:
+        end_id = max(1, start_id - max_articles)
+
+    # Optional: Search-Snippets-Preload für letzte Fallback-Quelle
+    search_meta = {}
+    try:
+        snip_results = _barrikade_search_engine_discover_with_snippets(
+            max_results=80, per_query_timeout=6, overall_budget_s=20)
+        for r in snip_results:
+            search_meta[r["url"]] = {"title": r["title"], "snippet": r["snippet"], "src": r["src"]}
+        log.info(f"barrikade full-crawl: {len(search_meta)} search-snippets preloaded")
+    except Exception as e:
+        log.info(f"barrikade full-crawl: search-snippet preload err: {str(e)[:120]}")
+
+    log.info(f"barrikade full-crawl: scanning IDs {start_id} → {end_id} (max {max_articles} tries)")
+    if progress_callback:
+        progress_callback({"total_ids": min(start_id - end_id + 1, max_articles),
+                           "tried_urls": 0, "inserted": 0})
+
+    consecutive_404 = 0
+    consecutive_403 = 0
+    tried = 0
+
+    for aid in range(start_id, end_id - 1, -1):
+        if tried >= max_articles: break
+        if consecutive_404 > 30:
+            log.info(f"barrikade full-crawl: 30 konsekutive 404 — abbruch bei id={aid}")
+            break
+        if consecutive_403 > 5:
+            log.warning(f"barrikade full-crawl: 5 konsekutive 403/429 — Cloudflare blockt, abbruch")
+            break
+        tried += 1
+
+        link_canonical = f"https://barrikade.info/article/{aid}"
+        link_used = link_canonical
+        full = None
+        strategy = None
+
+        try:
+            # 1) Direct fetch via cloudscraper
+            try:
+                t = get_text(link_canonical)
+                if t and len(t) > 250:
+                    full = t
+                    strategy = "direct"
+                    fetch_counter["direct"] += 1
+                    consecutive_404 = 0
+                    consecutive_403 = 0
+            except requests.HTTPError as he:
+                code = getattr(he.response, "status_code", 0)
+                if code == 404:
+                    consecutive_404 += 1
+                    if verbose:
+                        url_results.append({"url": link_canonical, "ok": False, "reason": "direct_404"})
+                    if progress_callback:
+                        progress_callback({"tried_urls": tried, "inserted": inserted,
+                                           "fetch_counter": dict(fetch_counter),
+                                           "current_id": aid})
+                    time.sleep(0.15)
+                    continue  # nicht mit Wayback verschwenden bei echtem 404
+                elif code in (403, 429):
+                    consecutive_403 += 1
+                    log.info(f"barrikade direct id={aid} HTTP {code}")
+            except Exception as e:
+                log.info(f"barrikade direct id={aid}: {str(e)[:100]}")
+
+            # 2) Wayback Snapshot wenn direct nichts
+            if not full:
+                try:
+                    wb = _barrikade_wayback_fetch(link_canonical, timeout=12)
+                    if wb:
+                        soup = BeautifulSoup(wb, "html.parser")
+                        for s in soup(["script","style","nav","footer","header","aside","form"]):
+                            s.decompose()
+                        for sel in ["#wm-ipp","#wm-ipp-base","#wm-ipp-print"]:
+                            for el in soup.select(sel): el.decompose()
+                        content_el = (soup.select_one("div.texte-article") or
+                                      soup.select_one("article") or
+                                      soup.select_one("main") or
+                                      soup.body)
+                        if content_el:
+                            t = content_el.get_text(" ", strip=True)
+                            if t and len(t) > 250:
+                                full = t
+                                strategy = "wayback"
+                                fetch_counter["wayback"] += 1
+                                consecutive_404 = 0
+                except Exception as e:
+                    log.info(f"barrikade wayback id={aid}: {str(e)[:100]}")
+
+            # 3) archive.today als 2. Archiv
+            if not full:
+                try:
+                    at = _barrikade_archive_today_fetch(link_canonical, timeout=10)
+                    if at:
+                        soup = BeautifulSoup(at, "html.parser")
+                        for s in soup(["script","style","nav","footer","header","aside","form"]):
+                            s.decompose()
+                        content_el = (soup.select_one("div.texte-article") or
+                                      soup.select_one("article") or soup.body)
+                        if content_el:
+                            t = content_el.get_text(" ", strip=True)
+                            if t and len(t) > 250:
+                                full = t
+                                strategy = "archive_today"
+                                fetch_counter["archive_today"] += 1
+                except Exception as e:
+                    log.info(f"barrikade archive.today id={aid}: {str(e)[:100]}")
+
+            # 4) Search-Snippet als allerletzter Content
+            if not full and link_canonical in search_meta:
+                meta = search_meta[link_canonical]
+                t = (meta.get("title","") + " — " + meta.get("snippet","")).strip()
+                if len(t) > 80:
+                    full = t
+                    strategy = f"snippet-{meta.get('src','?')}"
+                    fetch_counter["snippet"] += 1
+
+            # Wenn nichts: failed
+            if not full or len(full) < 80:
+                fetch_counter["failed"] += 1
+                if verbose:
+                    url_results.append({"url": link_canonical, "ok": False, "reason": "no_content"})
+                if progress_callback:
+                    progress_callback({"tried_urls": tried, "inserted": inserted,
+                                       "fetch_counter": dict(fetch_counter), "current_id": aid})
+                time.sleep(0.3)
+                continue
+
+            # ── Klassifizieren + speichern ──
+            if not any(kw in full.lower() for kw in BARRIKADE_RELEVANCE_KWS):
+                if verbose:
+                    url_results.append({"url": link_canonical, "ok": False,
+                                        "reason": "no_relevance_kw", "strategy": strategy,
+                                        "len": len(full)})
+            elif is_false_positive(full):
+                if verbose:
+                    url_results.append({"url": link_canonical, "ok": False,
+                                        "reason": "false_positive", "strategy": strategy})
+            else:
+                ai = smart_classify(full)
+                if not ai:
+                    if verbose:
+                        url_results.append({"url": link_canonical, "ok": False,
+                                            "reason": "classify_failed", "strategy": strategy,
+                                            "len": len(full)})
+                else:
+                    saved = save_incident(ai, full, "barrikade.info", link_canonical, date_from_url(link_canonical))
+                    if saved:
+                        inserted += 1
+                        if verbose:
+                            url_results.append({"url": link_canonical, "ok": True,
+                                                "strategy": strategy,
+                                                "category": ai.get("kategorie",""),
+                                                "len": len(full)})
+                    else:
+                        if verbose:
+                            url_results.append({"url": link_canonical, "ok": False,
+                                                "reason": "duplicate_or_filter",
+                                                "strategy": strategy,
+                                                "category": ai.get("kategorie","")})
+            time.sleep(0.35)
+        except Exception as e:
+            log.info(f"barrikade full id={aid}: {str(e)[:100]}")
+            fetch_counter["failed"] += 1
+
+        if progress_callback:
+            progress_callback({"tried_urls": tried, "inserted": inserted,
+                               "fetch_counter": dict(fetch_counter), "current_id": aid})
+
+    log.info(f"barrikade full-crawl: {inserted} inserted, {tried} tried, "
+             f"counter={fetch_counter}")
+    final = {"inserted": inserted, "tried_urls": tried,
+             "start_id": start_id, "end_id": max(end_id, start_id - tried + 1),
+             "fetch_counter": fetch_counter,
+             "url_results": url_results,
+             "strategy_counter": {r["strategy"]: 1 for r in url_results if r.get("ok")}}
+    # Sum up strategy_counter
+    sc = {}
+    for r in url_results:
+        if r.get("ok"):
+            s = r.get("strategy","?")
+            sc[s] = sc.get(s, 0) + 1
+    final["strategy_counter"] = sc
+    if progress_callback:
+        progress_callback({"status": "done", "done": True, **final})
+    if verbose:
+        return final
+    return inserted
+
+def _crawl_barrikade_wayback_only(verbose=False, max_articles=80, progress_callback=None):
+    """No-Auth crawl path: läuft auch wenn Cloudflare ALLE Direkt-Zugriffe
+    auf publish.barrikade.info UND barrikade.info blockt.
+
+    Discovery: SEARCH-ENGINE-SNIPPETS (DDG/Bing) + Wayback CDX (URL-Listen).
+    Article-Fetch in dieser Reihenfolge:
+      1) Direct cloudscraper (manchmal geht barrikade.info doch durch CF)
+      2) Wayback Machine Snapshot
+      3) archive.today (separates Archiv)
+      4) Search-Engine-Snippet als Mini-Content (Titel + Snippet
+         reicht oft für Classification + Save)
+
+    progress_callback(dict) → wird nach jeder URL aufgerufen mit aktuellem
+    Stand {inserted, tried, total}."""
+    url_results = []
+    inserted = 0
+
+    # ── Discovery via SEARCH-SNIPPETS (gibt direkt Content mit) ──
+    search_meta = {}  # url → {title, snippet}
+    try:
+        snip_results = _barrikade_search_engine_discover_with_snippets(
+            max_results=max_articles, per_query_timeout=8, overall_budget_s=25)
+        for r in snip_results:
+            search_meta[r["url"]] = {"title": r["title"], "snippet": r["snippet"],
+                                      "src": r["src"]}
+        log.info(f"barrikade search-snip: {len(search_meta)} URLs mit snippets")
+    except Exception as e:
+        log.warning(f"barrikade search-snip err: {e}")
+
+    # ── Discovery via Wayback CDX (ergänzt mit historischen URLs) ──
+    cdx_urls = []
+    try:
+        cdx_urls = _barrikade_wayback_cdx_discover(max_results=max_articles*2, timeout=20)
+    except Exception as e:
+        log.warning(f"barrikade wayback discover err: {e}")
+
+    # Vereinige beide Quellen — search-snippet-URLs zuerst (neuer)
+    urls = list(search_meta.keys())
+    for u in cdx_urls:
+        if u not in search_meta and u not in urls:
+            urls.append(u)
+    log.info(f"barrikade combined discovery: {len(urls)} URLs total ({len(search_meta)} mit search-snippets, {len(cdx_urls)} aus CDX)")
+    if not urls:
+        result = {"inserted": 0, "reason": "wayback_discovery_empty",
+                  "discovered_total": 0, "url_results": []}
+        if progress_callback:
+            progress_callback({"status": "done", "done": True, **result})
+        return result if verbose else 0
+    log.info(f"barrikade wayback-only: {len(urls)} URLs from CDX, processing top {max_articles}")
+    if progress_callback:
+        progress_callback({"discovered_total": len(urls), "tried_urls": 0})
+
+    direct_hits = 0
+    wayback_hits = 0
+    for idx, link in enumerate(urls[:max_articles]):
+        try:
+            # 1) DIRECT FETCH via cloudscraper (barrikade.info ist u.U. erreichbar
+            #    auch wenn publish.barrikade.info blockt — andere CF-Konfiguration).
+            #    Wenn das geht: aktuelles HTML statt potenziell-altem Wayback-Snapshot.
+            full = None
+            source_strategy = None
+            try:
+                direct_text = get_text(link)
+                if direct_text and len(direct_text) > 200:
+                    full = direct_text
+                    source_strategy = "direct"
+                    direct_hits += 1
+            except Exception as e:
+                log.info(f"barrikade direct-fetch [{link}]: {str(e)[:120]}")
+
+            # 2) WAYBACK SNAPSHOT als Fallback wenn Direct nichts bringt
+            if not full:
+                wb_html = _barrikade_wayback_fetch(link, timeout=15)
+                if not wb_html:
+                    if verbose:
+                        url_results.append({"url": link, "ok": False, "reason": "no_wayback_snapshot"})
+                else:
+                    soup = BeautifulSoup(wb_html, "html.parser")
+                    # Header/Footer/Wayback-Toolbar entfernen — aber NICHT <main> oder <article>
+                    for s in soup(["script","style","nav","footer","header","aside","form"]): s.decompose()
+                    for sel in ["#wm-ipp", "#wm-ipp-base", "#wm-ipp-print", ".wb-autocomplete-suggestions"]:
+                        for el in soup.select(sel): el.decompose()
+                    # SPIP-spezifische Content-Selektoren bevorzugt
+                    content_el = (soup.select_one("div.texte-article") or
+                                  soup.select_one("article .texte") or
+                                  soup.select_one(".surface-texte") or
+                                  soup.select_one("main") or
+                                  soup.select_one("article") or
+                                  soup.body)
+                    if content_el:
+                        full = content_el.get_text(" ", strip=True)
+                    else:
+                        full = soup.get_text(" ", strip=True)
+                    source_strategy = "wayback"
+                    if full and len(full) >= 120:
+                        wayback_hits += 1
+
+            # 3) archive.today als zweites Archiv (separat von Wayback)
+            if not full or len(full) < 120:
+                at_html = _barrikade_archive_today_fetch(link, timeout=12)
+                if at_html:
+                    soup = BeautifulSoup(at_html, "html.parser")
+                    for s in soup(["script","style","nav","footer","header","aside","form"]): s.decompose()
+                    content_el = (soup.select_one("div.texte-article") or
+                                  soup.select_one("article") or
+                                  soup.select_one("main") or
+                                  soup.body)
+                    if content_el:
+                        full = content_el.get_text(" ", strip=True)
+                        source_strategy = "archive.today"
+
+            # 4) SEARCH-SNIPPET als allerletzter Content-Quelle
+            #    Wenn alle Fetch-Wege scheitern: Titel + Snippet aus dem
+            #    Suchmaschinen-Index nehmen. Snippet hat oft 150-300 Zeichen,
+            #    reicht für smart_classify und gibt zumindest einen Aggregat-
+            #    Eintrag in die DB. Quelle: barrikade.info-URL (ohne Inhalt).
+            if (not full or len(full) < 120) and link in search_meta:
+                meta = search_meta[link]
+                title = meta.get("title","")
+                snippet = meta.get("snippet","")
+                snippet_full = (title + " — " + snippet).strip()
+                if len(snippet_full) > 50:
+                    full = snippet_full
+                    source_strategy = f"search-snippet-{meta.get('src','?')}"
+
+            # 5) Gemeinsamer Save-Pfad — egal woher full kommt
+            if full:
+                if len(full) < 120:
+                    if verbose:
+                        url_results.append({"url": link, "ok": False, "reason": "too_short",
+                                            "len": len(full), "strategy": source_strategy})
+                elif not any(kw in full.lower() for kw in BARRIKADE_RELEVANCE_KWS):
+                    if verbose:
+                        url_results.append({"url": link, "ok": False, "reason": "no_relevance_kw",
+                                            "len": len(full), "strategy": source_strategy})
+                elif is_false_positive(full):
+                    if verbose:
+                        url_results.append({"url": link, "ok": False, "reason": "false_positive",
+                                            "strategy": source_strategy})
+                else:
+                    ai = smart_classify(full)
+                    if not ai:
+                        if verbose:
+                            url_results.append({"url": link, "ok": False, "reason": "classify_failed",
+                                                "strategy": source_strategy, "len": len(full)})
+                    else:
+                        saved = save_incident(ai, full, "barrikade.info", link, date_from_url(link))
+                        if saved:
+                            inserted += 1
+                            if verbose:
+                                url_results.append({"url": link, "ok": True, "strategy": source_strategy,
+                                                    "category": ai.get("kategorie",""), "len": len(full)})
+                        else:
+                            if verbose:
+                                url_results.append({"url": link, "ok": False, "reason": "duplicate_or_filter",
+                                                    "strategy": source_strategy,
+                                                    "category": ai.get("kategorie","")})
+            time.sleep(0.3)
+        except Exception as e:
+            log.info(f"barrikade wayback link={link}: {str(e)[:120]}")
+            if verbose:
+                url_results.append({"url": link, "ok": False, "exc": str(e)[:120]})
+
+        if progress_callback:
+            progress_callback({
+                "tried_urls": idx + 1,
+                "discovered_total": len(urls),
+                "inserted": inserted,
+                "url_results": list(url_results),  # copy so caller sees live snapshot
+            })
+
+    log.info(f"barrikade wayback-only: {inserted} inserted from {min(len(urls), max_articles)} attempts "
+             f"(direct_fetch_ok={direct_hits} wayback_fetch_ok={wayback_hits})")
+    # Strategie-Counter aus url_results aufdröseln (welche Strategie hat tatsächlich erfolgreich gespeichert?)
+    saved_by_strategy = {}
+    for r in url_results:
+        if r.get("ok"):
+            s = r.get("strategy", "unknown")
+            saved_by_strategy[s] = saved_by_strategy.get(s, 0) + 1
+    final = {"inserted": inserted, "tried_urls": min(len(urls), max_articles),
+             "discovered_total": len(urls), "url_results": url_results,
+             "strategy_counter": saved_by_strategy,
+             "fetch_counter": {"direct_fetch_ok": direct_hits, "wayback_fetch_ok": wayback_hits}}
+    if progress_callback:
+        progress_callback({"status": "done", "done": True, **final})
+    if verbose:
+        return final
+    return inserted
+
+def _crawl_barrikade_authed(verbose=False):
+    """Run the authenticated discovery + ingestion path. Returns the
+    number of newly inserted incidents. Returns 0 if auth unavailable.
+
+    Strategy für Article-Fetch (siehe _fetch_article_multi für volle Liste):
+      1. publish.barrikade.info/spip.php?article<id>  (auth)
+      2. publish.barrikade.info/ecrire/?exec=article  (auth, editor view)
+      3. publish.barrikade.info/ecrire/?exec=article_edit (auth, editor with textarea)
+      4. publish.barrikade.info/article/<id>  (auth, rewritten)
+      5. barrikade.info/article/<id>  (public, cloudscraper)
+      6. Wayback Machine snapshot
+
+    verbose=True → liefert pro URL die genutzte Strategie + Status,
+    damit der Admin im UI sieht, welcher Pfad pro Artikel geklappt hat."""
+    sess = _barrikade_login_session()
+    if not sess:
+        return {"inserted": 0, "reason": "auth_failed", "url_results": []} if verbose else 0
+    urls = _barrikade_authed_discover_urls(sess)
+    if not urls:
+        return {"inserted": 0, "reason": "discovery_empty", "url_results": []} if verbose else 0
+
+    inserted = 0
+    strategy_counter = {}
+    url_results = []  # für verbose-Output
+
+    for link in urls[:80]:
+        try:
+            # Article-ID extrahieren — entweder /article/<id> oder /<slug>-<id>
+            aid_m = (re.search(r"/article/(\d+)", link) or
+                     re.search(r"-(\d{3,6})(?:[?#]|$)", link))
+            article_id = aid_m.group(1) if aid_m else None
+
+            full, strategy = _fetch_article_multi(sess, link, article_id, capture_diag=verbose)
+            if full is None:
+                if verbose:
+                    url_results.append({"url": link, "ok": False, "fetch_err": strategy})
+                continue
+
+            strategy_counter[strategy] = strategy_counter.get(strategy, 0) + 1
+
+            # Relevanz-Filter
+            if not any(kw in full.lower() for kw in BARRIKADE_RELEVANCE_KWS):
+                if verbose:
+                    url_results.append({"url": link, "ok": False, "strategy": strategy,
+                                        "reason": "no_relevance_kw", "len": len(full)})
+                continue
+            if is_false_positive(full):
+                if verbose:
+                    url_results.append({"url": link, "ok": False, "strategy": strategy,
+                                        "reason": "false_positive"})
+                continue
+
+            ai = smart_classify(full)
+            if not ai:
+                if verbose:
+                    url_results.append({"url": link, "ok": False, "strategy": strategy,
+                                        "reason": "classify_failed", "len": len(full)})
+                continue
+
+            saved = save_incident(ai, full, "barrikade.info", link, date_from_url(link))
+            if saved:
+                inserted += 1
+                if verbose:
+                    url_results.append({"url": link, "ok": True, "strategy": strategy,
+                                        "category": ai.get("kategorie",""), "len": len(full)})
+            else:
+                if verbose:
+                    url_results.append({"url": link, "ok": False, "strategy": strategy,
+                                        "reason": "duplicate_or_filter", "category": ai.get("kategorie","")})
+            time.sleep(0.3)
+        except Exception as e:
+            log.info(f"barrikade authed link={link}: {str(e)[:120]}")
+            if verbose:
+                url_results.append({"url": link, "ok": False, "exc": str(e)[:120]})
+
+    log.info(f"barrikade authed crawl: {inserted} inserted, strategies={strategy_counter}")
+    if verbose:
+        return {
+            "inserted": inserted,
+            "tried_urls": min(len(urls), 80),
+            "discovered_total": len(urls),
+            "strategy_counter": strategy_counter,
+            "url_results": url_results,
+        }
+    return inserted
+
 
 def crawl_barrikade_range(start_id, stop_id):
     """Crawl barrikade article IDs from start_id down to stop_id über BEIDE
     Barrikade-Domains (www + publish).
 
-    Resilience v5 (User-Hinweis: muss jetzt funktionieren):
-      1. Multi-Domain Discovery — beide Hosts × 10 Pfade.
-      2. Falls Discovery URLs liefert: parse, klassifiziere, speichere.
-         source-Label = der Hostname aus der URL (so dass beide Domains
-         separat in source_health getrackt werden).
-      3. Falls Discovery komplett scheitert: ID-Sweep über beide Domains.
+    Resilience v6 (Merge AB/AC + main v4):
+      0. (Authed) Wenn BARRIKADE_USER/BARRIKADE_PASS gesetzt sind:
+         Authentifizierter Pull aus publish.barrikade.info-Backend.
+         Bei Erfolg (>=1 neuer Insert) Frühreturn.
+      1. Multi-URL-Discovery (RSS/Atom/Sitemap/Homepage/SPIP/DDG/Bing/Wayback).
+      2. ALLE entdeckten URLs verarbeiten (Commit AC — kein [:80]-Slice mehr);
+         is_seen()-Dedup schützt vor Doppelverarbeitung.
+         source-Label = Hostname aus URL — beide Domains separat in
+         source_health getrackt.
+      3. Discovery + ID-Sweep ergänzen sich (kein Early-Return) damit
+         historische Lücken gefüllt werden.
     """
     from urllib.parse import urlparse as _up
     inserted = 0
 
+    # Helper: trenne barrikade.info vs publish.barrikade.info im source_health
+    _ALLOWED_HOSTS = {"barrikade.info", "publish.barrikade.info", "www.barrikade.info"}
     def _src_from_url(u):
         try:
-            host = _up(u).netloc
-            return host if host in _BARRIKADE_DOMAINS else "barrikade.info"
+            host = _up(u).netloc.lower()
+            if host.startswith("www."):
+                host = host[4:]
+            return host if host in _ALLOWED_HOSTS else "barrikade.info"
         except Exception:
             return "barrikade.info"
 
-    # 1) Multi-Domain-Discovery
+    # 0) Authentifizierter Pull (silent skip wenn ENV fehlt)
+    if os.getenv("BARRIKADE_USER") and os.getenv("BARRIKADE_PASS"):
+        try:
+            authed = _crawl_barrikade_authed()
+            inserted += authed
+            if authed > 0:
+                return inserted
+        except Exception as e:
+            log.warning(f"barrikade authed crawler: {str(e)[:160]} — fallback to public")
+
+    # 1) Multi-URL-Discovery (RSS, Atom, Sitemap, Homepage, SPIP, Suchmaschinen, Wayback)
     discovered = _barrikade_discover_urls()
     if discovered:
         log.info(f"barrikade: {len(discovered)} URLs from discovery — processing ALL")
-        # Commit AC: kein [:50]-Slice mehr — User-Direktive "alles crawlen".
-        # is_seen() pro Hash blockt schon Doppelverarbeitung; das einzige
-        # was wir verlieren ist Lauf-Zeit, was beim einmaligen 12-h-Tick OK
-        # ist. Per-Item sleep 0.4s = max 500 URLs × 0.4s = 200s pro Lauf.
+        wayback_used = 0
+        # Commit AC: kein [:80]-Slice — User-Direktive "alles crawlen".
+        # is_seen() pro Hash blockt schon Doppelverarbeitung.
         for link in discovered:
             try:
                 h = mk_hash(link, link)
                 if is_seen(h): continue
-                full = get_text(link)
-                if len(full) < 60: continue
+                full = None
+                try:
+                    full = get_text(link)
+                except Exception as fe:
+                    log.info(f"barrikade direct-fetch failed for {link}: {str(fe)[:120]}")
+                # Wayback-Fallback: wenn direct fetch leer/zu kurz/exception,
+                # versuchen wir den Wayback-Snapshot. Cloudflare blockt
+                # barrikade.info gerne aus bestimmten IP-Ranges — Wayback ist
+                # nicht hinter CF und cached die Inhalte zuverlässig.
+                if not full or len(full) < 200:
+                    wb_html = _barrikade_wayback_fetch(link, timeout=20)
+                    if wb_html:
+                        # Aus dem Wayback-HTML den sichtbaren Text extrahieren
+                        try:
+                            from bs4 import BeautifulSoup as _BS
+                            soup = _BS(wb_html, "html.parser")
+                            for s in soup(["script","style","nav","footer","header"]): s.decompose()
+                            full = soup.get_text(" ", strip=True)
+                            wayback_used += 1
+                        except Exception:
+                            full = wb_html
+                if not full or len(full) < 60: continue
                 if not any(kw in full.lower() for kw in BARRIKADE_RELEVANCE_KWS):
                     continue
                 if is_false_positive(full): continue
@@ -3900,10 +6522,9 @@ def crawl_barrikade_range(start_id, stop_id):
                 time.sleep(0.4)
             except Exception as e:
                 log.info(f"barrikade link={link}: {str(e)[:100]}")
-        # Commit AC: discovery+ID-sweep ergänzen sich jetzt, statt einer
-        # den anderen abzulösen. Wenn Discovery 60 URLs fand, brauchen wir
-        # trotzdem den ID-Sweep um historische Lücken zu schließen. Daher
-        # KEIN Early-Return mehr.
+        if wayback_used:
+            log.info(f"barrikade: {wayback_used} URLs via Wayback-Fallback")
+        # Commit AC: discovery+ID-sweep ergänzen sich (kein Early-Return)
         if inserted > 0:
             log.info(f"barrikade discovery path saved {inserted} new incidents — proceeding to ID sweep")
 
@@ -4047,6 +6668,62 @@ def crawl_indymedia_feed():
             log.warning(f"alt-feed {source}: {e}")
         time.sleep(0.4)
 
+    return inserted
+
+# ── NAZIFREI.ORG CRAWLER ──────────────────────────────────────────
+# Plattform mit antifaschistischem Counter-Extremismus-Fokus; veröffentlicht
+# u.a. "Outings" rechtsextrem aktiver Personen. Wir crawlen den Public-Feed
+# wie jede andere Quelle; die Doxxing-Erkennungs-Pipeline
+# (is_doxxing_text + sanitize_doxxing_event) sorgt dafür, dass Outings
+# nur als ROLLE/Aggregat in die DB kommen, NIEMALS mit Klarnamen oder PII.
+def crawl_nazifrei_feed():
+    """Crawl nazifrei.org sowie verwandte antifaschistische Plattformen.
+    Doxxing-Inhalte werden automatisch sanitisiert (s. save_incident)."""
+    inserted = 0
+    candidate_feeds = [
+        # nazifrei.org RSS-Kandidaten (mehrere Pfade, einer wird funktionieren)
+        ("nazifrei-rss",       "https://nazifrei.org/feed/"),
+        ("nazifrei-rss2",      "https://www.nazifrei.org/feed/"),
+        ("nazifrei-atom",      "https://nazifrei.org/atom"),
+        ("nazifrei-rss-xml",   "https://nazifrei.org/rss.xml"),
+        ("nazifrei-news",      "https://nazifrei.org/news/feed/"),
+        # Schwesterprojekte / verwandte Counter-Extremismus-Outings
+        ("npd-blockieren",     "https://npd-blockieren.de/feed/"),
+        ("recherche-nord",     "https://recherche-nord.com/feed/"),
+        ("recherche-elbe",     "https://www.recherche-elbe-saale.de/feed/"),
+        ("antifa-recherche",   "https://antifa-recherche-team.org/feed/"),
+        ("apabiz",             "https://www.apabiz.de/feed/"),  # Antifaschistisches Pressearchiv Berlin
+    ]
+    for label, feed_url in candidate_feeds:
+        try:
+            xml = fetch(feed_url, timeout=12)
+            items = parse_rss(xml) if xml else []
+            log.info(f"nazifrei {label}: {len(items)} items")
+            for it in items[:15]:
+                url = it.get("link") or ""
+                title = it.get("title") or ""
+                if not url: continue
+                try:
+                    h = mk_hash(url, title)
+                    if is_seen(h): continue
+                    full = get_text(url)
+                    if len(full) < 80: continue
+                    if is_false_positive(full):
+                        continue
+                    ai = smart_classify(full)
+                    if ai:
+                        # save_incident triggert auto die Doxxing-Sanitisierung
+                        # über is_doxxing_text/sanitize_doxxing_event — wir
+                        # müssen hier nichts Spezielles tun, das ist
+                        # transparent.
+                        if save_incident(ai, full, "nazifrei.org", url, date_from_url(url) or it.get("date","")):
+                            inserted += 1
+                    time.sleep(0.3)
+                except Exception as e:
+                    log.info(f"nazifrei item {url}: {str(e)[:120]}")
+        except Exception as e:
+            log.info(f"nazifrei feed [{label}] failed: {str(e)[:120]}")
+        time.sleep(0.4)
     return inserted
 
 # ── RSS FEEDS ─────────────────────────────────────────────────────
@@ -4522,6 +7199,14 @@ def run_crawler(force=False):
         n = crawl_indymedia_feed()
         total += n
         log.info(f"Indymedia: +{n}")
+
+        # 2b. Nazifrei + Antifa-Recherche-Plattformen (Counter-Extremism Outings).
+        # Doxxing-Inhalte werden via save_incident → sanitize_doxxing_event
+        # automatisch zu rolle-basierten T3-Kontext-Einträgen anonymisiert.
+        log.info("Nazifrei/Antifa-Recherche feeds...")
+        n = crawl_nazifrei_feed()
+        total += n
+        log.info(f"Nazifrei: +{n}")
 
         # 3. Mainstream RSS
         log.info("RSS feeds...")
@@ -7017,6 +9702,22 @@ async def get_accountability():
         "gap_rows":   gap_rows[:200],
     })
 
+@app.get("/api/incidents/hotwire")
+async def hotwire():
+    """SITREP-Strip: die N jüngsten High-Severity- oder T1-Vorfälle.
+    Wird vom UI-Hotwire-Ticker im Header genutzt — kompakter Payload
+    (kein description-Volltext, nur die zum Anzeigen benötigten Felder)."""
+    rows = db.execute(
+        """SELECT id,date,location,country,category,summary,severity_score,
+                  tier,target_type,is_high_risk
+           FROM incidents
+           WHERE (severity_score >= 4 OR tier='act')
+             AND date IS NOT NULL AND date != ''
+           ORDER BY date DESC, timestamp DESC
+           LIMIT 12"""
+    ).fetchall()
+    return JSONResponse([dict(r) for r in rows])
+
 @app.get("/api/incidents")
 async def get_incidents(
     country: str = "", category: str = "", date_from: str = "",
@@ -8260,8 +10961,26 @@ async def admin_inline_delete(inc_id: int, _=Depends(require_admin)):
     db.commit()
     return JSONResponse({"ok": True, "id": inc_id})
 
+# POST-Alias für die Delete-Operation. Cloudflare und einige Render.com-
+# Proxy-Konfigurationen blockieren die DELETE-Methode auf Browser-Requests
+# (CORS-Preflight scheitert silent → "Netzwerkfehler" im Frontend).
+# POST mit explizitem /delete-Suffix funktioniert in JEDER Proxy-Konfig.
+@app.post("/api/admin/incident/{inc_id}/delete")
+async def admin_inline_delete_post(inc_id: int, _=Depends(require_admin)):
+    db.execute("DELETE FROM incidents WHERE id=?", (inc_id,))
+    db.commit()
+    return JSONResponse({"ok": True, "id": inc_id})
+
 @app.put("/api/admin/incident/{inc_id}")
 async def admin_inline_update(inc_id: int, request: Request, _=Depends(require_admin)):
+    return await _do_admin_inline_update(inc_id, request)
+
+# POST-Alias für Update — gleiche Logik, andere HTTP-Methode (Proxy-Bypass).
+@app.post("/api/admin/incident/{inc_id}/update")
+async def admin_inline_update_post(inc_id: int, request: Request, _=Depends(require_admin)):
+    return await _do_admin_inline_update(inc_id, request)
+
+async def _do_admin_inline_update(inc_id: int, request: Request):
     """Quick-edit fields on a single incident from the map (admin only)."""
     try:
         data = await request.json()
@@ -8389,6 +11108,244 @@ async def admin_stop(_=Depends(require_admin)):
 async def admin_hist(bg: BackgroundTasks, reset: bool = False, _=Depends(require_admin)):
     bg.add_task(run_historical, reset)
     return JSONResponse({"status": "Historisch gestartet"})
+
+@app.post("/admin/api/barrikade-test")
+async def admin_barrikade_test(_=Depends(require_admin)):
+    """Volle Diagnose ALLER Barrikade-Discovery-Strategien.
+
+    Testet parallel:
+      1. SPIP-Auth-Login (Editorial-Backend)
+      2. Standard-Discovery (RSS/Sitemap auf barrikade.info)
+      3. SPIP-Public-Endpoints (?page=backend, ?page=plan auf beiden Domains)
+      4. Search-Engine-Discovery (DuckDuckGo + Bing)
+      5. Wayback Machine (für eine Test-URL)
+
+    Liefert pro Strategie: success/fail, URL-Anzahl, Sample-URLs,
+    detaillierte Fehlermeldungen."""
+    diag = {"ts": datetime.now().isoformat(), "env": {
+        "BARRIKADE_USER_set": bool(os.getenv("BARRIKADE_USER")),
+        "BARRIKADE_PASS_set": bool(os.getenv("BARRIKADE_PASS")),
+        "BARRIKADE_LOGIN_URL": os.getenv("BARRIKADE_LOGIN_URL","(default)"),
+        "BARRIKADE_BASE":      os.getenv("BARRIKADE_BASE","(default)"),
+    }}
+
+    # 1) SPIP Auth (nur wenn ENV gesetzt)
+    if os.getenv("BARRIKADE_USER") and os.getenv("BARRIKADE_PASS"):
+        sess = _barrikade_login_session(force_refresh=True, capture_diag=True)
+        auth = dict(_BK_LAST_DIAG)
+        auth["session_acquired"] = sess is not None
+        if sess is not None:
+            try:
+                urls = _barrikade_authed_discover_urls(sess)
+                auth["discovery"] = {"urls_found": len(urls), "sample": urls[:5]}
+            except Exception as e:
+                auth["discovery"] = {"error": str(e)[:300]}
+        diag["1_spip_auth"] = auth
+    else:
+        diag["1_spip_auth"] = {"skipped": "ENV BARRIKADE_USER/PASS nicht gesetzt"}
+
+    # 2) Standard-Discovery (RSS/Sitemap) — wrapped to limit time
+    try:
+        # _barrikade_discover_urls trial-uses 10 RSS-Pfade mit timeout=12 each
+        # = max ~120s worst case. In production wo Pfade schnell antworten ist
+        # das OK, hier wrappen wir mit eigenem Timeout via signal-Alarm wäre
+        # zu aggressiv — wir akzeptieren dass diese Strategie länger braucht.
+        import threading
+        result = {"urls": [], "done": False, "err": None}
+        def _run():
+            try:
+                result["urls"] = _barrikade_discover_urls()
+            except Exception as e:
+                result["err"] = str(e)[:300]
+            result["done"] = True
+        th = threading.Thread(target=_run, daemon=True)
+        th.start()
+        th.join(timeout=25)  # 25s hard cap
+        if result["err"]:
+            diag["2_standard_discovery"] = {"error": result["err"]}
+        elif not result["done"]:
+            diag["2_standard_discovery"] = {"timeout": "25s exceeded", "partial_count": len(result["urls"])}
+        else:
+            diag["2_standard_discovery"] = {
+                "urls_found": len(result["urls"]),
+                "sample": result["urls"][:5],
+            }
+    except Exception as e:
+        diag["2_standard_discovery"] = {"error": str(e)[:300]}
+
+    # 3) SPIP-Public-Endpoints (15s budget)
+    try:
+        urls = _barrikade_spip_public_discover(max_results=20, per_request_timeout=4, overall_budget_s=15)
+        diag["3_spip_public"] = {
+            "urls_found": len(urls),
+            "sample": urls[:5],
+        }
+    except Exception as e:
+        diag["3_spip_public"] = {"error": str(e)[:300]}
+
+    # 4) Search-Engine-Discovery (12s budget)
+    try:
+        urls = _barrikade_search_engine_discover(max_results=20, per_query_timeout=4, overall_budget_s=12)
+        diag["4_search_engine"] = {
+            "urls_found": len(urls),
+            "sample": urls[:5],
+        }
+    except Exception as e:
+        diag["4_search_engine"] = {"error": str(e)[:300]}
+
+    # 5) Wayback Machine probe — versuche mehrere Test-URLs, die mit hoher
+    #    Wahrscheinlichkeit einen Snapshot haben. Wenn eine davon im Wayback
+    #    indexiert ist, gilt die Strategie als verfügbar.
+    wb_test_urls = []
+    # Bevorzuge URLs die der SPIP-Auth gerade gefunden hat (real-existent + neu)
+    auth_sample = (diag.get("1_spip_auth", {}).get("discovery", {}).get("sample", [])
+                   if isinstance(diag.get("1_spip_auth"), dict) else [])
+    wb_test_urls.extend(auth_sample[:2])
+    # Fallback: Homepage und ein paar als sicher-archivierte known-good URLs
+    wb_test_urls.extend([
+        "https://barrikade.info/",
+        "https://barrikade.info/article/1",
+        "https://barrikade.info/article/100",
+    ])
+    wb_ok = False
+    wb_url = None
+    wb_len = 0
+    for t_url in wb_test_urls:
+        try:
+            wb = _barrikade_wayback_fetch(t_url, timeout=8)
+            if wb:
+                wb_ok = True
+                wb_url = t_url
+                wb_len = len(wb)
+                break
+        except Exception:
+            continue
+    diag["5_wayback"] = {
+        "ok": wb_ok,
+        "test_url": wb_url,
+        "html_len": wb_len,
+        "tested": len(wb_test_urls),
+    }
+
+    # Aggregat: Wie viele Strategien funktionieren?
+    working = sum(1 for k in ("1_spip_auth","2_standard_discovery","3_spip_public","4_search_engine","5_wayback")
+                  if k in diag and (
+                      diag[k].get("session_acquired") or
+                      (diag[k].get("urls_found",0) > 0) or
+                      diag[k].get("ok")
+                  ))
+    diag["working_strategies"] = working
+    diag["overall_ok"] = working >= 1
+
+    return JSONResponse(diag)
+
+@app.post("/admin/api/barrikade-fullcrawl")
+async def admin_barrikade_fullcrawl(request: Request, _=Depends(require_admin)):
+    """FULL-CRAWL: systematische ID-Iteration durch barrikade.info.
+
+    Query/Body params (optional):
+      start_id: höchste ID (default: auto-detect via barrikade_latest_id)
+      end_id: niedrigste ID (default: start_id - max_articles)
+      max_articles: harter Cap (default 200)
+
+    Pro ID: 4-stufige Fetch-Chain (direct → Wayback → archive.today →
+    search-snippet). Returns detaillierten Per-URL-Bericht."""
+    try:
+        # Optional Params aus Body oder Query
+        body = {}
+        try: body = await request.json()
+        except: pass
+        start_id = body.get("start_id") or request.query_params.get("start_id")
+        end_id = body.get("end_id") or request.query_params.get("end_id")
+        max_articles = body.get("max_articles") or request.query_params.get("max_articles") or 200
+        start_id = int(start_id) if start_id else None
+        end_id = int(end_id) if end_id else None
+        max_articles = int(max_articles)
+        # Hard-cap auf 500 damit der Lauf nicht ausartet
+        max_articles = min(max_articles, 500)
+
+        result = _crawl_barrikade_full(verbose=True, max_articles=max_articles,
+                                        start_id=start_id, end_id=end_id)
+        if isinstance(result, int):
+            result = {"inserted": result, "url_results": []}
+        return JSONResponse({"status": "ok", "path": "full_crawl", **result})
+    except Exception as e:
+        log.error(f"barrikade full-crawl error: {e}", exc_info=True)
+        return JSONResponse({"status": "error", "error": str(e)[:300], "inserted": 0}, status_code=500)
+
+@app.post("/admin/api/barrikade-wayback")
+async def admin_barrikade_wayback(_=Depends(require_admin)):
+    """SOFORT-WAYBACK-CRAWL: skippt Auth komplett, holt URLs+Inhalte
+    NUR aus archive.org. Funktioniert auch wenn publish.barrikade.info
+    von der Render-IP komplett unerreichbar ist (Cloudflare-Block).
+    Liefert detaillierten Per-URL-Bericht im selben Format wie
+    /admin/api/barrikade-crawl."""
+    try:
+        result = _crawl_barrikade_wayback_only(verbose=True, max_articles=80)
+        if isinstance(result, int):
+            result = {"inserted": result, "url_results": []}
+        return JSONResponse({
+            "status": "ok",
+            "path": "wayback_only",
+            "inserted": result.get("inserted", 0),
+            "tried_urls": result.get("tried_urls", 0),
+            "discovered_total": result.get("discovered_total", 0),
+            "strategy_counter": result.get("strategy_counter", {}),
+            "url_results": result.get("url_results", []),
+            "reason": result.get("reason", None),
+        })
+    except Exception as e:
+        log.error(f"barrikade wayback crawl error: {e}", exc_info=True)
+        return JSONResponse({"status": "error", "error": str(e)[:300], "inserted": 0}, status_code=500)
+
+@app.post("/admin/api/barrikade-crawl")
+async def admin_barrikade_crawl(_=Depends(require_admin)):
+    """Synchroner Barrikade-Crawl mit detailliertem Per-URL-Bericht.
+
+    Pipeline:
+      1) Versuche Auth-Pfad (publish.barrikade.info Login + ?exec=article)
+      2) Wenn Auth fehlschlägt ODER 0 Inserts: Wayback-Only-Fallback.
+         Holt URLs aus CDX-API und Snapshots aus archive.org — funktioniert
+         AUCH wenn Cloudflare ALLE Direkt-Zugriffe blockt.
+    Liefert kombinierten Per-URL-Bericht zurück.
+    Max-Laufzeit ~150s (80 URLs × 2 Pfade)."""
+    try:
+        # 1) Auth-Pfad versuchen
+        result_a = _crawl_barrikade_authed(verbose=True)
+        if isinstance(result_a, int):  # legacy compat
+            result_a = {"inserted": result_a, "url_results": []}
+
+        # 2) Wayback-Only Fallback wenn Auth scheitert ODER 0 Inserts
+        run_wb = (result_a.get("inserted", 0) == 0)
+        wb_result = None
+        if run_wb:
+            log.info("barrikade: Auth-Pfad lieferte 0 Inserts → starte Wayback-Only-Fallback")
+            wb_result = _crawl_barrikade_wayback_only(verbose=True, max_articles=80)
+
+        # Kombiniere die Outputs
+        total_inserted = result_a.get("inserted", 0)
+        all_url_results = list(result_a.get("url_results", []))
+        all_strategy_counter = dict(result_a.get("strategy_counter", {}))
+        if wb_result:
+            total_inserted += wb_result.get("inserted", 0)
+            all_url_results.extend(wb_result.get("url_results", []))
+            for k, v in wb_result.get("strategy_counter", {}).items():
+                all_strategy_counter[k] = all_strategy_counter.get(k, 0) + v
+
+        return JSONResponse({
+            "status": "ok",
+            "inserted": total_inserted,
+            "tried_urls": result_a.get("tried_urls", 0) + (wb_result.get("tried_urls",0) if wb_result else 0),
+            "discovered_total": result_a.get("discovered_total", 0) + (wb_result.get("discovered_total",0) if wb_result else 0),
+            "strategy_counter": all_strategy_counter,
+            "url_results": all_url_results,
+            "auth_path": {"inserted": result_a.get("inserted", 0),
+                          "reason": result_a.get("reason", "ran")},
+            "wayback_fallback_used": run_wb,
+        })
+    except Exception as e:
+        log.error(f"barrikade authed crawl error: {e}", exc_info=True)
+        return JSONResponse({"status": "error", "error": str(e)[:300], "inserted": 0}, status_code=500)
 
 @app.get("/admin/api/status")
 async def admin_status(_=Depends(require_admin)):

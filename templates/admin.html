@@ -235,6 +235,10 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
       <button class="btn" onclick="stopCrawl()">■ STOPPEN</button>
       <button class="btn btn-accent" onclick="seedData()" id="btn-seed">↓ HISTORISCHE DATEN</button>
       <button class="btn" onclick="testGrok()">⚡ GROK TESTEN</button>
+      <button class="btn" onclick="testBarrikadeAuth()" title="Alle 5 Discovery-Strategien parallel testen">⚡ BARRIKADE-AUTH</button>
+      <button class="btn" onclick="crawlBarrikadeAuth()" title="Auth-Crawl + auto Wayback-Fallback bei 0 Inserts">▶ BARRIKADE-CRAWL</button>
+      <button class="btn btn-green" onclick="crawlBarrikadeWayback()" title="Direkt Wayback-Only Crawl — funktioniert immer (archive.org ist nicht hinter Cloudflare)">▶ WAYBACK-CRAWL</button>
+      <button class="btn btn-green" onclick="crawlBarrikadeFull()" title="FULL-CRAWL: systematische ID-Iteration durch barrikade.info, 4-stufige Fetch-Chain (direct → wayback → archive.today → search-snippet)">▶ FULL-CRAWL barrikade</button>
       <button class="btn" onclick="reGeo()">⊕ GEOCODING WIEDERHOLEN</button>
       <button class="btn" onclick="refreshStatus()">↺ STATUS</button>
       <button class="btn btn-red" onclick="clearDB()">✕ DB LÖSCHEN</button>
@@ -606,6 +610,170 @@ async function testGrok(){
   log('Teste Grok API…');
   try{const d=await apiFetch('/admin/api/grok-test',{method:'POST'});log('Grok → '+JSON.stringify(d));toast('Grok OK');}
   catch(e){log('Fehler: '+e.message);}
+}
+
+async function testBarrikadeAuth(){
+  log('Teste ALLE 5 Barrikade-Discovery-Strategien (kann 30s dauern)…');
+  try{
+    const d = await apiFetch('/admin/api/barrikade-test', {method:'POST'});
+    log('— ENV: '+JSON.stringify(d.env||{}));
+    log('');
+
+    // Strategy 1: SPIP Auth
+    const a1 = d['1_spip_auth'] || {};
+    if(a1.skipped){
+      log('1) SPIP-AUTH ◇ skipped: '+a1.skipped);
+    } else if(a1.session_acquired){
+      log('1) SPIP-AUTH ✓ OK (variant='+a1.variant+', '+(a1.discovery?.urls_found||0)+' URLs)');
+      if(a1.discovery?.sample) log('   sample='+JSON.stringify(a1.discovery.sample));
+    } else {
+      log('1) SPIP-AUTH ✗ FAIL — '+(a1.fail_reason||'siehe steps'));
+      (a1.steps||[]).forEach(s => log('     · '+s.step+' '+JSON.stringify(Object.assign({},s,{step:undefined}))));
+    }
+
+    // Strategies 2-4: URL-based
+    [['2','2_standard_discovery','Standard (RSS/Sitemap)'],
+     ['3','3_spip_public','SPIP-Public (?page=backend)'],
+     ['4','4_search_engine','Search-Engine (DDG/Bing)']].forEach(([n, k, name]) => {
+      const a = d[k] || {};
+      if(a.error){
+        log(n+') '+name+' ✗ ERROR — '+a.error.substring(0,200));
+      } else {
+        const n_urls = a.urls_found || 0;
+        log(n+') '+name+' '+(n_urls>0?'✓':'◇')+' '+n_urls+' URLs');
+        if(a.sample?.length) log('   sample='+JSON.stringify(a.sample));
+      }
+    });
+
+    // Strategy 5: Wayback
+    const a5 = d['5_wayback'] || {};
+    if(a5.error){
+      log('5) WAYBACK ✗ ERROR — '+a5.error.substring(0,200));
+    } else {
+      log('5) WAYBACK '+(a5.ok?'✓':'◇')+' '+(a5.ok?(a5.html_len+'b html')+' fetched':'no snapshot'));
+    }
+
+    log('');
+    log('═══ AGGREGATE: '+(d.working_strategies||0)+'/5 Strategien aktiv ═══');
+    if(d.overall_ok){
+      toast('Barrikade: '+(d.working_strategies)+'/5 OK');
+    } else {
+      toast('Barrikade: ALLE Strategien fehlgeschlagen');
+    }
+  }catch(e){ log('Fehler: '+e.message); toast('Test-Fehler'); }
+}
+
+async function crawlBarrikadeFull(){
+  const maxStr = prompt('Wieviele Article-IDs maximal versuchen? (Empfehlung: 100-200, Max: 500)', '150');
+  if(!maxStr) return;
+  const maxArt = Math.max(10, Math.min(500, parseInt(maxStr)||150));
+  log(`▶ FULL-CRAWL barrikade — scanne ${maxArt} Article-IDs (kann ~${Math.round(maxArt*1.5/60)}min dauern)…`);
+  try{
+    const d = await apiFetch('/admin/api/barrikade-fullcrawl', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({max_articles: maxArt})
+    });
+    if(d.status === 'error'){
+      log('✗ FEHLER: '+d.error);
+      toast('Full-Crawl: '+d.error.substring(0,40));
+      return;
+    }
+    log('═══════════════════════════════════════════════');
+    log(`Pfad: FULL-CRAWL (direct → wayback → archive.today → snippet)`);
+    log(`ID-Range: ${d.start_id} → ${d.end_id}`);
+    log(`Versucht: ${d.tried_urls} URLs`);
+    log(`✓ INSERTED: ${d.inserted}`);
+    log(`Fetch-Counter: ${JSON.stringify(d.fetch_counter||{})}`);
+    log(`Strategie-Counter: ${JSON.stringify(d.strategy_counter||{})}`);
+    log('───── Per-URL Detail (erste 50) ─────');
+    const items = (d.url_results||[]);
+    const showMax = items.length > 50 ? 50 : items.length;
+    items.slice(0, showMax).forEach(r => {
+      const u = (r.url||'').replace('https://barrikade.info/','b:');
+      if(r.ok){
+        log(`  ✓ ${u} → [${r.strategy}] ${r.category||''} (${r.len||0}b)`);
+      } else {
+        log(`  ◇ ${u} → ${r.reason||r.exc||'übersprungen'}${r.strategy?' ['+r.strategy+']':''}`);
+      }
+    });
+    if(items.length > showMax) log(`  … +${items.length - showMax} weitere`);
+    log('═══════════════════════════════════════════════');
+    toast(`Full-Crawl: +${d.inserted} neue Vorfälle`);
+    setTimeout(refreshStatus, 1500);
+  }catch(e){ log('Exception: '+e.message); toast('Full-Crawl-Fehler'); }
+}
+
+async function crawlBarrikadeWayback(){
+  log('▶ WAYBACK-CRAWL — fetcht direkt aus archive.org (kann ~2-4min dauern bei 80 URLs)…');
+  try{
+    const d = await apiFetch('/admin/api/barrikade-wayback', {method:'POST'});
+    if(d.status === 'error'){
+      log('✗ FEHLER: '+d.error);
+      toast('Wayback-Crawl: '+d.error.substring(0,40));
+      return;
+    }
+    log('═══════════════════════════════════════════════');
+    log('Pfad: WAYBACK-ONLY (archive.org CDX + Snapshots)');
+    log(`Discovery: ${d.discovered_total} URLs aus CDX, ${d.tried_urls} versucht`);
+    log(`✓ INSERTED: ${d.inserted}`);
+    log(`Strategien-Counter: ${JSON.stringify(d.strategy_counter||{})}`);
+    if(d.reason) log(`reason: ${d.reason}`);
+    log('───── Per-URL Detail ─────');
+    const items = (d.url_results||[]);
+    const showMax = items.length > 40 ? 40 : items.length;
+    items.slice(0, showMax).forEach(r => {
+      const u = (r.url||'').replace('https://barrikade.info/','b:').replace('https://web.archive.org/','wb:');
+      if(r.ok){
+        log(`  ✓ ${u} → ${r.category||''} (${r.len||0}b)`);
+      } else {
+        log(`  ◇ ${u} → ${r.reason||r.exc||'übersprungen'}`);
+      }
+    });
+    if(items.length > showMax) log(`  … +${items.length - showMax} weitere`);
+    log('═══════════════════════════════════════════════');
+    toast(`Wayback: +${d.inserted} neue Vorfälle`);
+    setTimeout(refreshStatus, 1500);
+  }catch(e){ log('Exception: '+e.message); toast('Wayback-Crawl-Fehler'); }
+}
+
+async function crawlBarrikadeAuth(){
+  log('Starte Barrikade-Crawl: Auth + Wayback-Fallback (kann bis ~2-3min dauern)…');
+  try{
+    const d = await apiFetch('/admin/api/barrikade-crawl', {method:'POST'});
+    if(d.status === 'error'){
+      log('✗ FEHLER: '+d.error);
+      toast('Barrikade-Crawl: '+d.error.substring(0,40));
+      return;
+    }
+
+    log('═══════════════════════════════════════════════');
+    log(`Auth-Pfad: ${d.auth_path?.inserted ?? 0} Inserts (${d.auth_path?.reason||''})`);
+    if(d.wayback_fallback_used){
+      log('→ Wayback-Only-Fallback aktiviert (Auth lieferte 0)');
+    }
+    log(`Discovery total: ${d.discovered_total} URLs, ${d.tried_urls} versucht`);
+    log(`✓ INSERTED GESAMT: ${d.inserted}`);
+    log(`Strategien-Counter: ${JSON.stringify(d.strategy_counter||{})}`);
+    log('───── Per-URL Detail ─────');
+    const items = (d.url_results||[]);
+    const showMax = items.length > 40 ? 40 : items.length;
+    items.slice(0, showMax).forEach(r => {
+      const u = (r.url||'').replace('https://barrikade.info/','…/').replace('https://publish.barrikade.info/','…/').replace('https://web.archive.org/','wb:');
+      if(r.ok){
+        log(`  ✓ ${u} → [${r.strategy}] ${r.category||''} (${r.len||0}b)`);
+      } else if(r.fetch_err){
+        const stepsBrief = r.fetch_err.steps ? r.fetch_err.steps.filter(s=>s.ok===false).slice(0,3).map(s=>s.step).join(',') : '';
+        log(`  ✗ ${u} → fetch-fail: ${stepsBrief||r.fetch_err.error||r.fetch_err}`);
+      } else {
+        log(`  ◇ ${u} → ${r.reason||r.exc||'übersprungen'}${r.strategy?' ['+r.strategy+']':''}`);
+      }
+    });
+    if(items.length > showMax) log(`  … +${items.length - showMax} weitere`);
+    log('═══════════════════════════════════════════════');
+    toast(`Barrikade: +${d.inserted} neue Vorfälle`);
+    setTimeout(refreshStatus, 1500);
+  }catch(e){ log('Exception: '+e.message); toast('Crawl-Fehler'); }
 }
 
 async function reGeo(){
