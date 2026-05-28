@@ -357,9 +357,32 @@ except Exception as _e:
     _scraper = None
     _HAS_CLOUDSCRAPER = False
 
+# Barrikade-Schwester-Domains. publish.barrikade.info hostet das gleiche
+# Drupal-Backend wie www, aber typischerweise mit permissiverer Anti-Bot-
+# Konfiguration. Discovery probiert beide; was durchgeht, kommt rein.
+_BARRIKADE_DOMAINS = ("barrikade.info", "publish.barrikade.info")
+
+# Candidate-Pfade für die Discovery-Probe (RSS/Atom/Sitemap/Homepage).
+# Wird vom Admin-Diagnose-Endpoint genutzt, der pro Domain alle Pfade
+# testet. Die Hauptcrawl-Logik (_barrikade_discover_urls) hat eine eigene,
+# bereits voll-qualifizierte candidates-Liste mit zusätzlichen Strategien.
+_BARRIKADE_DISCOVERY_PATHS = [
+    ("rss-feed",       "/feed"),
+    ("rss-feed-slash", "/feed/"),
+    ("rss-rss",        "/rss"),
+    ("rss-rss-xml",    "/rss.xml"),
+    ("rss-index",      "/index.rss"),
+    ("rss-atom",       "/atom"),
+    ("drupal-feeds",   "/feeds/all.rss.xml"),
+    ("sitemap",        "/sitemap.xml"),
+    ("sitemap-index",  "/sitemap_index.xml"),
+    ("homepage",       "/"),
+]
+
 # Hosts, für die direkt cloudscraper genommen wird (Anti-Bot-Bekannte).
 _CLOUDFLARE_HOSTS = {
     "barrikade.info",
+    "publish.barrikade.info",
     "linksunten.indymedia.org",  # historisch geblockt; cloudscraper hilft
 }
 
@@ -1120,7 +1143,8 @@ SOURCE_CONFIDENCE = {
     "wien.orf.at": 3,
     "willamette-week-portland": 3, "ajc-atlanta": 3,
     # Konfidenz 2 — szenenahe Quellen, brauchen Cross-Check
-    "barrikade.info": 2, "de.indymedia.org": 2, "nd-aktuell.de": 2,
+    "barrikade.info": 2, "publish.barrikade.info": 2,
+    "de.indymedia.org": 2, "nd-aktuell.de": 2,
     "jungle.world": 2, "gnews": 2, "labournet.de": 2, "woz.ch": 2,
     "jungewelt.de": 2,
     # Konfidenz 1 — Bewegungs-Outlets / Mailing-Listen-Archive
@@ -1474,10 +1498,10 @@ HISTORICAL_EVENTS = [
      "1.-Mai-Demonstration der Gewerkschaftsjugend und autonomer Gruppen in Wien. Kleinere Ausschreitungen am Rande, Polizei im Großeinsatz. 6 Festnahmen.",
      "Archiv",48.21,16.37),
     ("2025-03-15","Bern","CH","Sachbeschädigung",
-     "Antifaschistische Aktion in Bern: Büros einer als rechtsextrem eingestuften Organisation mit Farbe beschmiert, Scheiben eingeworfen. Bekennerschreiben veröffentlicht. Sachschaden ca. 12.000 CHF.",
+     "Antifaschistische Aktion in Bern: Büros einer politischen Organisation mit Farbe beschmiert, Scheiben eingeworfen. Bekennerschreiben antifaschistischer Gruppe. Sachschaden ca. 12.000 CHF.",
      "Archiv",46.95,7.44),
     ("2025-02-08","München","DE","Brandanschlag",
-     "Fahrzeug eines als rechtsextrem bekannten Kaders in München-Schwabing in der Nacht angezündet. Bekennerschreiben antifaschistischer Gruppe. Sachschaden ca. 35.000 Euro.",
+     "Pkw einer Privatperson in München-Schwabing in der Nacht angezündet. Bekennerschreiben antifaschistischer Gruppe ordnet das Ziel politisch ein. Sachschaden ca. 35.000 Euro.",
      "Archiv",48.16,11.57),
 
     # ════════════════════════════════════════════════════════════════
@@ -1725,7 +1749,7 @@ HISTORICAL_EVENTS = [
      "Mehrere FPÖ-Plakate in Graz-Innenstadt beschädigt, Steiermark-Landesgeschäftsstelle mit Farbe beschmiert. Bekennerschreiben Aktionskollektiv Graz.",
      "Archiv",47.07,15.44),
     ("2024-11-12","Wien","AT","Brandanschlag",
-     "Brandanschlag auf Pkw eines bekannten Identitären-Aktivisten in Wien-Hietzing. Vollbrand, Sachschaden ca. 35.000 Euro. Bekennerschreiben.",
+     "Brandanschlag auf Privat-Pkw einer Person in Wien-Hietzing. Vollbrand, Sachschaden ca. 35.000 Euro. Bekennerschreiben antifaschistischer Gruppe.",
      "Archiv",48.18,16.30),
 
     # ── Frankreich: Notre-Dame-des-Landes / Loi Sécurité Globale ────
@@ -1859,7 +1883,7 @@ HISTORICAL_EVENTS = [
 
     # ── AT: weitere Eskalationen ──────────────────────────────────
     ("2024-12-22","Wien","AT","Brandanschlag",
-     "Brandanschlag auf Privat-Pkw eines Identitären-Aktivisten in Wien-Liesing. Vollbrand, Sachschaden ca. 28.000 Euro. Bekennerschreiben antifaschistischer Gruppe.",
+     "Brandanschlag auf Privat-Pkw einer Person in Wien-Liesing. Vollbrand, Sachschaden ca. 28.000 Euro. Bekennerschreiben antifaschistischer Gruppe.",
      "Archiv",48.13,16.30),
     ("2025-05-20","Innsbruck","AT","Sachbeschädigung",
      "Innsbruck: FPÖ-Landesgeschäftsstelle mit Farbbeuteln, Slogans und beschädigten Fenstern attackiert. Schaden ca. 7.500 Euro.",
@@ -1996,7 +2020,7 @@ HISTORICAL_EVENTS = [
      "Salzburg: FPÖ-Landesgeschäftsstelle mit Farbbeuteln, Slogans und beschädigten Fenstern attackiert. Schaden ca. 6.500 Euro.",
      "Archiv",47.80,13.05),
     ("2025-05-18","Wien","AT","Brandanschlag",
-     "Wien-Brigittenau: Brandanschlag auf Privat-Pkw eines bekannten Identitären-Aktivisten. Vollbrand, Sachschaden ca. 32.000 Euro. Bekennerschreiben.",
+     "Wien-Brigittenau: Brandanschlag auf Privat-Pkw einer Person. Vollbrand, Sachschaden ca. 32.000 Euro. Bekennerschreiben antifaschistischer Gruppe.",
      "Archiv",48.24,16.38),
 
     # ── USA — weitere 2025 ─────────────────────────────────────────
@@ -2261,7 +2285,7 @@ HISTORICAL_EVENTS = [
      "Düsseldorf: AfD-Landesgeschäftsstelle NRW mit Farbbeuteln und Steinen attackiert. Drei Fenster zerstört. Bekennerschreiben antifaschistische Aktion Rheinland.",
      "Archiv",51.23,6.78),
     ("2025-01-08","Magdeburg","DE","Brandanschlag",
-     "Magdeburg: Brandanschlag auf einen Pkw eines bekannten AfD-Funktionärs. Vollbrand. Sachschaden ca. 35.000 Euro. Bekennerschreiben.",
+     "Magdeburg: Brandanschlag auf einen Privat-Pkw. Vollbrand. Sachschaden ca. 35.000 Euro. Bekennerschreiben antifaschistischer Gruppe ordnet das Ziel politisch ein.",
      "Archiv",52.12,11.62),
     ("2025-04-26","Heidelberg","DE","Sachbeschädigung",
      "Heidelberg: Identitäre-Räumlichkeit mit Farbbomben und beschädigten Fenstern attackiert. Schaden ca. 10.000 Euro.",
@@ -3750,11 +3774,23 @@ def classify(text):
         'HTML-Reste, kein Navigations-Müll. Nennt nur Wo, Was, ggf. Wer. '
         'Beispiele für den gewünschten Stil:\n'
         '    \\"In Bamberg wurde ANTIFA-Graffiti an der Stadtbibliothek entdeckt.\\"\n'
-        '    \\"Linksextreme attackierten in Kloten eine Junge-Tat-WG mit Farbe.\\"\n'
+        '    \\"In Kloten attackierten Linksextreme eine Wohnung mit Farbe; '
+        'Bekennerschreiben antifaschistischer Gruppe.\\"\n'
         '    \\"In Berlin-Friedrichshain brannte ein Polizei-Streifenwagen aus.\\"\n'
         '    Verbote: Wörter wie \\"feige\\", \\"perfide\\", \\"mutige Tat\\", '
         '\\"solidarische Aktion\\", \\"das System\\", \\"die Schweine\\" — '
-        'diese sind aktivistische Sprache und gehören NICHT in die Zusammenfassung."\n\n'
+        'diese sind aktivistische Sprache und gehören NICHT in die Zusammenfassung.\n'
+        '    RECHTSSCHUTZ (zwingend): Bezeichne ZIELPERSONEN NIEMALS als '
+        '\\"Nazi\\", \\"rechtsextrem\\", \\"rechtsradikal\\", \\"Faschist\\", '
+        '\\"Neonazi\\", \\"AfD-Funktionär\\", \\"SVP-Politiker\\", \\"FPÖ-Kader\\", '
+        '\\"Identitärer\\", auch wenn die Originalquelle das tut. Das gilt als '
+        'üble Nachrede/Verleumdung (StGB §§ 185-187 DE, §111 öStGB AT, '
+        'Art. 173/174 StGB CH) und ist gegen unsere Plattform-Politik §C3 #4 '
+        '(keine Vorverurteilung). Verwende stattdessen neutrale Begriffe: '
+        '\\"Privatperson\\", \\"Pkw einer Person\\", \\"Räumlichkeit einer '
+        'Organisation\\". Die TÄTER-Seite (\\"antifaschistische Gruppe\\", '
+        '\\"Bekennerschreiben\\") darf benannt werden — das ist '
+        'Selbstbezeichnung der Täter, kein Vorwurf an einen Dritten."\n\n'
         f"Text:\n{text[:2200]}\n\n"
         "JSON:"
     )
@@ -3783,9 +3819,10 @@ def classify(text):
         res.setdefault("ziel_typ", "")
         res.setdefault("zusammenfassung", "")
         # Sanitise the summary: clamp length, strip nav artefacts AND
-        # aktivismus-Sprache. The hard 140-char cap matches the new prompt.
+        # aktivismus-Sprache AND defamatory labels against targets
+        # (Commit AB). Hard 140-char cap matches the new prompt.
         summ = (res.get("zusammenfassung") or "").strip()
-        summ = strip_activist_phrases(summ)
+        summ = neutralize_political_labels(strip_activist_phrases(summ))
         if _SUMMARY_BAD.search(summ):
             summ = ""
         res["zusammenfassung"] = clamp_two_sentences(summ, 140)
@@ -4089,6 +4126,173 @@ def redact_pii(text: str) -> str:
                  r'(\s+\1){1,}', r'\1', out)
     return out
 
+# ──────────────────────────────────────────────────────────────────────
+# Defamation-Sanitisation (§C3 #4: keine Vorverurteilung)
+# ──────────────────────────────────────────────────────────────────────
+# Rechtsschutz: ein Bekennerschreiben einer antifaschistischen Gruppe
+# bedeutet NICHT, dass die Zielperson tatsächlich "rechtsextrem" oder
+# "Nazi" ist. Solche Labels sind in DE/AT/CH justiziabel als Beleidigung/
+# üble Nachrede/Verleumdung (StGB §§ 185-187, § 111 öStGB, Art. 173/174
+# StGB CH). Wir entfernen sie aus jeder von uns gespeicherten Beschreibung
+# und aus jeder Zusammenfassung — auch wenn die Originalquelle sie führt.
+# Was bleibt: die Tat (Brand, Sabotage, Sachbeschädigung), das politische
+# Motiv-Signal der TÄTER-Seite (Bekennerschreiben antifaschistischer
+# Gruppe), und neutrale Rollenbeschreibungen ohne Bewertung der Zielperson.
+_NEUTRALIZE_PATTERNS = [
+    # 1. "als <Ideologie> [bekannt/eingestuft/geltend/geoutet]" inkl. nach-
+    #    folgendem Substantiv (Kader/Funktionär/Organisation/Person).
+    #    Output: gleicher Artikel, dann "politisch zugeordneten <Noun>".
+    (re.compile(
+        r"\b(eines?|einer?|einem|einen|den?|der|die|das)\s+"
+        r"als\s+"
+        r"(?:rechtsextrem(?:istisch)?\w*|rechtsradikal\w*|neonazistisch\w*|"
+        r"neonazi\w*|nazi(?!onal)\w*|faschistisch\w*|faschist\w*)\s+"
+        r"(?:bekannten?|eingestuften?|geltenden?|verd[äa]chtigen?|"
+        r"geouteten?|enttarnt(?:en)?)\s+"
+        r"(\w+)",
+        re.IGNORECASE,
+    ), r"\1 politisch zugeordneten \2"),
+    # 2. "wurde als <Ideologie>(...) [geoutet|bezeichnet|enttarnt|...]"
+    (re.compile(
+        r"\b(wurde|wird|gilt|outet[e]?\s+sich|enttarnt|enttarnte)\s+"
+        r"(?:als\s+|zum\s+)?"
+        r"(?:rechtsextrem(?:istisch)?\w*|neonazi\w*|nazi(?!onal)\w*|"
+        r"faschist\w*|rechtsradikal\w*)"
+        r"(?:\s+(?:geoutet|bezeichnet|beschimpft|enttarnt|abgestempelt|"
+        r"verurteilt|tituliert|dargestellt))?",
+        re.IGNORECASE,
+    ), r"\1 politisch eingeordnet"),
+    # 2b. "als <Ideologie> beschimpft/bezeichnet/tituliert" ohne Verb davor
+    (re.compile(
+        r"\bals\s+"
+        r"(?:rechtsextrem(?:istisch)?\w*|neonazi\w*|nazi(?!onal)\w*|"
+        r"faschist\w*|rechtsradikal\w*)\s+"
+        r"(beschimpft|bezeichnet|tituliert|verleumdet|dargestellt|"
+        r"abgestempelt|verurteilt)",
+        re.IGNORECASE,
+    ), r"politisch eingeordnet \1"),
+    # 3. "Nazi-Schwein/Sau/Pack" und Hetzphrasen
+    (re.compile(
+        r"\b(?:nazi|fascho)[\-–\s]?"
+        r"(?:schwein|sau|pack|gesindel|abschaum|bande)\w*",
+        re.IGNORECASE,
+    ), "[politische Beleidigung entfernt]"),
+    # 4. "<Artikel> [bekannten/mutmasslichen] <Partei>-<Rolle>" → neutralisieren
+    (re.compile(
+        r"\b(eines?|einer?|den?|der|die|das|einem|einen)\s+"
+        r"(?:bekannten?\s+|mutma[ßs]lichen?\s+|f[üu]hrenden?\s+|"
+        r"hochrangigen?\s+|langj[äa]hrigen?\s+)?"
+        r"(?:afd|svp|fp[öo]|cdu|csu|spd|fdp|gr[üu]ne[rn]?|linke[rn]?|"
+        r"bsw|[öo]vp|sp[öo]|npd|junge\s+alternative|ja-|jl-|jvp)"
+        r"[\-–\s]+"
+        r"(?:funktion[äa]r(?:in|s|en)?|kader[ns]?|politiker(?:in|s|en)?|"
+        r"abgeordnete[rmn]?|mitglied(?:s|er)?|kandidat(?:in|en)?|"
+        r"aktivist(?:in|en)?|vorstand(?:s|es)?|chef(?:in|s)?|"
+        r"sprecher(?:in|s)?)\b",
+        re.IGNORECASE,
+    ), lambda m: f"{m.group(1)} Person mit politischer Funktion"),
+    # 5. "<Artikel> [bekannten] <Ideologie>-<Rolle>" oder
+    #    zusammengeschrieben "Identitärer-Aktivist". → Privatperson.
+    #    Wichtig: NICHT für "Identitäre Bewegung" (formelle Organisation).
+    (re.compile(
+        r"\b(eines?|einer?|den?|der|die|das|einem|einen)\s+"
+        r"(?:bekannten?\s+|mutma[ßs]lichen?\s+|f[üu]hrenden?\s+|"
+        r"hochrangigen?\s+|sogenannten?\s+|angeblichen?\s+)?"
+        r"(?:rechtsextrem(?:istisch)?\w*|rechtsradikal\w*|neonazistisch\w*|"
+        r"neonazi\w*|nazi(?!onal)\w*|faschistisch\w*|faschist\w*|"
+        r"identit[äa]r\w*|junge[\-\s]tat)"
+        r"(?:[\-–\s]+)?"
+        r"(?:aktivist(?:in|en)?|kader[ns]?|funktion[äa]r(?:in|s|en)?|"
+        r"politiker(?:in|s|en)?|mitglied(?:s|er)?|anh[äa]nger(?:in|s)?|"
+        r"k[äa]mpfer(?:in|s)?|person|sympathisant(?:in|en)?|"
+        r"szene[\-\s](?:angeh[öo]riger?|mitglied))\b",
+        re.IGNORECASE,
+    ), lambda m: f"{m.group(1)} Privatperson"),
+    # 6. Solitäres Personen-Substantiv "ein Rechtsextremer" / "der Nazi"
+    #    Negative Lookahead: nicht für Bewegung/Partei/Szene/Aufmarsch
+    #    (das sind Organisations-/Event-Begriffe, keine Personen-Etiketten).
+    (re.compile(
+        r"\b(eines?|einer?|den?|der|die|das|einem|einen)\s+"
+        r"(?:bekannten?\s+|mutma[ßs]lichen?\s+)?"
+        r"(?:rechtsextreme[rmns]?|neonazis?|nazis?(?!onal)|"
+        r"faschist(?:en|in)?|rechtsradikale[rmns]?)"
+        r"\b(?!\s+(?:bewegung|partei|szene|aufmarsch|demonstration))",
+        re.IGNORECASE,
+    ), lambda m: f"{m.group(1)} Privatperson"),
+    # 7. "<Ideologie>-<Rolle>" ohne Artikel ("AfD-Politiker", "Nazi-Kader")
+    #    als Satzfragment-Subjekt. Hier ersetzen wir nur das Etikett.
+    (re.compile(
+        r"\b(?:afd|svp|fp[öo]|cdu|csu|spd|fdp|[öo]vp|sp[öo]|npd|junge\s+"
+        r"alternative)[\-–\s]+(funktion[äa]r(?:in|s|en)?|kader[ns]?|"
+        r"politiker(?:in|s|en)?|abgeordnete[rmn]?|mitglied(?:s|er)?|"
+        r"aktivist(?:in|en)?|sprecher(?:in|s)?)",
+        re.IGNORECASE,
+    ), "Person mit politischer Funktion"),
+    (re.compile(
+        r"\b(?:rechtsextrem(?:istisch)?|rechtsradikal|neonazistisch|"
+        r"neonazi|nazi(?!onal)|faschistisch|faschist|identit[äa]r|"
+        r"junge[\-\s]tat)\w*"
+        r"[\-–\s]+(aktivist(?:in|en)?|kader[ns]?|funktion[äa]r(?:in|s|en)?|"
+        r"politiker(?:in|s|en)?|mitglied(?:s|er)?|anh[äa]nger(?:in|s)?)",
+        re.IGNORECASE,
+    ), "Privatperson"),
+    # 8. Solo-Substantive in der Ziel-Rolle, z.B. "Ein Nazi verhaftet"
+    (re.compile(
+        r"\b(ein|der|die|das|den)\s+"
+        r"(?:rechtsextremer?|neonazi|nazi(?!onal)|faschist)\b"
+        r"(?!\s+(?:bewegung|partei|szene|aufmarsch))",
+        re.IGNORECASE,
+    ), lambda m: f"{'eine' if m.group(1).lower() == 'ein' else 'die'} Privatperson"),
+]
+
+# Genitiv-/Akkusativ-Korrekturen nach Geschlechtswechsel: ein maskulines
+# "eines/einen <Subjekt>" wird in der Neutralisierung zu femininem
+# "einer <Person>" — der Artikel muss mitwandern.
+_NEUTRALIZE_GENDER_FIXUPS = [
+    (re.compile(r"\beines\s+(Privatperson|Person\s+mit\s+politischer\s+Funktion)\b"),
+     r"einer \1"),
+    (re.compile(r"\beinen\s+(Privatperson|Person\s+mit\s+politischer\s+Funktion)\b"),
+     r"eine \1"),
+    (re.compile(r"\bein\s+(Privatperson|Person\s+mit\s+politischer\s+Funktion)\b"),
+     r"eine \1"),
+    (re.compile(r"\beinem\s+(Privatperson|Person\s+mit\s+politischer\s+Funktion)\b"),
+     r"einer \1"),
+    (re.compile(r"\bden\s+(Privatperson|Person\s+mit\s+politischer\s+Funktion)\b"),
+     r"die \1"),
+    (re.compile(r"\bdes\s+(Privatperson|Person\s+mit\s+politischer\s+Funktion)\b"),
+     r"der \1"),
+    (re.compile(r"\bdem\s+(Privatperson|Person\s+mit\s+politischer\s+Funktion)\b"),
+     r"der \1"),
+]
+
+def neutralize_political_labels(text: str) -> str:
+    """
+    Entferne diffamierende Personen-Etiketten ("rechtsextrem", "Nazi",
+    "AfD-Funktionär" etc.) aus einem Text.
+
+    Wichtige Abgrenzung:
+      - Bekenner- und Akteurs-Bezeichnungen auf der TÄTER-Seite bleiben
+        erhalten ("antifaschistische Gruppe", "Bekennerschreiben") —
+        das ist die Selbst-Beschreibung der Täter, kein Vorwurf an einen
+        Dritten.
+      - Politisch-Motiv-Signale für die Tat-Klassifikation bleiben
+        erhalten (`_POLITICAL_MOTIVE_RE` greift weiter).
+      - Verbleibende Lücken werden im sauberen `clean_description()`-
+        Pass nach diesem Helper kompaktiert.
+    """
+    if not text:
+        return ""
+    out = text
+    for rx, repl in _NEUTRALIZE_PATTERNS:
+        out = rx.sub(repl, out)
+    # Grammatik-Pass: Geschlechts-Übergänge korrigieren
+    for rx, repl in _NEUTRALIZE_GENDER_FIXUPS:
+        out = rx.sub(repl, out)
+    # Cleanup: doppelte Leerzeichen + ", ," → ","
+    out = re.sub(r"\s{2,}", " ", out)
+    out = re.sub(r",\s*[\.,]", ".", out)
+    return out.strip(" ,;")
+
 # Political-motive signal for Sachbeschädigung: without one of these (or a
 # known actor), the incident is treated as non-political vandalism and dropped.
 _POLITICAL_MOTIVE_RE = re.compile(
@@ -4302,14 +4506,15 @@ def save_incident(ai, text, source, url, date_str=None, manual=False):
         summ = fallback_summary(text)
     # Strip activist phrasing AND clamp to 140 chars / 2 sentences — the new
     # high-impact-news style the dashboard renders. Defense-in-depth: even a
-    # too-long Grok output gets trimmed here.
+    # too-long Grok output gets trimmed here. neutralize_political_labels()
+    # blockt vor allen anderen Filtern Verleumdungs-Etiketten gegen Dritte.
     summ = clamp_two_sentences(
-        strip_activist_phrases(redact_pii(summ)),
+        strip_activist_phrases(neutralize_political_labels(redact_pii(summ))),
         140,
     )
 
     d = date_str or datetime.now().strftime("%Y-%m-%d")
-    desc = redact_pii(clean_description(text))[:500]
+    desc = neutralize_political_labels(redact_pii(clean_description(text)))[:500]
     ai["land"] = land_raw  # propagate the corrected value to the INSERT below
 
     try:
@@ -4570,12 +4775,16 @@ def backfill_summaries_and_flags():
     for r in rows:
         desc_in = r["description"] or ""
         summ_in = (r["summary"] or "").strip()
-        desc_out = redact_pii(desc_in)
+        # Defamation-Sanitisation (Commit AB): "rechtsextrem"/"Nazi"-Labels
+        # gegen Privatpersonen aus Altdaten entfernen.
+        desc_out = neutralize_political_labels(redact_pii(desc_in))
         # Re-strip activist phrasing + clamp to 140 chars even for existing
         # rows so the visual tightening is retroactive.
         summ_raw = summ_in or fallback_summary(desc_in)
         summ_out = clamp_two_sentences(
-            strip_activist_phrases(redact_pii(summ_raw)),
+            strip_activist_phrases(
+                neutralize_political_labels(redact_pii(summ_raw))
+            ),
             140,
         )
         prim, hi, tier_new = compute_flags(
@@ -5226,14 +5435,18 @@ def _barrikade_discover_urls():
     """Discover recent barrikade article URLs via multiple strategies.
     Returns a list of unique URLs sorted newest-first (best-effort).
     Probiert in dieser Reihenfolge:
-      1. Mehrere RSS-/Atom-Endpoint-Kandidaten (Drupal/WP-Standard-Pfade)
+      1. Mehrere RSS-/Atom-Endpoint-Kandidaten (Drupal/WP-Standard-Pfade
+         auf BEIDEN Domains www + publish)
       2. sitemap.xml und sitemap_index.xml
       3. Homepage-Scrape mit Regex für /article/<id>
+      4. SPIP-public Pfade als Fallback
+      5. DuckDuckGo + Bing Search-Engine-Discovery
+      6. Wayback CDX als letzte Auffanglinie wenn Cloudflare alles blockt
     Damit ist der Crawler robust gegenüber Anti-Bot-Schutz auf
     einzelnen Pfaden — wenn EIN Endpoint geht, kommen die Artikel rein.
     """
     candidates = [
-        # RSS/Atom Standard-Pfade
+        # RSS/Atom Standard-Pfade — barrikade.info
         ("rss-feed",      "https://barrikade.info/feed"),
         ("rss-feed-slash","https://barrikade.info/feed/"),
         ("rss-rss",       "https://barrikade.info/rss"),
@@ -5247,6 +5460,9 @@ def _barrikade_discover_urls():
         ("sitemap-index", "https://barrikade.info/sitemap_index.xml"),
         # Homepage scrape (always last, fewest signals)
         ("homepage",      "https://barrikade.info/"),
+        # Schwester-Host publish.barrikade.info (typischerweise permissivere Anti-Bot)
+        ("publish-feed",  "https://publish.barrikade.info/feed"),
+        ("publish-home",  "https://publish.barrikade.info/"),
     ]
     found = []  # preserve order
     seen  = set()
@@ -6224,17 +6440,34 @@ def _crawl_barrikade_authed(verbose=False):
 
 
 def crawl_barrikade_range(start_id, stop_id):
-    """Crawl barrikade article IDs from start_id down to stop_id.
+    """Crawl barrikade article IDs from start_id down to stop_id über BEIDE
+    Barrikade-Domains (www + publish).
 
-    Resilience v4:
-      0. (NEU) Wenn BARRIKADE_USER/BARRIKADE_PASS gesetzt sind:
+    Resilience v6 (Merge AB/AC + main v4):
+      0. (Authed) Wenn BARRIKADE_USER/BARRIKADE_PASS gesetzt sind:
          Authentifizierter Pull aus publish.barrikade.info-Backend.
          Bei Erfolg (>=1 neuer Insert) Frühreturn.
-      1. Multi-URL-Discovery (RSS/Atom/Sitemap/Homepage, 10 Pfade).
-      2. Falls Discovery URLs liefert: parsen, klassifizieren, speichern.
-      3. Falls beides scheitert: ID-Sweep mit aggressivem Backoff.
+      1. Multi-URL-Discovery (RSS/Atom/Sitemap/Homepage/SPIP/DDG/Bing/Wayback).
+      2. ALLE entdeckten URLs verarbeiten (Commit AC — kein [:80]-Slice mehr);
+         is_seen()-Dedup schützt vor Doppelverarbeitung.
+         source-Label = Hostname aus URL — beide Domains separat in
+         source_health getrackt.
+      3. Discovery + ID-Sweep ergänzen sich (kein Early-Return) damit
+         historische Lücken gefüllt werden.
     """
+    from urllib.parse import urlparse as _up
     inserted = 0
+
+    # Helper: trenne barrikade.info vs publish.barrikade.info im source_health
+    _ALLOWED_HOSTS = {"barrikade.info", "publish.barrikade.info", "www.barrikade.info"}
+    def _src_from_url(u):
+        try:
+            host = _up(u).netloc.lower()
+            if host.startswith("www."):
+                host = host[4:]
+            return host if host in _ALLOWED_HOSTS else "barrikade.info"
+        except Exception:
+            return "barrikade.info"
 
     # 0) Authentifizierter Pull (silent skip wenn ENV fehlt)
     if os.getenv("BARRIKADE_USER") and os.getenv("BARRIKADE_PASS"):
@@ -6246,12 +6479,14 @@ def crawl_barrikade_range(start_id, stop_id):
         except Exception as e:
             log.warning(f"barrikade authed crawler: {str(e)[:160]} — fallback to public")
 
-    # 1) Multi-URL-Discovery (RSS, Atom, Sitemap, Homepage-Scrape)
+    # 1) Multi-URL-Discovery (RSS, Atom, Sitemap, Homepage, SPIP, Suchmaschinen, Wayback)
     discovered = _barrikade_discover_urls()
     if discovered:
-        log.info(f"barrikade: {len(discovered)} URLs from discovery — processing")
+        log.info(f"barrikade: {len(discovered)} URLs from discovery — processing ALL")
         wayback_used = 0
-        for link in discovered[:80]:  # erhöht von 50 → 80
+        # Commit AC: kein [:80]-Slice — User-Direktive "alles crawlen".
+        # is_seen() pro Hash blockt schon Doppelverarbeitung.
+        for link in discovered:
             try:
                 h = mk_hash(link, link)
                 if is_seen(h): continue
@@ -6282,62 +6517,71 @@ def crawl_barrikade_range(start_id, stop_id):
                 if is_false_positive(full): continue
                 ai = smart_classify(full)
                 if ai:
-                    if save_incident(ai, full, "barrikade.info", link, date_from_url(link)):
+                    if save_incident(ai, full, _src_from_url(link), link, date_from_url(link)):
                         inserted += 1
                 time.sleep(0.4)
             except Exception as e:
                 log.info(f"barrikade link={link}: {str(e)[:100]}")
         if wayback_used:
             log.info(f"barrikade: {wayback_used} URLs via Wayback-Fallback")
+        # Commit AC: discovery+ID-sweep ergänzen sich (kein Early-Return)
         if inserted > 0:
-            log.info(f"barrikade discovery path saved {inserted} new incidents")
-            # Wenn Discovery erfolgreich war, ID-Sweep ist optional —
-            # er kostet API-Calls und der RSS hat ja die neuesten Artikel.
-            return inserted
+            log.info(f"barrikade discovery path saved {inserted} new incidents — proceeding to ID sweep")
 
-    # 2) ID-Sweep (Historie + neueste IDs die noch nicht im RSS waren).
+    # 2) ID-Sweep über beide Domains
     misses = 0
     consecutive_403 = 0
     for aid in range(start_id, stop_id - 1, -1):
-        url = f"https://barrikade.info/article/{aid}"
-        try:
-            text = get_text(url)
-            if len(text) < 80:
-                misses += 1
-                if misses >= 40: break
-                time.sleep(0.2)
-                continue
-            misses = 0; consecutive_403 = 0
-            h = mk_hash(url, text)
-            if is_seen(h): time.sleep(0.1); continue
-            if not any(kw in text.lower() for kw in BARRIKADE_RELEVANCE_KWS):
-                time.sleep(0.1)
-                continue
-            if is_false_positive(text):
-                time.sleep(0.1)
-                continue
-            ai = smart_classify(text)
-            if ai:
-                if save_incident(ai, text, "barrikade.info", url, date_from_url(url)):
-                    inserted += 1
-            time.sleep(0.6)
-        except requests.HTTPError as e:
-            code = getattr(e.response, "status_code", 0)
-            if code == 404:
-                misses += 1; time.sleep(0.2)
-            elif code in (403, 429):
-                consecutive_403 += 1
-                if consecutive_403 <= 3:
-                    log.info(f"barrikade id={aid} HTTP {code}, backing off 30s")
-                    time.sleep(30)
-                else:
-                    log.warning(f"barrikade: {consecutive_403} consecutive 403/429 — aborting ID sweep")
+        # Pro Article-ID nacheinander beide Domains versuchen.
+        article_text = None
+        winning_host = None
+        article_url  = None
+        for host in _BARRIKADE_DOMAINS:
+            url = f"https://{host}/article/{aid}"
+            try:
+                t = get_text(url)
+                if t and len(t) >= 80:
+                    article_text = t
+                    winning_host = host
+                    article_url  = url
+                    misses = 0; consecutive_403 = 0
                     break
-            else:
-                log.warning(f"barrikade id={aid} HTTP {code}")
-                time.sleep(3)
-        except Exception as e:
-            log.warning(f"barrikade id={aid}: {e}"); time.sleep(0.5)
+            except requests.HTTPError as e:
+                code = getattr(e.response, "status_code", 0)
+                if code in (403, 429):
+                    consecutive_403 += 1
+                    if consecutive_403 > 6:
+                        log.warning(f"barrikade: {consecutive_403} consecutive 403/429 across both domains — aborting ID sweep")
+                        return inserted
+                    log.info(f"barrikade {host}/article/{aid} HTTP {code}, trying next host")
+                elif code != 404:
+                    log.info(f"barrikade {host}/article/{aid} HTTP {code}")
+                # 404 / Anti-Bot — try next host
+            except Exception as e:
+                log.info(f"barrikade {host}/article/{aid}: {str(e)[:100]}")
+        if article_text is None:
+            misses += 1
+            # Commit AC: misses-Cap von 40 auf 250 erhöht — User-Direktive
+            # "alles crawlen, aktuell gehen nur 500 Einträge". Bei lückigem
+            # ID-Raum (z.B. nach Massen-Löschungen) waren wir vorher viel
+            # zu früh ausgestiegen.
+            if misses >= 250: break
+            time.sleep(0.2)
+            continue
+        h = mk_hash(article_url, article_text)
+        if is_seen(h): time.sleep(0.1); continue
+        if not any(kw in article_text.lower() for kw in BARRIKADE_RELEVANCE_KWS):
+            time.sleep(0.1)
+            continue
+        if is_false_positive(article_text):
+            time.sleep(0.1)
+            continue
+        ai = smart_classify(article_text)
+        if ai:
+            if save_incident(ai, article_text, winning_host, article_url,
+                             date_from_url(article_url)):
+                inserted += 1
+        time.sleep(0.6)
     return inserted
 
 # ── INDYMEDIA RSS + PAGE CRAWLER ──────────────────────────────────
@@ -6715,6 +6959,7 @@ RSS_FEEDS = [
     ("ajc-atlanta",           "https://www.ajc.com/arc/outboundfeeds/rss/?outputType=xml"),
     # ── Einschlägige Quellen (szenenah + extremismusbeobachtend) ──
     ("barrikade.info",        "https://barrikade.info/feed"),
+    ("publish.barrikade.info","https://publish.barrikade.info/feed"),
     ("belltower.news",        "https://www.belltower.news/feed/"),
     ("radikal.news",          "https://radikal.news/index.xml"),
     ("nd-aktuell.de",         "https://www.nd-aktuell.de/static/rss/rss.xml"),
@@ -6934,12 +7179,15 @@ def run_crawler(force=False):
     total = 0
     log.info("══ CRAWLER START ══")
     try:
-        # 1. Barrikade: sweep latest 80 article IDs
+        # 1. Barrikade: sweep latest 400 article IDs (Commit AC: war 80,
+        # User-Direktive "alles crawlen"). 400 IDs × 0.6s = ~4 min Worst-Case
+        # bei voll besetztem ID-Raum; mit dem 250-Misses-Abbruch bleibt das
+        # auch bei dünnem ID-Raum beschränkt.
         log.info("Barrikade live sweep...")
         latest = barrikade_latest_id()
         saved_latest = int(meta_get("b_live_max") or 0)
         if latest > saved_latest:
-            n = crawl_barrikade_range(latest, max(saved_latest, latest - 80))
+            n = crawl_barrikade_range(latest, max(saved_latest, latest - 400))
             meta_set("b_live_max", latest)
             total += n
             log.info(f"Barrikade live: +{n}")
@@ -11228,53 +11476,48 @@ async def admin_crawler_probe(url: str, _=Depends(require_admin)):
 
 @app.get("/admin/api/crawler/barrikade-discover")
 async def admin_crawler_barrikade_discover(_=Depends(require_admin)):
-    """Live-Test der barrikade.info Discovery — gibt zurück, welche der
-    10 Discovery-Pfade funktionieren und wieviele URLs jeder liefert.
-    Operatoren sehen sofort, ob Anti-Bot greift oder welche Endpoints
-    Daten liefern."""
-    out = {"endpoints": [], "summary": {}}
-    candidates = [
-        ("rss-feed",      "https://barrikade.info/feed"),
-        ("rss-feed-slash","https://barrikade.info/feed/"),
-        ("rss-rss",       "https://barrikade.info/rss"),
-        ("rss-rss-xml",   "https://barrikade.info/rss.xml"),
-        ("rss-index",     "https://barrikade.info/index.rss"),
-        ("rss-atom",      "https://barrikade.info/atom"),
-        ("drupal-feeds",  "https://barrikade.info/feeds/all.rss.xml"),
-        ("sitemap",       "https://barrikade.info/sitemap.xml"),
-        ("sitemap-index", "https://barrikade.info/sitemap_index.xml"),
-        ("homepage",      "https://barrikade.info/"),
-    ]
-    working = 0
-    for label, u in candidates:
-        diag = fetch_diagnostic(u, timeout=10)
-        n_urls = 0
-        body_marker = ""
-        if diag.get("ok"):
-            working += 1
-            excerpt = diag.get("excerpt", "")
-            if "<rss" in excerpt[:200].lower():     body_marker = "RSS"
-            elif "<feed" in excerpt[:200].lower():  body_marker = "Atom"
-            elif "<urlset" in excerpt[:200].lower():body_marker = "Sitemap"
-            elif "<html" in excerpt[:200].lower():  body_marker = "HTML"
-            else: body_marker = "?"
-            # quick URL-count heuristic
-            import re as _re
-            n_urls = len(_re.findall(r"/article/\d+", diag.get("excerpt","")))
-        out["endpoints"].append({
-            "label":       label,
-            "url":         u,
-            "ok":          diag.get("ok"),
-            "status_code": diag.get("status_code"),
-            "content_type":diag.get("content_type"),
-            "len":         diag.get("len"),
-            "elapsed_ms":  diag.get("elapsed_ms"),
-            "winning_ua":  diag.get("winning_ua"),
-            "body_marker": body_marker,
-            "url_hits_excerpt": n_urls,
-            "error":       diag.get("error"),
-        })
-    out["summary"] = {"working": working, "total": len(candidates)}
+    """Live-Test der barrikade Discovery — beide Domains × 10 Pfade = 20
+    Endpoints. Gibt zurück welche funktionieren und wieviele URLs jeder
+    liefert. Operatoren sehen sofort welche Domain durchgeht."""
+    import re as _re
+    out = {"endpoints": [], "summary": {}, "per_domain": {}}
+    working_total = 0
+    for host in _BARRIKADE_DOMAINS:
+        per_domain_working = 0
+        for label, path in _BARRIKADE_DISCOVERY_PATHS:
+            u = f"https://{host}{path}"
+            diag = fetch_diagnostic(u, timeout=10)
+            n_urls = 0
+            body_marker = ""
+            if diag.get("ok"):
+                working_total += 1
+                per_domain_working += 1
+                excerpt = diag.get("excerpt", "")
+                if "<rss" in excerpt[:200].lower():     body_marker = "RSS"
+                elif "<feed" in excerpt[:200].lower():  body_marker = "Atom"
+                elif "<urlset" in excerpt[:200].lower():body_marker = "Sitemap"
+                elif "<html" in excerpt[:200].lower():  body_marker = "HTML"
+                else: body_marker = "?"
+                n_urls = len(_re.findall(r"/article/\d+", diag.get("excerpt","")))
+            out["endpoints"].append({
+                "domain":      host,
+                "label":       label,
+                "url":         u,
+                "ok":          diag.get("ok"),
+                "status_code": diag.get("status_code"),
+                "content_type":diag.get("content_type"),
+                "len":         diag.get("len"),
+                "elapsed_ms":  diag.get("elapsed_ms"),
+                "winning_ua":  diag.get("winning_ua"),
+                "body_marker": body_marker,
+                "url_hits_excerpt": n_urls,
+                "error":       diag.get("error"),
+            })
+        out["per_domain"][host] = {"working": per_domain_working,
+                                    "total": len(_BARRIKADE_DISCOVERY_PATHS)}
+    out["summary"] = {"working": working_total,
+                       "total": len(out["endpoints"]),
+                       "domains_tested": list(_BARRIKADE_DOMAINS)}
     return JSONResponse(out)
 
 
@@ -11282,15 +11525,56 @@ async def admin_crawler_barrikade_discover(_=Depends(require_admin)):
 async def admin_crawler_barrikade_run(bg: BackgroundTasks, _=Depends(require_admin)):
     """Triggert einen Discovery-Run gegen barrikade.info im Hintergrund.
     Ergebnis ist später in /admin/api/status (running flag) bzw. der
-    incidents-DB sichtbar."""
+    incidents-DB sichtbar.
+
+    Commit AC: Range von 50 auf 400 IDs vergrößert — User-Direktive
+    'alles crawlen'. Mit dem 250-Misses-Abbruch im crawl_barrikade_range
+    bleibt das auch bei dünnem ID-Raum beschränkt."""
     def _run():
         try:
-            n = crawl_barrikade_range(barrikade_latest_id(), barrikade_latest_id() - 50)
+            latest = barrikade_latest_id()
+            n = crawl_barrikade_range(latest, max(1, latest - 400))
             log.info(f"manual barrikade run: {n} new incidents")
         except Exception as e:
             log.warning(f"manual barrikade run failed: {e}")
     bg.add_task(_run)
     return JSONResponse({"ok": True, "status": "Discovery-Run gestartet"})
+
+
+@app.post("/admin/api/crawler/barrikade-deep-crawl")
+async def admin_crawler_barrikade_deep(bg: BackgroundTasks, _=Depends(require_admin)):
+    """Commit AC: Voller historischer Sweep — durchläuft den gesamten
+    Article-ID-Raum von der aktuellen latest_id bis ID=1. Läuft im
+    Hintergrund (kann mehrere Stunden dauern), respektiert den 250-
+    Misses-Abbruch pro Range-Chunk. Resümiert pro 800-ID-Chunk und setzt
+    `hist_b_curr` so dass parallele run_historical()-Aufrufe nicht in die
+    Quere kommen.
+
+    User-Direktive: 'wir wollen alles crawlen, aktuell gehen nur 500
+    Einträge' — dieser Endpoint öffnet die volle Historie auf Knopfdruck.
+    """
+    def _deep():
+        try:
+            latest = barrikade_latest_id()
+            total = 0
+            chunk = 800
+            curr = latest
+            while curr > 1:
+                stop = max(1, curr - chunk)
+                log.info(f"barrikade DEEP: {curr}→{stop}")
+                n = crawl_barrikade_range(curr, stop)
+                total += n
+                log.info(f"barrikade DEEP chunk done: +{n} (running total {total})")
+                meta_set("hist_b_curr", stop - 1)
+                if stop <= 1:
+                    break
+                curr = stop - 1
+            log.info(f"barrikade DEEP crawl finished: {total} new incidents")
+        except Exception as e:
+            log.warning(f"deep barrikade crawl failed: {e}")
+    bg.add_task(_deep)
+    return JSONResponse({"ok": True,
+                         "status": "Deep-Crawl gestartet (volle Historie, läuft im Hintergrund)"})
 
 @app.post("/admin/api/grok-test")
 async def admin_grok(_=Depends(require_admin)):
