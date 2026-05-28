@@ -11,11 +11,11 @@
 :root{
   --bg:#060c14;--s0:#080e18;--s1:#0a1220;--s2:#0e1828;
   --pb:rgba(0,180,255,0.15);--pb2:rgba(0,200,255,0.3);
-  --accent:#9da3a9;--ag:rgba(0,200,255,0.15);
+  --accent:#a0a0a3;--ag:rgba(0,200,255,0.15);
   --amber:#d99a2b;--amg:rgba(240,165,0,0.14);
-  --red:#dc4c5e;--rdg:rgba(255,51,85,0.14);
+  --red:#e23a4c;--rdg:rgba(255,51,85,0.14);
   --green:#00e87a;--gg:rgba(0,232,122,0.14);
-  --t0:#e8f4ff;--t1:#9da3a9;--t2:#7a8088;--t3:#2a4055;
+  --t0:#e8f4ff;--t1:#a0a0a3;--t2:#7a8088;--t3:#2a4055;
   --mono:'JetBrains Mono',monospace;--sans:'Inter',sans-serif;
   --panel:rgba(5,11,22,0.95);
 }
@@ -536,10 +536,10 @@ async function loadAdminTimeline(){
     const bw=W/rows.length;
     svg.innerHTML=rows.map((d,i)=>{
       const h=Math.max(2,Math.round(d.n/mx*H));
-      const c=d.high>0?'#dc4c5e':d.n>0?'rgba(0,200,255,0.5)':'rgba(0,200,255,0.12)';
+      const c=d.high>0?'#e23a4c':d.n>0?'rgba(0,200,255,0.5)':'rgba(0,200,255,0.12)';
       const lbl=d.month?d.month.substring(5):'';
       return `<rect x="${i*bw+1}" y="${H-h}" width="${bw-3}" height="${h}" fill="${c}" rx="1"/>
-              <text x="${i*bw+bw/2}" y="${H+1}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7" fill="rgba(157,163,169,0.5)">${lbl}</text>`;
+              <text x="${i*bw+bw/2}" y="${H+1}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7" fill="rgba(160,160,163,0.5)">${lbl}</text>`;
     }).join('');
     svg.setAttribute('viewBox',`0 0 ${W} ${H+10}`);
   }catch(e){}
