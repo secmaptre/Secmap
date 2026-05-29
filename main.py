@@ -5102,6 +5102,10 @@ def crawl_indymedia_feed():
         ("untergrund-blättle.ch",   "https://www.untergrund-blaettle.ch/rss.xml"),
         ("contraste.org",           "https://www.contraste.org/feed/"),
         ("autonomes-zentrum.org",   "https://www.az-koeln.org/feed/"),
+        # ── FR — Lyon scene aggregator (user request). SPIP backend feed;
+        # low confidence (=2), country auto-detected via COUNTRY_KEYWORDS
+        # (lyon/france). All entries pass the FP gate + doxxing sanitization.
+        ("rebellyon.info",          "https://rebellyon.info/spip.php?page=backend"),
         # ── englischsprachig (UK / US / international) ──
         ("freedomnews.org.uk",      "https://freedomnews.org.uk/feed/"),
         ("libcom.org",              "https://libcom.org/rss.xml"),
