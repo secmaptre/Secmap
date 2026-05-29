@@ -541,10 +541,10 @@ def _fetch_via_jina_reader(url, timeout=25):
         log.info(f"jina-reader FAIL {url}: {str(e)[:160]}")
     return None
 
-def _fetch_via_scrapingbee(url, timeout=30):
-    """ScrapingBee API — Cloudflare/Anti-Bot-Bypass + headless Browser as
-    Service. Benötigt SCRAPINGBEE_API_KEY in ENV. 1000 free credits/month.
-    Aktiv NUR wenn ENV-Var gesetzt — sonst silent skip.
+def _fetch_via_scrapingbee(url, timeout=45):
+    """ScrapingBee API mit JS-Rendering — für SPAs wie barrikade.info
+    (Angular). Benötigt SCRAPINGBEE_API_KEY. 1000 free credits/Monat,
+    aber JS-Render kostet ~5 credits pro Page = ~200 renders/Monat.
     Doku: https://www.scrapingbee.com/documentation/"""
     key = os.getenv("SCRAPINGBEE_API_KEY", "").strip()
     if not key:
@@ -555,24 +555,25 @@ def _fetch_via_scrapingbee(url, timeout=30):
             params={
                 "api_key": key,
                 "url": url,
-                "render_js": "false",      # spart credits; barrikade ist SSR
-                "premium_proxy": "true",   # residential IPs — bypasst Cloudflare
-                "country_code": "de",      # DE-IP für DE-zentrierte Site
+                "render_js": "true",        # SPA-Rendering AKTIV
+                "wait": "2500",             # 2.5s warten auf JS-Content
+                "premium_proxy": "true",    # residential IPs
+                "country_code": "de",
+                "block_resources": "false",
             },
             timeout=timeout,
         )
         if r.status_code == 200 and r.text and len(r.text) > 400:
-            log.info(f"scrapingbee HIT für {url} ({len(r.text)}b)")
+            log.info(f"scrapingbee HIT für {url} ({len(r.text)}b, JS-rendered)")
             return r.text
         log.info(f"scrapingbee miss {url}: HTTP {r.status_code}")
     except Exception as e:
         log.info(f"scrapingbee FAIL {url}: {str(e)[:160]}")
     return None
 
-def _fetch_via_scraperapi(url, timeout=30):
-    """ScraperAPI — alternative zu ScrapingBee, gleiches Konzept. 1000
-    free credits/month. Aktiv NUR wenn SCRAPERAPI_KEY in ENV.
-    Doku: https://www.scraperapi.com/documentation/"""
+def _fetch_via_scraperapi(url, timeout=45):
+    """ScraperAPI mit JS-Rendering. 1000 free credits/Monat, JS-Render
+    ~10 credits = ~100 renders/Monat."""
     key = os.getenv("SCRAPERAPI_KEY", "").strip()
     if not key:
         return None
@@ -582,17 +583,56 @@ def _fetch_via_scraperapi(url, timeout=30):
             params={
                 "api_key": key,
                 "url": url,
+                "render": "true",           # SPA-Rendering AKTIV
                 "country_code": "de",
                 "premium": "true",
             },
             timeout=timeout,
         )
         if r.status_code == 200 and r.text and len(r.text) > 400:
-            log.info(f"scraperapi HIT für {url} ({len(r.text)}b)")
+            log.info(f"scraperapi HIT für {url} ({len(r.text)}b, JS-rendered)")
             return r.text
         log.info(f"scraperapi miss {url}: HTTP {r.status_code}")
     except Exception as e:
         log.info(f"scraperapi FAIL {url}: {str(e)[:160]}")
+    return None
+
+def _fetch_via_firecrawl(url, timeout=60):
+    """Firecrawl API — spezialisiert auf JS-Rendering + Markdown-Extraktion.
+    500 free credits/Monat, 1 credit pro Page = 500 renders/Monat (effizienter
+    als ScrapingBee mit JS-Render). Ideal für SPAs wie barrikade.info.
+    User-Vorschlag 2026-05-28: "würde firecrawl was nützen". JA —
+    rendered die Angular-App komplett und liefert sauberen Markdown.
+    Doku: https://docs.firecrawl.dev/api-reference/endpoint/scrape"""
+    key = os.getenv("FIRECRAWL_API_KEY", "").strip()
+    if not key:
+        return None
+    try:
+        r = requests.post(
+            "https://api.firecrawl.dev/v1/scrape",
+            json={
+                "url": url,
+                "formats": ["markdown"],
+                "waitFor": 2500,
+                "timeout": max(15000, (timeout - 5) * 1000),
+            },
+            headers={
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+            },
+            timeout=timeout,
+        )
+        if r.status_code == 200:
+            data = r.json() or {}
+            md = (data.get("data") or {}).get("markdown", "") or ""
+            if md and len(md) > 200:
+                log.info(f"firecrawl HIT für {url} ({len(md)}b markdown)")
+                return md
+            log.info(f"firecrawl miss {url}: empty markdown")
+        else:
+            log.info(f"firecrawl miss {url}: HTTP {r.status_code} {r.text[:160]}")
+    except Exception as e:
+        log.info(f"firecrawl FAIL {url}: {str(e)[:160]}")
     return None
 
 def _fetch_via_cloudscraper(url, timeout=25):
@@ -714,22 +754,41 @@ def fetch(url, timeout=25):
         if result:
             return result
 
-    # ── Fallback 4: ScrapingBee (NUR wenn SCRAPINGBEE_API_KEY gesetzt) ──
-    # Residential-Proxy + JS-Render-Service. Bypasst Cloudflare zuverlässig.
-    # 1000 free credits/Monat (~30 pro Tag). User-Direktive 2026-05-28:
-    # Render-Setup robust gegen Cloudflare-Block machen.
-    if last_status in (403, 429, 503) or is_connect_err:
-        result = _fetch_via_scrapingbee(url, timeout)
+    # ── Detect SPA-Skeleton ───────────────────────────────────────
+    # User-Befund 2026-05-28: barrikade.info liefert HTTP-200 + 15kb HTML,
+    # aber der Body ist nur das Angular-Skeleton (data-beasties-container,
+    # <base href="/">, kein Article-Body). In dem Fall NICHT zufrieden
+    # geben mit direct/cloudscraper-Response — direkt zu JS-Render-Service.
+    spa_skeleton_received = False
+    if last_status == 200 and last_excerpt:
+        is_spa = ("data-beasties-container" in last_excerpt or
+                  '<base href="/"' in last_excerpt or
+                  "<app-root" in last_excerpt)
+        if is_spa:
+            spa_skeleton_received = True
+            log.info(f"fetch detected SPA-skeleton for {url} — escalating to JS-render")
+
+    # ── Fallback 4: Firecrawl (NUR wenn FIRECRAWL_API_KEY gesetzt) ──
+    # Best-of-Breed für JS-Sites: 1 credit pro Render, 500/Monat free.
+    # Liefert Markdown statt HTML — ideal für die Klassifikator-Pipeline.
+    if last_status in (403, 429, 503) or is_connect_err or spa_skeleton_received:
+        result = _fetch_via_firecrawl(url, max(timeout, 45))
         if result:
             return result
 
-    # ── Fallback 5: ScraperAPI (alternative wenn SCRAPERAPI_KEY gesetzt) ──
-    if last_status in (403, 429, 503) or is_connect_err:
-        result = _fetch_via_scraperapi(url, timeout)
+    # ── Fallback 5: ScrapingBee (mit JS-Render aktiv) ────────────
+    if last_status in (403, 429, 503) or is_connect_err or spa_skeleton_received:
+        result = _fetch_via_scrapingbee(url, max(timeout, 45))
         if result:
             return result
 
-    # ── Fallback 6: web.archive.org Mirror ───────────────────────
+    # ── Fallback 6: ScraperAPI (mit JS-Render aktiv) ─────────────
+    if last_status in (403, 429, 503) or is_connect_err or spa_skeleton_received:
+        result = _fetch_via_scraperapi(url, max(timeout, 45))
+        if result:
+            return result
+
+    # ── Fallback 7: web.archive.org Mirror ───────────────────────
     if last_status in (403, 429, 404, 503):
         result = _fetch_via_archive(url, timeout)
         if result:
@@ -11317,13 +11376,18 @@ async def admin_crawler_barrikade_import_id(request: Request, _=Depends(require_
         # Jeder Eintrag ist (label, fetch-fn) — fetch-fn liefert HTML/Markdown.
         url_canon = f"https://barrikade.info/article/{aid}"
         url_beta  = f"https://beta.barrikade.info/article/{aid}"
+        # Reihenfolge: günstigste zuerst, JS-Render-Services dann.
+        # barrikade.info ist Angular-SPA — direct/cloudscraper/jina liefern
+        # nur Skeleton; nur firecrawl/scrapingbee/scraperapi (mit JS-Render)
+        # liefern echten Article-Body.
         targets = [
             ("beta-direct",  lambda: get_text(url_beta)),
             ("www-direct",   lambda: get_text(url_canon)),
             ("jina-beta",    lambda: _fetch_via_jina_reader(url_beta, 20)),
             ("jina-www",     lambda: _fetch_via_jina_reader(url_canon, 20)),
-            ("scrapingbee",  lambda: _fetch_via_scrapingbee(url_canon, 30)),
-            ("scraperapi",   lambda: _fetch_via_scraperapi(url_canon, 30)),
+            ("firecrawl",    lambda: _fetch_via_firecrawl(url_canon, 60)),
+            ("scrapingbee",  lambda: _fetch_via_scrapingbee(url_canon, 45)),
+            ("scraperapi",   lambda: _fetch_via_scraperapi(url_canon, 45)),
             ("archive.org",  lambda: _fetch_via_archive(url_canon, 20)),
         ]
         for label, fn in targets:
@@ -11395,22 +11459,22 @@ async def admin_grok(_=Depends(require_admin)):
 @app.get("/admin/api/scrape-test")
 async def admin_scrape_test(url: str = "https://barrikade.info/article/7490",
                             _=Depends(require_admin)):
-    """Live-Diagnose: testet ALLE Fetch-Strategien gegen die übergebene URL
-    und zeigt pro Strategie ok/Status/Bytes. Damit sieht der Operator
-    auf einen Blick welche Pfade aus Render-IP funktionieren — relevant
-    nachdem ENV-Vars (SCRAPINGBEE_API_KEY, SCRAPERAPI_KEY) gesetzt wurden.
+    """Live-Diagnose: testet alle Fetch-Strategien + erkennt SPA-Skeleton-
+    Responses (die zeigen ok=true aber tatsächlich keinen Content liefern).
 
     User 2026-05-28: 'sag einfach was ich bei render einstellen muss'.
-    Dieser Endpoint beantwortet das pro Strategie:
-      - direct        → braucht KEINE ENV-Var, aber oft blockiert
-      - cloudscraper  → braucht KEINE ENV-Var, oft blockiert
-      - jina          → KEIN Key nötig (gratis, sofort)
-      - scrapingbee   → braucht SCRAPINGBEE_API_KEY (1000/Mon free)
-      - scraperapi    → braucht SCRAPERAPI_KEY (1000/Mon free)
-      - archive.org   → KEIN Key, langsam
+    Strategien:
+      - direct          → KEINE ENV-Var, oft blockt oder liefert SPA-Skeleton
+      - cloudscraper    → KEINE ENV-Var, oft liefert SPA-Skeleton
+      - jina            → KEIN Key nötig (gratis); rendert JS partial
+      - firecrawl       → braucht FIRECRAWL_API_KEY (500/Mon, 1 cr/render)
+      - scrapingbee     → braucht SCRAPINGBEE_API_KEY (1000/Mon, ~5 cr/render)
+      - scraperapi      → braucht SCRAPERAPI_KEY (1000/Mon, ~10 cr/render)
+      - archive.org     → KEIN Key, oft veraltet
     """
     out = {"url": url, "render_region": os.getenv("RENDER_REGION", "unknown"),
            "env_keys": {
+               "FIRECRAWL_API_KEY":   bool(os.getenv("FIRECRAWL_API_KEY")),
                "SCRAPINGBEE_API_KEY": bool(os.getenv("SCRAPINGBEE_API_KEY")),
                "SCRAPERAPI_KEY":      bool(os.getenv("SCRAPERAPI_KEY")),
                "BARRIKADE_USER":      bool(os.getenv("BARRIKADE_USER")),
@@ -11419,6 +11483,15 @@ async def admin_scrape_test(url: str = "https://barrikade.info/article/7490",
            "strategies": []}
     import time as _t
 
+    def _is_spa_skeleton(body):
+        """Erkennt Angular-SPA-Skeleton ohne echten Article-Content."""
+        if not body or len(body) > 80000:
+            return False
+        head = body[:1000].lower()
+        return ("data-beasties-container" in head or
+                "<app-root" in head or
+                ('<base href="/"' in head and "<title>barrikade</title>" in head))
+
     def _measure(label, fn):
         t0 = _t.monotonic()
         try:
@@ -11426,10 +11499,16 @@ async def admin_scrape_test(url: str = "https://barrikade.info/article/7490",
             dt = round((_t.monotonic() - t0) * 1000)
             if result and len(result) > 200:
                 preview = re.sub(r'\s+', ' ', result[:160]).strip()
-                out["strategies"].append({
-                    "label": label, "ok": True, "len": len(result),
-                    "ms": dt, "preview": preview,
-                })
+                is_skel = _is_spa_skeleton(result)
+                entry = {
+                    "label": label,
+                    "ok": True,
+                    "delivers_content": not is_skel,
+                    "len": len(result), "ms": dt, "preview": preview,
+                }
+                if is_skel:
+                    entry["warning"] = "SPA-Skeleton (kein Article-Content)"
+                out["strategies"].append(entry)
             else:
                 out["strategies"].append({
                     "label": label, "ok": False, "ms": dt,
@@ -11446,13 +11525,126 @@ async def admin_scrape_test(url: str = "https://barrikade.info/article/7490",
                                        headers={"User-Agent": "Mozilla/5.0"}).text)
     _measure("cloudscraper",        lambda: _fetch_via_cloudscraper(url, 15))
     _measure("jina (r.jina.ai)",    lambda: _fetch_via_jina_reader(url, 20))
-    _measure("scrapingbee",         lambda: _fetch_via_scrapingbee(url, 25))
-    _measure("scraperapi",          lambda: _fetch_via_scraperapi(url, 25))
+    _measure("firecrawl",           lambda: _fetch_via_firecrawl(url, 60))
+    _measure("scrapingbee",         lambda: _fetch_via_scrapingbee(url, 45))
+    _measure("scraperapi",          lambda: _fetch_via_scraperapi(url, 45))
     _measure("archive.org mirror",  lambda: _fetch_via_archive(url, 15))
 
     out["working_count"] = sum(1 for s in out["strategies"] if s.get("ok"))
+    # NEU: zähle nur Strategien die ECHTEN Content liefern (kein SPA-Skel)
+    out["content_delivering"] = [s["label"] for s in out["strategies"]
+                                 if s.get("ok") and s.get("delivers_content")]
     out["working_strategies"] = [s["label"] for s in out["strategies"] if s.get("ok")]
     return JSONResponse(out)
+
+
+@app.get("/admin/api/raw-fetch")
+async def admin_raw_fetch(url: str, _=Depends(require_admin)):
+    """Liefert das volle HTML/Body einer URL zurück (max 60kb) — für die
+    Diagnose von SPA-Seiten oder unbekannten Layouts. User-Hinweis
+    2026-05-28: barrikade.info ist SPA (Angular, data-beasties-container).
+    Wir müssen sehen WAS die SPA an statischem HTML liefert, um den
+    API-Endpoint zu finden."""
+    try:
+        body = fetch(url, timeout=25)
+        if not body:
+            return JSONResponse({"ok": False, "reason": "empty"})
+        # Search for SPA-API-Hints im Body
+        api_hints = []
+        for pattern, label in [
+            (r'"apiUrl"\s*:\s*"([^"]+)"',          "apiUrl-literal"),
+            (r'"baseUrl"\s*:\s*"([^"]+)"',          "baseUrl-literal"),
+            (r'fetch\(["\']([^"\']*/api/[^"\']+)',   "fetch-call"),
+            (r'window\.__INITIAL_STATE__\s*=\s*({)', "initial-state"),
+            (r'application/ld\+json[^>]*>\s*({)',    "json-ld"),
+            (r'/api/v?\d*/articles?/\d+',            "api-articles-path"),
+            (r'/api/v?\d*/posts?/\d+',               "api-posts-path"),
+            (r'environment\.apiUrl\s*=\s*["\']([^"\']+)', "env-apiUrl"),
+            (r'src=["\']([^"\']*runtime\.[a-f0-9]+\.js)', "runtime-js"),
+            (r'src=["\']([^"\']*main\.[a-f0-9]+\.js)',    "main-bundle-js"),
+        ]:
+            for m in re.finditer(pattern, body):
+                api_hints.append({"label": label, "hit": m.group(0)[:160]})
+                if len(api_hints) > 30: break
+            if len(api_hints) > 30: break
+
+        # OG-Meta + canonical
+        og_url = re.search(r'<meta\s+property=["\']og:url["\']\s+content=["\']([^"\']+)', body)
+        canonical = re.search(r'<link\s+rel=["\']canonical["\']\s+href=["\']([^"\']+)', body)
+
+        return JSONResponse({
+            "ok": True,
+            "url": url,
+            "length": len(body),
+            "head_excerpt": body[:600],
+            "mid_excerpt":  body[len(body)//2 : len(body)//2 + 400],
+            "tail_excerpt": body[-400:],
+            "api_hints": api_hints,
+            "og_url": og_url.group(1) if og_url else None,
+            "canonical": canonical.group(1) if canonical else None,
+            "looks_like_spa": ("data-beasties-container" in body or
+                               "<app-root" in body or
+                               "id=\"root\"" in body or
+                               '<base href="/"' in body),
+        })
+    except Exception as e:
+        return JSONResponse({"ok": False, "exc": str(e)[:300]})
+
+
+# ── SPA-API-Discovery: barrikade.info ist eine Angular-SPA ──────────────
+# Statisches HTML ist nur Skeleton. Echte Artikel-Daten werden per
+# JS-Fetch von einem JSON-API geladen. Wir probieren bekannte SPA-API-
+# Patterns ab. Die erste 200er-JSON-Response gewinnt.
+_BARRIKADE_API_PATTERNS = [
+    "https://barrikade.info/api/articles/{aid}",
+    "https://barrikade.info/api/v1/articles/{aid}",
+    "https://barrikade.info/api/v2/articles/{aid}",
+    "https://barrikade.info/api/v1/posts/{aid}",
+    "https://barrikade.info/api/posts/{aid}",
+    "https://barrikade.info/api/article/{aid}",
+    "https://barrikade.info/api/article?id={aid}",
+    "https://barrikade.info/api/v1/article/{aid}",
+    "https://barrikade.info/wp-json/wp/v2/posts/{aid}",  # WP-API
+    "https://barrikade.info/api/items/{aid}",
+    "https://beta.barrikade.info/api/articles/{aid}",
+    "https://beta.barrikade.info/api/v1/articles/{aid}",
+    "https://beta.barrikade.info/api/v2/articles/{aid}",
+    "https://beta.barrikade.info/api/posts/{aid}",
+    "https://beta.barrikade.info/api/article/{aid}",
+]
+
+def _barrikade_fetch_via_spa_api(aid):
+    """Probiert bekannte SPA-API-Patterns für eine Article-ID.
+    Returns (api_url, json_dict) bei Treffer oder None.
+
+    Erkennt JSON-Response am Content-Type oder am Body-Prefix."""
+    for pattern in _BARRIKADE_API_PATTERNS:
+        api_url = pattern.format(aid=aid)
+        try:
+            r = requests.get(api_url, timeout=10, headers={
+                "User-Agent": "Mozilla/5.0 LEX-EUROPE-Mirror/2.0",
+                "Accept": "application/json, text/plain, */*",
+            }, allow_redirects=True)
+            if r.status_code != 200: continue
+            # JSON-Body
+            ct = r.headers.get("Content-Type", "")
+            body = r.text.strip()
+            if "application/json" in ct or body.startswith(("{", "[")):
+                try:
+                    data = r.json()
+                    # Heuristik: muss eine plausible "article"-Struktur sein
+                    if isinstance(data, dict) and (
+                        data.get("title") or data.get("body") or
+                        data.get("content") or data.get("text") or
+                        data.get("article")):
+                        log.info(f"barrikade SPA-API HIT [{api_url}]")
+                        return (api_url, data)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    return None
+
 
 @app.get("/admin/api/export-csv")
 async def export_csv(_=Depends(require_admin)):
