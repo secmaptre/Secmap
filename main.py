@@ -813,6 +813,50 @@ def date_from_url(url):
         except: pass
     return None
 
+def date_from_markdown(md, max_years_back=10):
+    """Extrahiere Datum aus Article-Markdown. Barrikade-Format:
+    "21.12. 2024" oder "21.12.2024" oder "21. Dezember 2024".
+    User-Befund 2026-05-29: alle Artikel landeten in 2026 weil URL
+    kein Datum hat → fallback war datetime.now(). Jetzt: erst Markdown
+    durchsuchen, dann URL, dann today."""
+    if not md:
+        return None
+    now_year = datetime.now().year
+    # Format 1: "21.12.2024" oder "21.12. 2024" oder "21. 12. 2024"
+    for m in re.finditer(r"\b(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})\b", md[:3000]):
+        try:
+            d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            if 1 <= d <= 31 and 1 <= mo <= 12 and (now_year - max_years_back) <= y <= now_year + 1:
+                return datetime(y, mo, d).strftime("%Y-%m-%d")
+        except Exception:
+            continue
+    # Format 2: "2024-12-21" ISO
+    for m in re.finditer(r"\b(20\d{2})-(\d{1,2})-(\d{1,2})\b", md[:3000]):
+        try:
+            y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            if 1 <= d <= 31 and 1 <= mo <= 12:
+                return datetime(y, mo, d).strftime("%Y-%m-%d")
+        except Exception:
+            continue
+    # Format 3: "21. Dezember 2024"
+    months_de = {"januar":1,"februar":2,"märz":3,"maerz":3,"april":4,"mai":5,
+                 "juni":6,"juli":7,"august":8,"september":9,"oktober":10,
+                 "november":11,"dezember":12}
+    for m in re.finditer(
+        r"\b(\d{1,2})\.\s+(januar|februar|märz|maerz|april|mai|juni|juli|"
+        r"august|september|oktober|november|dezember)\s+(\d{4})\b",
+        md[:3000], re.IGNORECASE,
+    ):
+        try:
+            d = int(m.group(1))
+            mo = months_de[m.group(2).lower()]
+            y = int(m.group(3))
+            if 1 <= d <= 31 and (now_year - max_years_back) <= y <= now_year + 1:
+                return datetime(y, mo, d).strftime("%Y-%m-%d")
+        except Exception:
+            continue
+    return None
+
 # ── GEOCODING with city fallback ──────────────────────────────────
 CITY_FALLBACK = {
     # Deutschland — Großstädte + relevante Mittelstädte
@@ -5123,6 +5167,30 @@ def backfill_summaries_and_flags():
         log.info(f"backfill_summaries_and_flags: updated {n} rows (PII + tier + target)")
     return n
 
+def backfill_barrikade_dates():
+    """User-Befund 2026-05-29: alle Firecrawl-gesaveden Barrikade-Artikel
+    landeten in 2026 weil date_from_url(/article/<id>) None liefert →
+    save_incident defaulted auf datetime.now().
+    Backfill: für alle barrikade.info-Einträge mit date >= heute - 60d
+    versuche date_from_markdown(description). Wenn extrahiert,
+    update. Idempotent: Eintrag mit korrekt erkanntem Datum wird nicht
+    nochmal angefasst."""
+    rows = db.execute(
+        "SELECT id, date, description FROM incidents "
+        "WHERE source='barrikade.info' AND date >= date('now','-60 day') "
+        "AND description IS NOT NULL"
+    ).fetchall()
+    n = 0
+    for r in rows:
+        new_d = date_from_markdown(r["description"])
+        if new_d and new_d != r["date"]:
+            db.execute("UPDATE incidents SET date=? WHERE id=?", (new_d, r["id"]))
+            n += 1
+    if n:
+        db.commit()
+        log.info(f"backfill_barrikade_dates: updated {n} barrikade incidents")
+    return n
+
 def backfill_enrichment():
     """Backfill severity, actors, confidence for existing records that have 0 values."""
     rows = db.execute(
@@ -5415,10 +5483,12 @@ def crawl_barrikade_range(start_id, stop_id):
         try:
             ai = smart_classify(full)
             if ai:
-                if save_incident(ai, full, "barrikade.info", url_canon,
-                                 date_from_url(url_canon)):
+                # Datum aus Markdown extrahieren (URL hat keins).
+                # User-Befund 2026-05-29: alles landete in 2026.
+                art_date = date_from_markdown(full) or date_from_url(url_canon)
+                if save_incident(ai, full, "barrikade.info", url_canon, art_date):
                     inserted += 1
-                    log.info(f"barrikade {aid}: SAVED ({ai.get('kategorie','?')} / {ai.get('ort','?')})")
+                    log.info(f"barrikade {aid}: SAVED ({ai.get('kategorie','?')} / {ai.get('ort','?')} / {art_date or 'no-date'})")
         except Exception as e:
             classify_errors += 1
             log.info(f"barrikade {aid} classify err: {str(e)[:120]}")
@@ -10320,8 +10390,8 @@ async def admin_firecrawl_import(request: Request, _=Depends(require_admin)):
             if not ai:
                 out.append({"id": aid, "ok": False, "reason": "classify_returned_none"})
                 continue
-            saved = save_incident(ai, md, "barrikade.info", url_canon,
-                                  date_from_url(url_canon))
+            art_date = date_from_markdown(md) or date_from_url(url_canon)
+            saved = save_incident(ai, md, "barrikade.info", url_canon, art_date)
             if saved:
                 inserted += 1
                 out.append({"id": aid, "ok": True, "saved": True,
@@ -10473,6 +10543,7 @@ async def startup():
     # the flag/summary backfill so is_high_risk sees the real severity.
     backfill_enrichment()
     backfill_summaries_and_flags()
+    backfill_barrikade_dates()
     # FTS5-Backfill: ein leerer Index wird einmal aus incidents repopuliert.
     backfill_fts_if_empty()
     # Strafverfolgungs-Status-Backfill: trägt bekannte Aktenzeichen
