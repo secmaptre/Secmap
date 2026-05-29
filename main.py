@@ -7100,27 +7100,44 @@ def run_historical(reset=False):
     _hist_run[0] = True
     log.info("══ HISTORICAL START ══")
     try:
-        # Mark indymedia historical as done — de.indymedia.org offline since 2017
+        # Indymedia historical: site is offline since 2017 — mark done.
         if not meta_get("hist_im_done"):
             meta_set("hist_im_done", datetime.now().isoformat())
             log.info("Indymedia hist: skipped (site offline since 2017)")
 
-        # Barrikade: crawl 800 IDs per invocation, save progress
+        # Barrikade: 1500 IDs pro Tick + Fortschritt-Logging mit ETA.
+        # User 2026-05-28: "automatisiert damit alle Artikel gecrawlt
+        # werden nicht nur die ersten 500". Mit Starter-Plan (24/7) und
+        # 30-min-Tick erreichen wir ID=1 in ~5-7 Stunden ab Live-ID 7570.
         DONE="hist_b_done"; CURR="hist_b_curr"
+        CHUNK_SIZE = 1500
         if not meta_get(DONE):
             if not meta_get(CURR):
                 mx = barrikade_latest_id()
                 meta_set("hist_b_max", mx)
                 meta_set(CURR, mx)
             curr = int(meta_get(CURR))
-            stop = max(1, curr - 800)
-            log.info(f"Barrikade hist: {curr}→{stop}")
+            stop = max(1, curr - CHUNK_SIZE)
+            mx_total = int(meta_get("hist_b_max") or curr)
+            done_so_far = max(0, mx_total - curr)
+            pct = round(done_so_far / max(mx_total, 1) * 100, 1)
+            log.info(f"Barrikade hist: {curr}→{stop} (chunk {CHUNK_SIZE}; "
+                     f"progress {done_so_far}/{mx_total} = {pct}%)")
             n = crawl_barrikade_range(curr, stop)
             meta_set(CURR, stop - 1)
+            # Insertion-Statistik mit fortlaufendem Total
+            tot = int(meta_get("hist_b_total_inserted") or 0) + n
+            meta_set("hist_b_total_inserted", tot)
             if stop <= 1:
                 meta_set(DONE, datetime.now().isoformat())
-                log.info("Barrikade hist: COMPLETE")
-            log.info(f"Barrikade hist: +{n} (remaining: {stop-1} IDs)")
+                log.info("Barrikade hist: COMPLETE — full ID-space covered")
+            else:
+                # ETA berechnen: bei aktuellem chunk_size + 30 min Tick
+                remaining = stop - 1
+                ticks_left = max(1, (remaining + CHUNK_SIZE - 1) // CHUNK_SIZE)
+                eta_h = round(ticks_left * 0.5, 1)  # 30 min = 0.5h
+                log.info(f"Barrikade hist: +{n} (total inserted={tot}; "
+                         f"remaining={remaining}; ETA ~{eta_h}h with current tick rate)")
         else:
             log.info("Barrikade hist: already complete")
 
@@ -11310,6 +11327,65 @@ async def admin_crawler_barrikade_run(bg: BackgroundTasks, _=Depends(require_adm
     return JSONResponse({"ok": True, "status": "Discovery-Run gestartet"})
 
 
+@app.get("/admin/api/hist-status")
+async def admin_hist_status(_=Depends(require_admin)):
+    """Status des automatischen Full-Sweep:
+       - Aktueller ID-Stand
+       - Bisher gecrawlte IDs + insertion-Total
+       - ETA bei aktueller Tick-Rate
+       - Live/Done-Flag
+    User 2026-05-28: "automatisiert damit alle Artikel gecrawlt werden".
+    Damit man sofort sieht ob der Sweep läuft und wie weit er ist."""
+    is_done = bool(meta_get("hist_b_done"))
+    curr = int(meta_get("hist_b_curr") or 0)
+    mx   = int(meta_get("hist_b_max") or 0)
+    tot  = int(meta_get("hist_b_total_inserted") or 0)
+    done_ids = max(0, mx - curr)
+    pct = round(done_ids / max(mx, 1) * 100, 1) if mx else 0
+    # Aktuelle barrikade-Artikel in der DB als Sanity-Check
+    db_count = db.execute(
+        "SELECT COUNT(*) FROM incidents WHERE source LIKE '%barrikade.info%'"
+    ).fetchone()[0]
+    return JSONResponse({
+        "is_done":         is_done,
+        "done_timestamp":  meta_get("hist_b_done") if is_done else None,
+        "id_max":          mx,
+        "id_current":      curr,
+        "ids_done":        done_ids,
+        "progress_pct":    pct,
+        "remaining_ids":   max(0, curr),
+        "total_inserted":  tot,
+        "db_barrikade_count": db_count,
+        "running":         _hist_run[0],
+        "tick_interval_min": 30,
+        "tick_chunk_size":   1500,
+        "eta_hours":       round(curr / 3000, 1) if curr > 0 else 0,
+    })
+
+
+@app.post("/admin/api/hist-reset")
+async def admin_hist_reset(_=Depends(require_admin)):
+    """Reset historical state — beginnt den vollen Sweep neu von der
+    aktuellen latest_id aus. Hash-Dedup verhindert Doppel-Einträge.
+    Wichtig wenn ENV-Vars (FIRECRAWL/SCRAPINGBEE/SCRAPERAPI) NEU
+    gesetzt wurden und man den kompletten ID-Raum nochmal scannen
+    will mit den jetzt verfügbaren JS-Render-Services."""
+    for k in ("hist_b_done","hist_b_curr","hist_b_max",
+              "hist_b_total_inserted","b_live_max"):
+        meta_del(k)
+    log.info("Historical state reset by admin")
+    return JSONResponse({"ok": True, "reset": True,
+                         "note": "Next auto_hist tick (~30 min) startet bei latest_id"})
+
+
+@app.post("/admin/api/hist-trigger")
+async def admin_hist_trigger(bg: BackgroundTasks, _=Depends(require_admin)):
+    """Triggert sofort einen run_historical()-Tick. Nützlich wenn man
+    nicht 30 min auf den Scheduler warten will."""
+    bg.add_task(run_historical, False)
+    return JSONResponse({"ok": True, "triggered": "run_historical"})
+
+
 @app.post("/admin/api/crawler/barrikade-deep-crawl")
 async def admin_crawler_barrikade_deep(bg: BackgroundTasks, _=Depends(require_admin)):
     """Commit AC: Voller historischer Sweep — durchläuft den gesamten
@@ -11810,15 +11886,18 @@ async def startup():
     except Exception as e:
         log.warning(f"detect_clusters at startup failed: {e}")
     sched = BackgroundScheduler(daemon=True, timezone="Europe/Zurich")
-    # Main crawler: every 12 hours (cost-efficient)
-    sched.add_job(run_crawler, "interval", hours=12, id="main",
+    # Main crawler: every 6 hours (auf Starter-Plan empfohlen — 24/7 läuft)
+    sched.add_job(run_crawler, "interval", hours=6, id="main",
                   next_run_time=datetime.now() + timedelta(seconds=20))
-    # Auto-continue historical barrikade crawl every 45 min until complete
-    sched.add_job(auto_hist, "interval", minutes=45, id="auto_hist",
+    # Auto-continue historical barrikade crawl alle 30 min bis fertig.
+    # User 2026-05-28: "automatisiert damit alle Artikel gecrawlt werden".
+    # Mit 1500 IDs/Tick × 30 min = 3000 IDs/Stunde = 72k IDs/Tag.
+    # ID-Raum 7570 → 1 = ~5 Stunden Vollabdeckung auf Starter-Plan ($7/Mo).
+    sched.add_job(auto_hist, "interval", minutes=30, id="auto_hist",
                   next_run_time=datetime.now() + timedelta(seconds=90))
     # Re-detect Frühwarn-Cluster weekly. Cheap query — runs in milliseconds.
     sched.add_job(detect_clusters, "interval", days=7, id="early_warning",
                   next_run_time=datetime.now() + timedelta(hours=6))
     sched.start()
-    log.info(f"LEX EUROPE — {len(RSS_FEEDS)} RSS + {len(GNEWS_Q)} GNews — crawl in 20s | hist auto-continue every 45min")
+    log.info(f"LEX EUROPE — {len(RSS_FEEDS)} RSS + {len(GNEWS_Q)} GNews — crawl in 20s | hist auto-continue every 30min")
 
