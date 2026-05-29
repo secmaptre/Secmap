@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 from urllib.parse import urljoin, quote_plus
 import xml.etree.ElementTree as ET
 import requests
+from lex.http_util import build_conditional_headers, parse_retry_after
+from lex.budget import month_key, over_budget
 from bs4 import BeautifulSoup
 import sqlite3
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -266,6 +268,17 @@ def get_db():
     )''')
     c.execute("CREATE INDEX IF NOT EXISTS idx_sh_active ON source_health(active)")
 
+    # ── CONDITIONAL-GET CACHE (M3 delta scraping) ──────────────────
+    # Stores the ETag / Last-Modified validators per feed URL so the next
+    # crawl can send If-None-Match / If-Modified-Since and skip unchanged
+    # feeds on a 304 Not Modified — less bandwidth, fewer bans, faster cycles.
+    c.execute('''CREATE TABLE IF NOT EXISTS conditional_get (
+        url TEXT PRIMARY KEY,
+        etag TEXT DEFAULT '',
+        last_modified TEXT DEFAULT '',
+        updated TEXT DEFAULT ''
+    )''')
+
     # ── FTS5 FULL-TEXT SEARCH ──────────────────────────────────────
     # Virtuelle Tabelle deckt Beschreibung + Summary + Ort + Aktoren ab.
     # Triggers halten sie automatisch synchron — keine separate Indexing-
@@ -461,6 +474,29 @@ def _fetch_via_jina_reader(url, timeout=25):
         log.info(f"jina-reader FAIL {url}: {str(e)[:160]}")
     return None
 
+# ── PAID-FETCHER BUDGET GUARD (M2) ───────────────────────────────────
+# Default monthly caps mirror the free tiers; override via env
+# (FIRECRAWL_MONTHLY_CAP, SCRAPINGBEE_MONTHLY_CAP, SCRAPERAPI_MONTHLY_CAP).
+_PAID_CAPS = {"FIRECRAWL": 500, "SCRAPINGBEE": 1000, "SCRAPERAPI": 1000}
+_BUDGET_WARNED = set()
+
+def _budget_allow(provider):
+    """Return True if a paid call to `provider` is within this month's cap,
+    counting the call. When the cap is hit, log once per provider/month and
+    return False so the caller skips the paid fetch (no runaway cost)."""
+    cap = int(os.getenv(f"{provider}_MONTHLY_CAP", _PAID_CAPS.get(provider, 0)))
+    mk = month_key()
+    key = f"budget:{provider}:{mk}"
+    used = int(meta_get(key) or 0)
+    if over_budget(used, cap):
+        warn_key = f"{provider}:{mk}"
+        if warn_key not in _BUDGET_WARNED:
+            log.warning(f"paid-fetcher budget reached: {provider} {used}/{cap} for {mk} — skipping paid calls")
+            _BUDGET_WARNED.add(warn_key)
+        return False
+    meta_set(key, str(used + 1))
+    return True
+
 def _fetch_via_scrapingbee(url, timeout=45):
     """ScrapingBee API mit JS-Rendering — für SPAs wie barrikade.info
     (Angular). Benötigt SCRAPINGBEE_API_KEY. 1000 free credits/Monat,
@@ -468,6 +504,8 @@ def _fetch_via_scrapingbee(url, timeout=45):
     Doku: https://www.scrapingbee.com/documentation/"""
     key = os.getenv("SCRAPINGBEE_API_KEY", "").strip()
     if not key:
+        return None
+    if not _budget_allow("SCRAPINGBEE"):
         return None
     try:
         r = requests.get(
@@ -496,6 +534,8 @@ def _fetch_via_scraperapi(url, timeout=45):
     ~10 credits = ~100 renders/Monat."""
     key = os.getenv("SCRAPERAPI_KEY", "").strip()
     if not key:
+        return None
+    if not _budget_allow("SCRAPERAPI"):
         return None
     try:
         r = requests.get(
@@ -526,6 +566,8 @@ def _fetch_via_firecrawl(url, timeout=60):
     Doku: https://docs.firecrawl.dev/api-reference/endpoint/scrape"""
     key = os.getenv("FIRECRAWL_API_KEY", "").strip()
     if not key:
+        return None
+    if not _budget_allow("FIRECRAWL"):
         return None
     try:
         r = requests.post(
@@ -626,6 +668,7 @@ def fetch(url, timeout=25):
     last_err = None
     last_status = 0
     last_excerpt = ""
+    retry_after_hint = None
     for attempt in range(3):
         try:
             # _safe_get vermeidet Redirects auf blocked Hosts wie
@@ -647,13 +690,21 @@ def fetch(url, timeout=25):
                         r = r2
                         break
             last_excerpt = (r.text or "")[:200].replace("\n", " ")
+            # M2: capture a server-provided cool-down before raise_for_status.
+            if r.status_code in (429, 503):
+                retry_after_hint = parse_retry_after(r.headers.get("Retry-After"))
             r.raise_for_status()
             return r.text
         except Exception as e:
             last_err = e
             if attempt == 2:
                 break
-            time.sleep(2 ** attempt)
+            # M2 resilience: if the server told us how long to wait (429/503
+            # Retry-After), honour it (capped at 30s) instead of blind backoff.
+            delay = 2 ** attempt
+            if retry_after_hint is not None:
+                delay = min(retry_after_hint, 30)
+            time.sleep(delay)
 
     # ── Fallback 2: cloudscraper für nicht-CF-Hosts ──────────────
     if last_status in (403, 429, 503) and _HAS_CLOUDSCRAPER:
@@ -4872,6 +4923,8 @@ def _firecrawl_article(aid):
     key = os.getenv("FIRECRAWL_API_KEY", "").strip()
     if not key:
         return None
+    if not _budget_allow("FIRECRAWL"):
+        return None
     url = f"https://barrikade.info/article/{aid}"
     try:
         r = requests.post(
@@ -5081,6 +5134,10 @@ def crawl_indymedia_feed():
         ("untergrund-blättle.ch",   "https://www.untergrund-blaettle.ch/rss.xml"),
         ("contraste.org",           "https://www.contraste.org/feed/"),
         ("autonomes-zentrum.org",   "https://www.az-koeln.org/feed/"),
+        # ── FR — Lyon scene aggregator (user request). SPIP backend feed;
+        # low confidence (=2), country auto-detected via COUNTRY_KEYWORDS
+        # (lyon/france). All entries pass the FP gate + doxxing sanitization.
+        ("rebellyon.info",          "https://rebellyon.info/spip.php?page=backend"),
         # ── englischsprachig (UK / US / international) ──
         ("freedomnews.org.uk",      "https://freedomnews.org.uk/feed/"),
         ("libcom.org",              "https://libcom.org/rss.xml"),
@@ -5464,13 +5521,60 @@ def record_crawl_result(source: str, url: str, ok: bool, items: int = 0,
         )
     db.commit()
 
+def fetch_feed_conditional(feed_url, timeout=18):
+    """Conditional GET of an RSS feed (M3 delta scraping).
+
+    Sends If-None-Match / If-Modified-Since from the stored validators. Returns
+    a tuple ``(text, not_modified)``:
+      * (xml, False) — feed changed (or first fetch); validators are persisted.
+      * (None, True) — server replied 304 Not Modified; caller should skip.
+      * (None, False) — conditional path failed; caller falls back to fetch().
+
+    Also honours a Retry-After header on 429/503 by recording a short cool-down
+    in source_health is left to the caller; here we just surface the signal.
+    """
+    row = db.execute(
+        "SELECT etag, last_modified FROM conditional_get WHERE url=?", (feed_url,)
+    ).fetchone()
+    headers = build_conditional_headers(
+        row["etag"] if row else "", row["last_modified"] if row else ""
+    )
+    try:
+        r = _safe_get(session, feed_url, timeout, headers=headers)
+    except Exception:
+        return (None, False)
+    if r.status_code == 304:
+        return (None, True)
+    if r.status_code == 200 and r.text:
+        et = r.headers.get("ETag", "") or ""
+        lm = r.headers.get("Last-Modified", "") or ""
+        if et or lm:
+            db.execute(
+                "INSERT OR REPLACE INTO conditional_get (url, etag, last_modified, updated) "
+                "VALUES (?,?,?,?)",
+                (feed_url, et, lm, datetime.now().isoformat(timespec="seconds"))
+            )
+            db.commit()
+        return (r.text, False)
+    # Non-200/304 (incl. 429/503): let the caller's robust fetch() chain handle it.
+    return (None, False)
+
+
 def crawl_rss_feed(source, feed_url, max_items=15):
     if should_skip_feed(source):
         return 0
     inserted = 0
     err_msg  = ""
     try:
-        xml   = fetch(feed_url, timeout=18)
+        # M3 delta: conditional GET first. 304 → feed unchanged, skip the whole
+        # parse/classify pass for this cycle. Otherwise fall back to the robust
+        # multi-stage fetch() (cloudscraper/jina/etc.).
+        xml, not_modified = fetch_feed_conditional(feed_url, timeout=18)
+        if not_modified:
+            record_crawl_result(source, feed_url, ok=True, items=0)
+            return 0
+        if not xml:
+            xml = fetch(feed_url, timeout=18)
         items = parse_rss(xml)
         hits  = 0
         for title, link, desc, pub in items:
@@ -9492,94 +9596,6 @@ async def admin_stop(_=Depends(require_admin)):
 async def admin_hist(bg: BackgroundTasks, reset: bool = False, _=Depends(require_admin)):
     bg.add_task(run_historical, reset)
     return JSONResponse({"status": "Historisch gestartet"})
-
-@app.post("/admin/api/barrikade-test")
-async def admin_barrikade_test(_=Depends(require_admin)):
-    """Volle Diagnose ALLER Barrikade-Discovery-Strategien.
-
-    Testet parallel:
-      1. SPIP-Auth-Login (Editorial-Backend)
-      2. Standard-Discovery (RSS/Sitemap auf barrikade.info)
-      3. SPIP-Public-Endpoints (?page=backend, ?page=plan auf beiden Domains)
-      4. Search-Engine-Discovery (DuckDuckGo + Bing)
-      5. Wayback Machine (für eine Test-URL)
-
-    Liefert pro Strategie: success/fail, URL-Anzahl, Sample-URLs,
-    detaillierte Fehlermeldungen."""
-    diag = {"ts": datetime.now().isoformat(), "env": {
-        "BARRIKADE_USER_set": bool(os.getenv("BARRIKADE_USER")),
-        "BARRIKADE_PASS_set": bool(os.getenv("BARRIKADE_PASS")),
-        "BARRIKADE_LOGIN_URL": os.getenv("BARRIKADE_LOGIN_URL","(default)"),
-        "BARRIKADE_BASE":      os.getenv("BARRIKADE_BASE","(default)"),
-    }}
-
-    # 1) SPIP Auth (nur wenn ENV gesetzt)
-    if os.getenv("BARRIKADE_USER") and os.getenv("BARRIKADE_PASS"):
-        sess = _barrikade_login_session(force_refresh=True, capture_diag=True)
-        auth = dict(_BK_LAST_DIAG)
-        auth["session_acquired"] = sess is not None
-        if sess is not None:
-            try:
-                urls = _barrikade_authed_discover_urls(sess)
-                auth["discovery"] = {"urls_found": len(urls), "sample": urls[:5]}
-            except Exception as e:
-                auth["discovery"] = {"error": str(e)[:300]}
-        diag["1_spip_auth"] = auth
-    else:
-        diag["1_spip_auth"] = {"skipped": "ENV BARRIKADE_USER/PASS nicht gesetzt"}
-
-    # 2) Standard-Discovery (RSS/Sitemap) — wrapped to limit time
-    try:
-        # _barrikade_discover_urls trial-uses 10 RSS-Pfade mit timeout=12 each
-        # = max ~120s worst case. In production wo Pfade schnell antworten ist
-        # das OK, hier wrappen wir mit eigenem Timeout via signal-Alarm wäre
-        # zu aggressiv — wir akzeptieren dass diese Strategie länger braucht.
-        import threading
-        result = {"urls": [], "done": False, "err": None}
-        def _run():
-            try:
-                result["urls"] = _barrikade_discover_urls()
-            except Exception as e:
-                result["err"] = str(e)[:300]
-            result["done"] = True
-        th = threading.Thread(target=_run, daemon=True)
-        th.start()
-        th.join(timeout=25)  # 25s hard cap
-        if result["err"]:
-            diag["2_standard_discovery"] = {"error": result["err"]}
-        elif not result["done"]:
-            diag["2_standard_discovery"] = {"timeout": "25s exceeded", "partial_count": len(result["urls"])}
-        else:
-            diag["2_standard_discovery"] = {
-                "urls_found": len(result["urls"]),
-                "sample": result["urls"][:5],
-            }
-    except Exception as e:
-        diag["2_standard_discovery"] = {"error": str(e)[:300]}
-
-    # 3) SPIP-Public-Endpoints (15s budget)
-    try:
-        urls = _barrikade_spip_public_discover(max_results=20, per_request_timeout=4, overall_budget_s=15)
-        diag["3_spip_public"] = {
-            "urls_found": len(urls),
-            "sample": urls[:5],
-        }
-    except Exception as e:
-        diag["3_spip_public"] = {"error": str(e)[:300]}
-
-    # Aggregat: Wie viele Strategien funktionieren?
-    # (DDG/Bing/Wayback aus dem Default-Pfad entfernt — siehe Commit
-    # 2026-05-28 Wayback-Cleanup)
-    working = sum(1 for k in ("1_spip_auth","2_standard_discovery","3_spip_public")
-                  if k in diag and (
-                      diag[k].get("session_acquired") or
-                      (diag[k].get("urls_found",0) > 0) or
-                      diag[k].get("ok")
-                  ))
-    diag["working_strategies"] = working
-    diag["overall_ok"] = working >= 1
-
-    return JSONResponse(diag)
 
 @app.get("/admin/api/status")
 async def admin_status(_=Depends(require_admin)):

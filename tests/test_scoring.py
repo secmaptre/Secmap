@@ -70,6 +70,14 @@ class TestExtractActors:
         # "hammerbande" is a pattern alias for the publicly-prosecuted Lina E. complex.
         assert "Lina E. Netzwerk" in extract_actors("Prozess gegen die Hammerbande")
 
+    def test_antifa_ost_maps_to_lina_e_network(self):
+        # "Antifa Ost" is the formal designation of the same complex.
+        assert "Lina E. Netzwerk" in extract_actors("Urteil im Antifa-Ost-Verfahren")
+
+    def test_new_french_actors(self):
+        assert "Bure-Widerstand" in extract_actors("Räumung am Cigéo-Endlager")
+        assert "Tarnac-Komplex" in extract_actors("Der Tarnac-Prozess endete")
+
     def test_multiple_actors(self):
         out = extract_actors("Vulkangruppe und Rote Flora")
         assert "Vulkangruppe" in out

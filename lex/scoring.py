@@ -86,7 +86,11 @@ KNOWN_ACTORS = [
     ("Schwarzer Block",     [r"schwarzer\s+block", r"black\s+bloc"],           "act"),
     ("Rev. Zellen",         [r"revolutionäre\s+zellen", r"\brz\b"],            "act"),
     ("Letzte Generation",   [r"letzte\s+generation"],                          "endorse"),
-    ("Lina E. Netzwerk",    [r"\blina\s+e[\.\b]", r"hammerbande"],             "act"),
+    # "Antifa Ost" is the formal designation of the Lina-E./Hammerbande complex
+    # (OLG Dresden conviction 5/2023) — all aliases for one publicly-prosecuted
+    # network, kept as a single actor to avoid double-counting.
+    ("Lina E. Netzwerk",    [r"\blina\s+e[\.\b]", r"hammerbande",
+                              r"antifa[\s\-]?ost"],                              "act"),
     ("Rote Hilfe",          [r"rote\s+hilfe"],                                 "enable"),
     ("Antifa Leipzig",      [r"antifa\s+leipzig", r"connewitz"],               "endorse"),
     ("Autonome Gruppe",     [r"eine?\s+autonome\s+gruppe", r"autonome\s+zelle"], "act"),
@@ -169,6 +173,16 @@ KNOWN_ACTORS = [
     ("AntiFa Frankfurt",    [r"\bantifa\s+frankfurt\b"],                       "endorse"),
     ("AntiFa Hamburg",      [r"\bantifa\s+hamburg\b"],                         "endorse"),
     ("Black Bloc Lyon",     [r"\bblack[\s-]?bloc\s+lyon\b"],                   "act"),
+    # ── Weitere dokumentierte FR/DE-Strukturen (public record) ────────────
+    # Bure: Widerstand gegen das Atommüll-Endlager Cigéo; mehrere Verfahren
+    # nach Räumungen/Besetzungen (TGI Bar-le-Duc). endorse — Bewegung, nicht
+    # einzelne Täter.
+    ("Bure-Widerstand",     [r"\bcig[ée]o\b",
+                              r"\bbure\b\s+(?:atomm[üu]ll|nuklear|besetzung|widerstand)"], "endorse"),
+    # Tarnac: historischer FR-Komplex (SNCF-Sabotage 2008, Verfahren bis 2018).
+    ("Tarnac-Komplex",      [r"\btarnac\b"],                                    "enable"),
+    # Rebellyon-Umfeld (Lyon): Szene-Plattform/Aggregator, endorse-Layer.
+    ("Rebellyon-Umfeld",    [r"\brebellyon\b"],                                 "endorse"),
 ]
 
 ACTOR_TIER = {name: tier for name, _patterns, tier in KNOWN_ACTORS}
@@ -222,7 +236,7 @@ SOURCE_CONFIDENCE = {
     "barrikade.info": 2, "publish.barrikade.info": 2,
     "de.indymedia.org": 2, "nd-aktuell.de": 2,
     "jungle.world": 2, "gnews": 2, "labournet.de": 2, "woz.ch": 2,
-    "jungewelt.de": 2,
+    "jungewelt.de": 2, "rebellyon.info": 2,
     # Konfidenz 1 — Bewegungs-Outlets / Mailing-Listen-Archive
     "perspektive-online.net": 1, "radikal.news": 1, "klassegegenklasse.org": 1,
     "lists.riseup.net": 1,
