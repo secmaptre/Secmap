@@ -35,10 +35,16 @@ class TestRejected:
 
     def test_autonomous_vehicle_rejected(self):
         # "autonom" keyword false positive — self-driving tech, not autonomists.
-        # NB: the existing _FP pattern matches "autonomes Fahren" (the nominal
-        # form); the declined "autonomen Fahren" is a known minor gap left as-is
-        # in this verbatim extraction.
+        # Both nominal and declined forms must be caught now.
         assert is_false_positive("Studie zum autonomes Fahren von Lkw vorgestellt") is True
+        assert is_false_positive("Studie zum autonomen Fahren von Lkw vorgestellt") is True
+        assert is_false_positive("Ein autonomer Lkw fuhr durch die Stadt") is True
+
+    def test_autonomous_group_still_passes(self):
+        # The vehicle filter must NOT swallow real autonomist-scene language.
+        assert is_false_positive(
+            "Eine autonome Gruppe bekannte sich zum Brandanschlag in Leipzig"
+        ) is False
 
     def test_right_wing_perpetrator_rejected(self):
         # Scope is LEFT extremism only; right-wing-perpetrator stories are out.

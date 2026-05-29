@@ -2315,9 +2315,29 @@ function openDetail(i){
     descEl.appendChild(placeholder);
   }
 
-  // QUELLENVERTRAUEN-Section entfernt (User 2026-05-29: "QUELLENVERTRAUEN
-  // soll rausgenommen werden"). Confidence-Dots werden nicht mehr angezeigt.
-  document.getElementById('det-conf-row').innerHTML='';
+  // QUELLENVERTRAUEN-Dots entfernt (User 2026-05-29). Stattdessen M4-
+  // VERIFIZIERUNG: der Glaubwürdigkeits-Score (Quelle + Aktenzeichen +
+  // Verfahrensstand + Beweissicherung + Mehrfachquellen) — die belegbare
+  // Substanz eines Eintrags, nicht eine Quellen-Wertung.
+  const verRow=document.getElementById('det-conf-row');
+  const q=i.quality;
+  if(verRow && q && q.label){
+    const m=(VERIFY_META[q.label]||VERIFY_META['unverified']);
+    const c=q.components||{};
+    const parts=[];
+    if(i.case_ref && i.case_ref.trim()) parts.push(`Aktenzeichen: ${i.case_ref.trim()}`);
+    if(i.prosec_status && !['unknown','none'].includes((i.prosec_status||'').toLowerCase()))
+      parts.push(`Verfahren: ${i.prosec_status}`);
+    if((c.corroboration||0)>0) parts.push(`Mehrfachquellen (+${c.corroboration/10})`);
+    if((c.evidence||0)>0) parts.push('WARC-Beweissicherung');
+    verRow.innerHTML=
+      `<div class="det-section-lbl">VERIFIZIERUNG</div>`+
+      `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">`+
+        `<span class="ver-badge" style="color:${m.c};background:${m.bg};border-color:${m.c}">✓ ${m.t}</span>`+
+        `<span style="font-family:var(--mono);font-size:10px;color:var(--t2)">${q.score}/100</span>`+
+      `</div>`+
+      (parts.length?`<div style="font-family:var(--mono);font-size:9px;color:var(--t3);margin-top:5px;line-height:1.5">${parts.join(' · ')}</div>`:'');
+  } else if(verRow){ verRow.innerHTML=''; }
 
   const srcEl=document.getElementById('det-src');
   if(i.url&&i.url.startsWith('http')){

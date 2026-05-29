@@ -30,9 +30,12 @@ RSS_KEYWORDS = [
 # Reject articles that match RSS_KEYWORDS superficially but are NOT political extremism
 _FP = [
     # Technology / autonomous vehicles
-    r'\bautonomes?\s+(fahren|fahrzeuge?|autos?\b|lkw|pkw|bus\b|roboter|drohnen?|flugzeug)',
+    # adjective ending widened ([snrm]?) so declined forms — "autonomen Fahren",
+    # "autonomer LKW" — are caught too. Safe: anchored to tech/vehicle nouns,
+    # so it never touches "autonome Gruppe/Szene".
+    r'\bautonome[snrm]?\s+(fahren|fahrzeuge?|autos?\b|lkw|pkw|bus\b|roboter|drohnen?|flugzeug)',
     r'\bself.?driving\b', r'\bautopilot\b',
-    r'\bautonomes?\s+(parken|laden|liefern)',
+    r'\bautonome[snrm]?\s+(parken|laden|liefern)',
     r'\bautonome[srm]?\s+(mobilitäts?|verkehrs?|transport)',
     r'\belektroauto[s]?\b', r'\be-auto[s]?\b', r'\belektromobilit',
     r'\bdigitale\s+revolution\b',

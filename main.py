@@ -8155,6 +8155,12 @@ async def get_incidents(
             has_evidence=bool((d.get("evidence_path") or "").strip()),
             corroboration=d.get("corroboration") or 0,
         )
+        # M4: a T1 "act" published as fact but still unverified (single low-
+        # confidence source, no court anchor, no corroboration) belongs in a
+        # review queue. Surfaced as a derived flag — does not alter publication.
+        d["needs_review"] = bool(
+            d.get("tier") == "act" and d["quality"]["label"] == "unverified"
+        )
         out.append(d)
     return JSONResponse(out)
 
