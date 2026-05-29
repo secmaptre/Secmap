@@ -1446,6 +1446,15 @@ button:focus-visible, a:focus-visible{
             <button class="sevbtn" id="sevbtn-5" onclick="setSevMin(5)" style="color:#dc4555;border-color:#dc4555" title="Nur Schwere 5">5</button>
           </div>
         </div>
+        <div style="margin-top:7px">
+          <label class="flbl">VERIFIZIERUNG MIN.</label>
+          <div class="sev-btns" id="ver-btns">
+            <button class="sevbtn on" id="verbtn-0" onclick="setVerMin(0)">ALLE</button>
+            <button class="sevbtn" id="verbtn-weak" onclick="setVerMin(25)" style="color:#c5c5c8;border-color:#c5c5c8" title="mind. schwach belegt">≥SCHWACH</button>
+            <button class="sevbtn" id="verbtn-moderate" onclick="setVerMin(45)" style="color:#f0a500;border-color:#f0a500" title="mind. teilbelegt">≥TEIL</button>
+            <button class="sevbtn" id="verbtn-strong" onclick="setVerMin(70)" style="color:#00c8ff;border-color:#00c8ff" title="belegt / gerichtlich">≥BELEGT</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -2048,7 +2057,15 @@ function col(c){return CAT_COL[c]||'#4a5159';}
 
 // ── STATE ──────────────────────────────────────────────────────────
 let all=[],vis=[],map,cg,heatL=null,heatMode=false,darkLayer=true,dTimer=null,activeYr=null;
-let feedSort='date',sevMin=0,activeRTab='feed';
+let feedSort='date',sevMin=0,verMin=0,activeRTab='feed';
+// M6: minimum verification-score filter (uses i.quality.score from /api/incidents).
+function setVerMin(v){
+  verMin=v;
+  document.querySelectorAll('#ver-btns .sevbtn').forEach(b=>b.classList.remove('on'));
+  const id = v===0?'verbtn-0' : v===25?'verbtn-weak' : v===45?'verbtn-moderate' : 'verbtn-strong';
+  const el=document.getElementById(id); if(el) el.classList.add('on');
+  applyFilters();
+}
 let detailItem=null;
 let chartInstances={};
 // Active module ("incidents" or "funding") and feed-context toggle.
@@ -2691,6 +2708,7 @@ function renderChips(){
   if(bis) chips.push(`<span class="chip-tag">BIS ${bis} <button onclick="clearChip('bis')">✕</button></span>`);
   if(q) chips.push(`<span class="chip-tag">SUCHE: ${q.substring(0,16)} <button onclick="clearChip('srch')">✕</button></span>`);
   if(sevMin>0) chips.push(`<span class="chip-tag" style="color:${SEV_COL[sevMin]}">SCHWERE ≥${sevMin} <button onclick="clearChip('sev')">✕</button></span>`);
+  if(verMin>0){const vl=verMin>=70?'BELEGT':verMin>=45?'TEIL':'SCHWACH';chips.push(`<span class="chip-tag" style="color:#00c8ff">VERIF ≥${vl} <button onclick="clearChip('ver')">✕</button></span>`);}
   document.getElementById('active-chips').innerHTML=chips.join('');
 }
 
@@ -2701,6 +2719,7 @@ function clearChip(field){
   else if(field==='bis') document.getElementById('f-bis').value='';
   else if(field==='srch') document.getElementById('f-srch').value='';
   else if(field==='sev') setSevMin(0);
+  else if(field==='ver') setVerMin(0);
   applyFilters();
 }
 
@@ -2816,6 +2835,7 @@ function applyFilters(){
     if(von&&i.date<von) return false;
     if(bis&&i.date>bis) return false;
     if(sevMin>0&&(i.severity_score||0)<sevMin) return false;
+    if(verMin>0&&((i.quality&&i.quality.score)||0)<verMin) return false;
     if(srch){
       const h=((i.description||'')+' '+(i.location||'')+' '+(i.category||'')+' '+(i.actors||'')).toLowerCase();
       if(!h.includes(srch)) return false;
@@ -2838,6 +2858,7 @@ function resetFilters(){
   document.querySelectorAll('.yrbtn').forEach(b=>b.classList.remove('on'));
   document.getElementById('yr-ALLE').classList.add('on');
   setSevMin(0);
+  setVerMin(0);
   applyFilters();
 }
 
