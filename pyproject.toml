@@ -15,13 +15,11 @@ target-version = "py311"
 #   F63  invalid comparisons / assertions
 #   F7   misplaced statements (e.g. break outside loop)
 #   F823 local variable referenced before assignment
+#   F821 undefined name
 #   F401 unused imports   F811 redefinitions
-# NOTE: F821 (undefined name) is intentionally NOT selected yet. It flags five
-# pre-existing, broken `_barrikade_*` references inside admin diagnostic
-# endpoints (latent NameErrors in dead/redundant controls). Those endpoints are
-# slated for consolidation/removal in milestone M6 (admin crawler cleanup);
-# re-enable F821 once they are gone so the check guards new code.
-select = ["E9", "F63", "F7", "F823", "F401", "F811"]
+# F821 was re-enabled in M6 after the broken `_barrikade_*` admin diagnostic
+# endpoint (which carried five latent NameErrors) was removed.
+select = ["E9", "F63", "F7", "F821", "F823", "F401", "F811"]
 # main.py re-exports several names purely for backwards-compatible imports.
 ignore = ["E402"]
 
