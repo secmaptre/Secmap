@@ -2563,6 +2563,24 @@ function sortFeed(mode){
   renderFeed(vis);
 }
 
+// M4: per-entry verification badge metadata + helper. Module-scope so BOTH
+// renderFeed()'s card() and the separate openDetailById() can use them.
+// i.quality comes from the /api/incidents payload (lex.scoring.quality_score);
+// defensive — older payloads may omit it.
+const VERIFY_META = {
+  'court-confirmed': {t:'GERICHTLICH', c:'#00e87a', bg:'rgba(0,232,122,0.12)'},
+  'strong':          {t:'BELEGT',      c:'#00c8ff', bg:'rgba(0,200,255,0.12)'},
+  'moderate':        {t:'TEILBELEGT',  c:'#f0a500', bg:'rgba(240,165,0,0.12)'},
+  'weak':            {t:'SCHWACH',     c:'#c5c5c8', bg:'rgba(197,197,200,0.10)'},
+  'unverified':      {t:'UNBESTÄTIGT', c:'#8a8a90', bg:'rgba(138,138,144,0.10)'},
+};
+function verifyBadge(qIn){
+  const q = qIn || null;
+  if(!q || !q.label) return '';
+  const m = VERIFY_META[q.label] || VERIFY_META['unverified'];
+  const sc = (typeof q.score==='number') ? q.score : '';
+  return `<span class="ver-badge" style="color:${m.c};background:${m.bg};border-color:${m.c}" title="Verifizierungs-Score ${sc}/100 — Quelle, Aktenzeichen, Verfahrensstand, Beweissicherung, Mehrfachquellen">✓ ${m.t}</span>`;
+}
 function renderFeed(list){
   const el=document.getElementById('feed');
   const rcEl=document.getElementById('rcount');
@@ -2596,24 +2614,8 @@ function renderFeed(list){
       `<span class="sb${n<=score?' on':''}"></span>`).join('');
     return `<span class="sev-bar" style="color:${color||'var(--t2)'}">${segs}</span>`;
   }
-  // M4: per-entry verification badge. Credibility is the core signal — a
-  // court-confirmed, well-sourced entry reads very differently from an
-  // unverified scene report. i.quality comes from the /api/incidents payload
-  // (lex.scoring.quality_score). Defensive: older payloads may omit it.
-  const VERIFY_META = {
-    'court-confirmed': {t:'GERICHTLICH', c:'#00e87a', bg:'rgba(0,232,122,0.12)'},
-    'strong':          {t:'BELEGT',      c:'#00c8ff', bg:'rgba(0,200,255,0.12)'},
-    'moderate':        {t:'TEILBELEGT',  c:'#f0a500', bg:'rgba(240,165,0,0.12)'},
-    'weak':            {t:'SCHWACH',     c:'#c5c5c8', bg:'rgba(197,197,200,0.10)'},
-    'unverified':      {t:'UNBESTÄTIGT', c:'#8a8a90', bg:'rgba(138,138,144,0.10)'},
-  };
-  function verifyBadge(qIn){
-    const q = qIn || null;
-    if(!q || !q.label) return '';
-    const m = VERIFY_META[q.label] || VERIFY_META['unverified'];
-    const sc = (typeof q.score==='number') ? q.score : '';
-    return `<span class="ver-badge" style="color:${m.c};background:${m.bg};border-color:${m.c}" title="Verifizierungs-Score ${sc}/100 — Quelle, Aktenzeichen, Verfahrensstand, Beweissicherung, Mehrfachquellen">✓ ${m.t}</span>`;
-  }
+  // M4 verification badge: VERIFY_META + verifyBadge() are module-scope (above)
+  // so the detail panel can share them.
   function card(i, asContext){
     const c=col(i.category),s=sev(i.category);
     const summ=(i.summary||'').trim();
