@@ -3,6 +3,7 @@ from lex.scoring import (
     score_severity,
     score_confidence,
     extract_actors,
+    quality_score,
     CATEGORIES,
     KNOWN_ACTORS,
     ACTOR_TIER,
@@ -78,6 +79,56 @@ class TestExtractActors:
     def test_empty_safe(self):
         assert extract_actors("") == ""
         assert extract_actors(None) == ""
+
+
+class TestQualityScore:
+    def test_unverified_floor(self):
+        # No signals at all → unverified, score 0.
+        r = quality_score()
+        assert r["score"] == 0
+        assert r["label"] == "unverified"
+
+    def test_convicted_is_court_confirmed(self):
+        # A conviction always reads as court-confirmed regardless of score band.
+        r = quality_score(confidence=2, prosec_status="convicted",
+                           case_ref="OLG Dresden 4 OJs 9/21")
+        assert r["label"] == "court-confirmed"
+
+    def test_authority_source_with_case_and_evidence_is_strong(self):
+        r = quality_score(confidence=5, prosec_status="charged",
+                          case_ref="Fulton County 23SC183872", has_evidence=True)
+        # 40 + 20 + 25 + 15 = 100
+        assert r["score"] == 100
+        assert r["label"] in ("strong", "court-confirmed")
+
+    def test_scene_source_single_uncorroborated_is_weak_or_unverified(self):
+        # confidence 2 (scene), no case, no evidence, no corroboration → 16.
+        r = quality_score(confidence=2)
+        assert r["score"] == 16
+        assert r["label"] == "unverified"
+
+    def test_corroboration_raises_score(self):
+        low = quality_score(confidence=2, corroboration=0)["score"]
+        high = quality_score(confidence=2, corroboration=2)["score"]
+        assert high > low
+        assert high - low == 20
+
+    def test_score_capped_at_100(self):
+        r = quality_score(confidence=5, prosec_status="convicted",
+                          case_ref="X", has_evidence=True, corroboration=2)
+        assert r["score"] == 100
+
+    def test_corroboration_clamped(self):
+        # More than 2 extra sources should not exceed the 2-source bonus.
+        a = quality_score(confidence=1, corroboration=2)["score"]
+        b = quality_score(confidence=1, corroboration=9)["score"]
+        assert a == b
+
+    def test_components_present(self):
+        r = quality_score(confidence=3, case_ref="ref")
+        assert set(r["components"]) == {
+            "source", "case_ref", "prosecution", "evidence", "corroboration"
+        }
 
 
 class TestDataIntegrity:

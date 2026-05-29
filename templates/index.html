@@ -194,6 +194,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 .icard:hover,.icard:active{background:rgba(197,197,200,0.04);}
 .icard-hd{display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap;}
 .ibadge{font-family:var(--mono);font-size:8px;font-weight:600;letter-spacing:.5px;padding:2px 6px;border-radius:2px;white-space:nowrap;}
+.ver-badge{font-family:var(--mono);font-size:7.5px;font-weight:600;letter-spacing:.5px;padding:1px 5px;border-radius:2px;border:1px solid;white-space:nowrap;}
 .idate{font-family:var(--mono);font-size:8px;color:var(--t2);margin-left:auto;flex-shrink:0;}
 .iloc{font-family:var(--mono);font-size:9px;color:var(--t1);margin-bottom:5px;display:flex;align-items:center;gap:8px;}
 .iloc-src{margin-left:auto;font-family:var(--mono);font-size:8px;color:var(--t3);letter-spacing:0.5px;
@@ -2558,6 +2559,24 @@ function renderFeed(list){
       `<span class="sb${n<=score?' on':''}"></span>`).join('');
     return `<span class="sev-bar" style="color:${color||'var(--t2)'}">${segs}</span>`;
   }
+  // M4: per-entry verification badge. Credibility is the core signal — a
+  // court-confirmed, well-sourced entry reads very differently from an
+  // unverified scene report. i.quality comes from the /api/incidents payload
+  // (lex.scoring.quality_score). Defensive: older payloads may omit it.
+  const VERIFY_META = {
+    'court-confirmed': {t:'GERICHTLICH', c:'#00e87a', bg:'rgba(0,232,122,0.12)'},
+    'strong':          {t:'BELEGT',      c:'#00c8ff', bg:'rgba(0,200,255,0.12)'},
+    'moderate':        {t:'TEILBELEGT',  c:'#f0a500', bg:'rgba(240,165,0,0.12)'},
+    'weak':            {t:'SCHWACH',     c:'#c5c5c8', bg:'rgba(197,197,200,0.10)'},
+    'unverified':      {t:'UNBESTÄTIGT', c:'#8a8a90', bg:'rgba(138,138,144,0.10)'},
+  };
+  function verifyBadge(qIn){
+    const q = qIn || null;
+    if(!q || !q.label) return '';
+    const m = VERIFY_META[q.label] || VERIFY_META['unverified'];
+    const sc = (typeof q.score==='number') ? q.score : '';
+    return `<span class="ver-badge" style="color:${m.c};background:${m.bg};border-color:${m.c}" title="Verifizierungs-Score ${sc}/100 — Quelle, Aktenzeichen, Verfahrensstand, Beweissicherung, Mehrfachquellen">✓ ${m.t}</span>`;
+  }
   function card(i, asContext){
     const c=col(i.category),s=sev(i.category);
     const summ=(i.summary||'').trim();
@@ -2577,6 +2596,7 @@ function renderFeed(list){
       ? `<span class="tier-pill t2">${lbl_t2}</span>`
       : (asContext ? `<span class="tier-pill t3">${lbl_t3}</span>` : '');
     const ctxBadge = asContext ? `<span class="ctx-badge">${lbl_ctx}</span>` : '';
+    const verBadge = verifyBadge(i.quality);
     const borderClr = asContext ? 'rgba(197,197,200,0.25)' : c;
     const host = srcHost(i.url);
     const srcChip = host
@@ -2586,7 +2606,7 @@ function renderFeed(list){
       <div class="icard-hd">
         ${hrBadge}${ctxBadge}${tierPill}
         <span class="ibadge s${s}">${i.category}</span>
-        ${sBar}${newBadge}${geoBadge}
+        ${verBadge}${sBar}${newBadge}${geoBadge}
         <span class="idate">${i.date||'—'}</span>
       </div>
       <div class="iloc">

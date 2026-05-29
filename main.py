@@ -1129,6 +1129,7 @@ from lex.scoring import (  # noqa: E402
     extract_actors,
     SOURCE_CONFIDENCE,
     score_confidence,
+    quality_score,
 )
 
 # ── KEYWORD CLASSIFICATION (AI-free) ─────────────────────────────
@@ -8089,7 +8090,21 @@ async def get_incidents(
         q += " AND target_type=?"
         p.append(target_type)
     q += " ORDER BY date DESC, timestamp DESC"
-    return JSONResponse([dict(r) for r in db.execute(q, p).fetchall()])
+    out = []
+    for r in db.execute(q, p).fetchall():
+        d = dict(r)
+        # M4: attach the per-entry verification/quality score so the UI can
+        # render a credibility badge. corroboration is not yet persisted —
+        # default 0 until the cross-source corroboration step lands.
+        d["quality"] = quality_score(
+            confidence=d.get("confidence") or 0,
+            prosec_status=d.get("prosec_status") or "unknown",
+            case_ref=d.get("case_ref") or "",
+            has_evidence=bool((d.get("evidence_path") or "").strip()),
+            corroboration=0,
+        )
+        out.append(d)
+    return JSONResponse(out)
 
 @app.get("/api/stats")
 async def stats():

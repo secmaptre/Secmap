@@ -235,3 +235,66 @@ def score_confidence(source):
         if k in src:
             return v
     return 2
+
+# ── VERIFICATION / QUALITY SCORING (M4 — accountability ledger) ──────────
+# The legitimate, durable effect of this tool comes from credible, verifiable,
+# court-anchored documentation — not from targeting people. quality_score()
+# turns the per-entry evidence signals into a single 0..100 credibility score
+# plus a human label, so the UI can show a verification badge and analysts can
+# rank by how well-substantiated a record is.
+#
+# Inputs (all optional, safe defaults):
+#   confidence     int 1..5   — source-tier confidence (see score_confidence)
+#   prosec_status  str        — {unknown,none,investigating,charged,trial,
+#                                convicted,acquitted,dismissed}
+#   case_ref       str        — public court/investigation reference (anchor)
+#   has_evidence   bool       — a WARC snapshot of the source was archived
+#   corroboration  int        — number of *additional* independent sources
+#                                that documented the same incident (0 = single)
+#
+# The weighting deliberately rewards court-anchoring and corroboration most:
+# those are exactly the signals that make a record hard to dismiss.
+_PROSEC_POINTS = {
+    "convicted": 35, "trial": 25, "charged": 25, "investigating": 15,
+    # acquitted/dismissed are still *documented public process* — small anchor,
+    # never negative: the event and its legal outcome are both on the record.
+    "acquitted": 10, "dismissed": 10,
+}
+
+def quality_score(confidence=0, prosec_status="unknown", case_ref="",
+                  has_evidence=False, corroboration=0):
+    """Return a verification dict for one incident.
+
+    Output:
+        {"score": int 0..100, "label": str, "components": {...}}
+    label ∈ {court-confirmed, strong, moderate, weak, unverified}
+
+    Deterministic and side-effect-free so it can be unit-tested and reused by
+    the API, the UI badge and any ranking. Higher = better substantiated.
+    """
+    conf = max(0, min(int(confidence or 0), 5))
+    ps = (prosec_status or "unknown").strip().lower()
+    corr = max(0, min(int(corroboration or 0), 2))
+
+    components = {
+        "source": conf * 8,                       # 0..40
+        "case_ref": 20 if (case_ref or "").strip() else 0,
+        "prosecution": _PROSEC_POINTS.get(ps, 0),  # 0..35
+        "evidence": 15 if has_evidence else 0,
+        "corroboration": corr * 10,                # 0..20
+    }
+    score = min(sum(components.values()), 100)
+
+    if ps == "convicted":
+        label = "court-confirmed"
+    elif score >= 70:
+        label = "strong"
+    elif score >= 45:
+        label = "moderate"
+    elif score >= 25:
+        label = "weak"
+    else:
+        label = "unverified"
+
+    return {"score": score, "label": label, "components": components}
+
