@@ -86,7 +86,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
   backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
 }
 .brand{display:flex;align-items:center;gap:10px;flex-shrink:0;text-decoration:none;}
-.brand-icon{font-size:17px;color:var(--accent);text-shadow:0 0 8px rgba(168,42,58,0.30);}
+.brand-icon{display:inline-flex;align-items:center;justify-content:center;
+  filter:drop-shadow(0 0 6px rgba(168,42,58,0.45));}
+.brand-icon svg{transition:transform .35s ease;}
+.brand:hover .brand-icon svg{transform:scale(1.08);}
 .brand-name{font-family:var(--sans);font-size:14.5px;font-weight:600;letter-spacing:0.8px;
   color:var(--t0);display:flex;align-items:baseline;gap:7px;line-height:1;}
 .brand-version{font-family:var(--mono);font-size:8px;font-weight:500;color:var(--t3);
@@ -838,12 +841,19 @@ body.mod-funding #mod-funding-view{display:grid !important;}
   box-shadow:0 1px 0 rgba(255,255,255,0.025) inset, 0 8px 24px -12px rgba(0,0,0,0.55);
 }
 
-/* — Brand-Mark: edler typografischer Lockup — */
+/* — Brand-Mark: rotes Auge SVG + typografischer Lockup — */
+/* User 2026-05-29: das SVG-Auge regelt das visual; hier nur noch
+   filter+animation für das Glow. Kein background-clip mehr (war für
+   Text-Logo). */
 .brand-icon{
   position:relative;
-  background:linear-gradient(135deg, var(--accent) 0%, #4a8aab 100%);
-  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  display:inline-flex;align-items:center;justify-content:center;
   filter:drop-shadow(0 0 6px rgba(168,42,58,0.45));
+  animation:eyePulse 4.5s ease-in-out infinite;
+}
+@keyframes eyePulse{
+  0%,100%{filter:drop-shadow(0 0 6px rgba(168,42,58,0.45));}
+  50%{filter:drop-shadow(0 0 10px rgba(220,69,85,0.65));}
 }
 .brand-name{
   background:linear-gradient(180deg, #f5f8fb 0%, #c9d3dd 100%);
@@ -1224,10 +1234,20 @@ button:focus-visible, a:focus-visible{
   .fnd-stat{flex:1 1 45%;font-size:10px;}
   #fnd-graph{height:420px;}
   .fnd-graph-legend{flex-wrap:wrap;gap:8px;font-size:8.5px;}
-  .fnd-disclaimer{font-size:10px;padding:8px;}
+  /* Methodik-Box: auf Mobile zusammenklappen — User 2026-05-29 */
+  .fnd-disclaimer{font-size:10.5px;padding:9px 11px;line-height:1.45;}
+  .fnd-disclaimer .fdc-collapsible{display:none;}
+  .fnd-disclaimer.expanded .fdc-collapsible{display:inline;}
+  .fnd-disclaimer .fdc-link-more{display:inline-block;margin-top:4px;font-size:10px;}
+  #mod-funding-view{height:auto;min-height:calc(100vh - var(--tbh) - var(--clsh));overflow-y:auto;}
+}
+@media (min-width: 801px){
+  /* Desktop: alles immer sichtbar, kein "Mehr"-Toggle nötig */
+  .fnd-disclaimer .fdc-link-more{display:none;}
+  .fnd-disclaimer .fdc-collapsible{display:inline;}
 }
 @media (max-width: 480px){
-  #fnd-graph{height:340px;}
+  #fnd-graph{height:340px;min-height:340px;}
   .fnd-table thead th{font-size:7.5px;padding:5px 4px;letter-spacing:0.8px;}
   .fnd-table tbody td{padding:6px 5px;font-size:10px;}
   .fnd-side{max-height:200px;}
@@ -1288,7 +1308,17 @@ button:focus-visible, a:focus-visible{
 <!-- TOPBAR -->
 <header id="topbar">
   <a class="brand" href="/">
-    <span class="brand-icon">◆</span>
+    <!-- Rotes Auge — User 2026-05-29: "baue als logo für lex europe
+         ein rotes auge ein". Inline-SVG damit es mit --accent skaliert
+         und keinen externen Asset braucht. -->
+    <span class="brand-icon" aria-label="LEX EUROPE">
+      <svg viewBox="0 0 32 18" width="26" height="15" xmlns="http://www.w3.org/2000/svg" style="display:block">
+        <ellipse cx="16" cy="9" rx="15" ry="8" fill="none" stroke="var(--accent)" stroke-width="1.6"/>
+        <circle cx="16" cy="9" r="5.2" fill="var(--accent)" opacity="0.92"/>
+        <circle cx="16" cy="9" r="2.4" fill="#0a0a0a"/>
+        <circle cx="14.4" cy="7.6" r="0.7" fill="#f5f5f5"/>
+      </svg>
+    </span>
     <div>
       <div class="brand-name">LEX EUROPE <span class="brand-version">v3.2</span></div>
       <div class="brand-sub" data-i18n="brand.sub">Politische Gewalt &amp; Förderfluss — OSINT-Recherche</div>
@@ -1667,25 +1697,28 @@ button:focus-visible, a:focus-visible{
   <div class="fnd-main">
 
     <!-- LEGAL DISCLAIMER — must appear above any funding data -->
-    <div class="fnd-disclaimer" role="note">
+    <div class="fnd-disclaimer" role="note" id="fnd-disclaimer">
       <span class="fdc-icon">⚠</span>
       <div class="fdc-body">
         <b>Methodik &amp; Haftungsausschluss.</b>
-        Aufgenommen werden ausschließlich Organisationen, die in offiziellen
-        Verfassungsschutzberichten (BfV, LfV, DSN, NDB) namentlich genannt
-        sind oder gegen deren Strukturen laufende Ermittlungsverfahren nach
-        §§ 129 / 129a StGB bzw. analogen Normen geführt werden.
-        <b>Keine Vorverurteilung</b> — die Aufnahme stellt keine Aussage über
-        individuelle strafrechtliche Verantwortung dar.
-        <br><br>
-        <b>Quellen-Status pro Eintrag.</b>
-        <span class="fnd-verified">✓ verifiziert</span> bedeutet: die Quelle
-        zeigt direkt auf ein spezifisches Primärdokument (Tätigkeitsbericht,
-        Grantees-Liste, Bürgerschafts-Drucksache mit Aktenzeichen).
-        <span class="fnd-unverified">⚠ ungeprüft</span> bedeutet: die Quelle
-        ist eine Programm- oder Behörden-Landingpage; das spezifische
-        Dokument ist dahinter veröffentlicht, aber die Plattform verlinkt
-        nicht direkt darauf — bitte vor Zitation eigenständig prüfen.
+        <span class="fdc-collapsible">
+          Aufgenommen werden ausschließlich Organisationen, die in offiziellen
+          Verfassungsschutzberichten (BfV, LfV, DSN, NDB) namentlich genannt
+          sind oder gegen deren Strukturen laufende Ermittlungsverfahren nach
+          §§ 129 / 129a StGB bzw. analogen Normen geführt werden.
+          <b>Keine Vorverurteilung</b> — die Aufnahme stellt keine Aussage über
+          individuelle strafrechtliche Verantwortung dar.
+          <br><br>
+          <b>Quellen-Status pro Eintrag.</b>
+          <span class="fnd-verified">✓ verifiziert</span> bedeutet: die Quelle
+          zeigt direkt auf ein spezifisches Primärdokument (Tätigkeitsbericht,
+          Grantees-Liste, Bürgerschafts-Drucksache mit Aktenzeichen).
+          <span class="fnd-unverified">⚠ ungeprüft</span> bedeutet: die Quelle
+          ist eine Programm- oder Behörden-Landingpage; das spezifische
+          Dokument ist dahinter veröffentlicht, aber die Plattform verlinkt
+          nicht direkt darauf — bitte vor Zitation eigenständig prüfen.
+        </span>
+        <a class="fdc-link fdc-link-more" onclick="document.getElementById('fnd-disclaimer').classList.toggle('expanded'); this.textContent = document.getElementById('fnd-disclaimer').classList.contains('expanded') ? '↑ Weniger' : '↓ Methodik anzeigen';">↓ Methodik anzeigen</a>
         <a class="fdc-link" onclick="openMethodology()">→ Vollständige Methodik</a>
       </div>
     </div>
@@ -2262,27 +2295,28 @@ function openDetail(i){
     actRow.innerHTML=`<div class="det-section-lbl">AKTEURE / GRUPPEN</div><div>${chips}</div>`;
   } else actRow.innerHTML='';
 
-  // Detail body: lead with the short AI summary, then full description.
+  // Detail body: nur die Zusammenfassung anzeigen (User 2026-05-29:
+  // "auf der karte soll nur noch die überschrift und quelle stehen
+  // der originaltext wie ... raus"). Rohtext mit Markdown-Müll
+  // (Tag-Links, Bild-Verweise, Navigation) wird unterdrückt.
   const descEl=document.getElementById('det-desc');
   const summ=(i.summary||'').trim();
-  const full=cleanDesc(i.description)||'Keine Beschreibung verfügbar.';
   descEl.innerHTML='';
   if(summ){
     const sm=document.createElement('div');
-    sm.style.cssText='font-size:12px;line-height:1.55;color:var(--t0);margin-bottom:10px;padding:10px 12px;background:rgba(197,197,200,0.06);border-left:2px solid var(--accent)';
+    sm.style.cssText='font-size:12.5px;line-height:1.6;color:var(--t0);padding:10px 12px;background:rgba(197,197,200,0.06);border-left:2px solid var(--accent)';
     sm.textContent=summ;
     descEl.appendChild(sm);
+  } else {
+    const placeholder=document.createElement('div');
+    placeholder.style.cssText='font-size:11px;color:var(--t3);font-style:italic';
+    placeholder.textContent='Keine Zusammenfassung verfügbar.';
+    descEl.appendChild(placeholder);
   }
-  const body=document.createElement('div');
-  body.textContent=full;
-  descEl.appendChild(body);
 
-  // Confidence dots
-  const confRow=document.getElementById('det-conf-row');
-  if(i.confidence>0){
-    const dots=[1,2,3,4,5].map(n=>`<div class="conf-dot${n<=i.confidence?' on':''}"></div>`).join('');
-    confRow.innerHTML=`<div class="det-section-lbl">QUELLENVERTRAUEN</div><div class="conf-row">${dots}<span style="font-family:var(--mono);font-size:8px;color:var(--t2);margin-left:6px">${i.source||'—'}</span></div>`;
-  } else confRow.innerHTML='';
+  // QUELLENVERTRAUEN-Section entfernt (User 2026-05-29: "QUELLENVERTRAUEN
+  // soll rausgenommen werden"). Confidence-Dots werden nicht mehr angezeigt.
+  document.getElementById('det-conf-row').innerHTML='';
 
   const srcEl=document.getElementById('det-src');
   if(i.url&&i.url.startsWith('http')){
@@ -3772,9 +3806,18 @@ function fndSwitchView(view){
   if(wrap) wrap.style.display = view === 'graph' ? 'block' : 'none';
   document.getElementById('fnd-tab-table').classList.toggle('on', view !== 'graph');
   document.getElementById('fnd-tab-graph').classList.toggle('on', view === 'graph');
-  if(view === 'graph' && !fndGraphLoaded){
-    fndGraphLoaded = true;
-    loadFundingGraph();
+  if(view === 'graph'){
+    // Layout-Zyklus abwarten bevor wir clientWidth messen — auf Mobile
+    // ist das Container-Layout sonst nicht fertig (User 2026-05-29).
+    requestAnimationFrame(() => {
+      if(!fndGraphLoaded){
+        fndGraphLoaded = true;
+        loadFundingGraph();
+      } else if(window._fndLastData){
+        // Re-render mit korrekten Dimensionen
+        renderFundingGraph(window._fndLastData);
+      }
+    });
   }
 }
 
@@ -3791,6 +3834,7 @@ async function loadFundingGraph(){
   if(fndFilters.amount_min) qs.append('min_amount', fndFilters.amount_min);
   try{
     const data = await fetch('/api/funding/graph?' + qs.toString()).then(r=>r.json());
+    window._fndLastData = data;  // für Re-Render bei View-Wechsel auf Mobile
     renderFundingGraph(data);
   }catch(e){
     document.getElementById('fnd-graph-counts').textContent = 'FEHLER BEIM LADEN';
@@ -3811,7 +3855,13 @@ function renderFundingGraph(data){
       .text(t('fnd.graph_empty','Keine Daten für die aktiven Filter'));
     return;
   }
-  const w = svgEl.clientWidth, h = svgEl.clientHeight;
+  // User 2026-05-29: "der graph bei finances wird auf dem handy nicht
+  // angezeigt". Auf Mobile ist svgEl.clientWidth/Height oft 0 weil der
+  // Container gerade erst sichtbar gemacht wurde. Fallback auf parent
+  // dimensions oder Defaults.
+  let w = svgEl.clientWidth, h = svgEl.clientHeight;
+  if (w < 50) w = (svgEl.parentElement?.clientWidth || 320);
+  if (h < 50) h = Math.max(340, Math.round(window.innerHeight * 0.5));
   const nodes = data.nodes.map(n => ({...n}));
   const id2 = Object.fromEntries(nodes.map(n => [n.id, n]));
   const links = data.links
