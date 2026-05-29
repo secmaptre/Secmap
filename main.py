@@ -357,31 +357,6 @@ except Exception as _e:
     _scraper = None
     _HAS_CLOUDSCRAPER = False
 
-# Barrikade-Schwester-Domains. publish.barrikade.info ist das SPIP-Editor-
-# Backend (für authed Pull), beta.barrikade.info ist ein zusätzlicher
-# Front-Mirror den der User 2026-05-28 nannte ("versuch mal
-# beta.barrikade.info/article/7490"). Alle drei teilen denselben
-# Article-ID-Raum. Discovery + ID-Sweep probieren alle der Reihe nach
-# durch — was durchgeht, kommt rein. Hash-Dedup verhindert Doppel-Saves.
-_BARRIKADE_DOMAINS = ("beta.barrikade.info", "barrikade.info", "publish.barrikade.info")
-
-# Candidate-Pfade für die Discovery-Probe (RSS/Atom/Sitemap/Homepage).
-# Wird vom Admin-Diagnose-Endpoint genutzt, der pro Domain alle Pfade
-# testet. Die Hauptcrawl-Logik (_barrikade_discover_urls) hat eine eigene,
-# bereits voll-qualifizierte candidates-Liste mit zusätzlichen Strategien.
-_BARRIKADE_DISCOVERY_PATHS = [
-    ("rss-feed",       "/feed"),
-    ("rss-feed-slash", "/feed/"),
-    ("rss-rss",        "/rss"),
-    ("rss-rss-xml",    "/rss.xml"),
-    ("rss-index",      "/index.rss"),
-    ("rss-atom",       "/atom"),
-    ("drupal-feeds",   "/feeds/all.rss.xml"),
-    ("sitemap",        "/sitemap.xml"),
-    ("sitemap-index",  "/sitemap_index.xml"),
-    ("homepage",       "/"),
-]
-
 # Hosts, für die direkt cloudscraper genommen wird (Anti-Bot-Bekannte).
 _CLOUDFLARE_HOSTS = {
     "barrikade.info",
@@ -435,42 +410,11 @@ def _warmup_host(url):
     except Exception:
         pass
 
-# Hosts die NIE als Redirect-Ziel akzeptiert werden.
-#
-# Produktions-Log 2026-05-28 18:25 zeigt klar: barrikade.info redirected
-# SPIP-Pfade per 301 zu publish.barrikade.info, und publish.barrikade.info
-# ist vom Render-IP-Range mit ConnectTimeoutError NICHT erreichbar
-# (Cloudflare-IP-Block). Wenn wir publish folgen, läuft jeder Request in
-# 15s-ConnectTimeout. publish ist deshalb wieder geblockt.
-#
-# WICHTIG: publish.barrikade.info bleibt erreichbar für DIREKTE Anfragen
-# (authed Pull). Der Block gilt NUR für Redirects von barrikade.info aus.
-# In _safe_get wird der Block über `redirected_to_blocked` markiert,
-# damit der Caller einen alternativen Pfad (beta.barrikade.info) probieren
-# kann.
-_BLOCKED_REDIRECT_HOSTS = {
-    "publish.barrikade.info",
-}
-
-# Wenn ein Redirect auf einen blocked Host trifft, versuchen wir
-# automatisch eine Schwester-Domain (selbe Path) als Fallback.
-# beta.barrikade.info liegt nicht hinter dem gleichen Cloudflare-Setup
-# wie publish — User-Hinweis 2026-05-28: "versuch mal beta...".
-_REDIRECT_RESCUE_MAP = {
-    "publish.barrikade.info": "beta.barrikade.info",
-}
-
 def _safe_get(scraper_or_session, url, timeout, **kwargs):
-    """GET mit Redirect-Schutz und Schwester-Domain-Rescue.
-
-    Verhalten bei Redirect zu einem blocked Host (z.B. publish.barrikade.info):
-      1. Wenn der Pfad in _REDIRECT_RESCUE_MAP eine Rescue-Schwester hat
-         (publish → beta), versuche dieselbe URL auf der Rescue-Domain
-         und gib das Ergebnis zurück.
-      2. Sonst: synthetisches 451 + Marker, sodass Caller wissen, dass
-         der Redirect blockiert wurde.
-    Folgt bis zu 5 same-origin Redirects manuell."""
-    from urllib.parse import urlparse, urljoin
+    """GET mit manueller Redirect-Folge (max 5 hops). Simpler als
+    allow_redirects=True weil cloudscraper's Auto-Redirect manchmal
+    Cookies vergisst zwischen Hops."""
+    from urllib.parse import urljoin
     current = url
     for _hop in range(6):
         r = scraper_or_session.get(current, timeout=timeout,
@@ -479,33 +423,7 @@ def _safe_get(scraper_or_session, url, timeout, **kwargs):
             loc = r.headers.get("Location", "")
             if not loc:
                 return r
-            next_url = urljoin(current, loc)
-            next_host = urlparse(next_url).netloc
-            if next_host in _BLOCKED_REDIRECT_HOSTS:
-                rescue = _REDIRECT_RESCUE_MAP.get(next_host)
-                if rescue:
-                    # Tausche Host gegen Rescue-Schwester aus
-                    rescue_url = next_url.replace(
-                        f"://{next_host}", f"://{rescue}", 1)
-                    log.info(f"redirect-rescue: {url} → {next_url} blocked → trying {rescue_url}")
-                    try:
-                        r2 = scraper_or_session.get(rescue_url, timeout=timeout,
-                                                    allow_redirects=False, **kwargs)
-                        # Falls Rescue selbst einen 301 hat, nochmal eine Runde
-                        if r2.status_code not in (301, 302, 303, 307, 308):
-                            return r2
-                        loc2 = r2.headers.get("Location", "")
-                        if loc2:
-                            current = urljoin(rescue_url, loc2)
-                            continue
-                        return r2
-                    except Exception as e:
-                        log.info(f"redirect-rescue failed for {rescue_url}: {str(e)[:120]}")
-                log.info(f"redirect-trap: {url} → {next_url} (blocked host) → ABORT")
-                r.status_code = 451
-                r._content = b'{"error":"redirect_to_blocked_host"}'
-                return r
-            current = next_url
+            current = urljoin(current, loc)
             continue
         return r
     return r
@@ -754,17 +672,11 @@ def fetch(url, timeout=25):
         if result:
             return result
 
-    # ── Detect SPA-Skeleton ───────────────────────────────────────
-    # User-Befund 2026-05-28: barrikade.info liefert HTTP-200 + 15kb HTML,
-    # aber der Body ist nur das Angular-Skeleton (data-beasties-container,
-    # <base href="/">, kein Article-Body). In dem Fall NICHT zufrieden
-    # geben mit direct/cloudscraper-Response — direkt zu JS-Render-Service.
+    # SPA-Detection: barrikade.info-spezifisch (Angular-Skeleton).
+    # Andere Crawler sollen nicht unnötig zu JS-Render-Services eskalieren.
     spa_skeleton_received = False
-    if last_status == 200 and last_excerpt:
-        is_spa = ("data-beasties-container" in last_excerpt or
-                  '<base href="/"' in last_excerpt or
-                  "<app-root" in last_excerpt)
-        if is_spa:
+    if last_status == 200 and last_excerpt and "barrikade.info" in host:
+        if "data-beasties-container" in last_excerpt or "<app-root" in last_excerpt:
             spa_skeleton_received = True
             log.info(f"fetch detected SPA-skeleton for {url} — escalating to JS-render")
 
@@ -5365,77 +5277,87 @@ def seed_funding_data():
     return inserted
 
 # ── BARRIKADE ID CRAWLER ──────────────────────────────────────────
+def _firecrawl_article(aid):
+    """Hole einen einzelnen Barrikade-Article via Firecrawl-API.
+    Returns markdown string oder None.
+
+    User 2026-05-28: "versuche mal nur artikel mit firecrawl zu crawlen
+    https://barrikade.info/article/7490 in diesem format runter, nur mit
+    den APIs alles andere löschen verursacht fehler".
+
+    barrikade.info ist Angular-SPA — direct/cloudscraper/jina liefern nur
+    Skeleton. Firecrawl rendert die SPA und gibt Article-Body als Markdown."""
+    key = os.getenv("FIRECRAWL_API_KEY", "").strip()
+    if not key:
+        return None
+    url = f"https://barrikade.info/article/{aid}"
+    try:
+        r = requests.post(
+            "https://api.firecrawl.dev/v1/scrape",
+            json={
+                "url": url,
+                "formats": ["markdown"],
+                "waitFor": 2500,
+                "timeout": 30000,
+            },
+            headers={
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+            },
+            timeout=60,
+        )
+        if r.status_code != 200:
+            log.info(f"firecrawl {aid}: HTTP {r.status_code} {r.text[:160]}")
+            return None
+        data = r.json() or {}
+        md = (data.get("data") or {}).get("markdown", "") or ""
+        if md and len(md) > 200:
+            return md
+        log.info(f"firecrawl {aid}: empty markdown (probably 404)")
+    except Exception as e:
+        log.info(f"firecrawl {aid} EXC: {str(e)[:160]}")
+    return None
+
+
 def barrikade_latest_id():
-    """Ermittelt die höchste Article-ID auf barrikade.info via Homepage-Scrape.
-    Versucht BEIDE URL-Patterns (kanonisch /article/<id> UND slug-rewritten
-    /<slug>-<id>) sowie verschiedene Discovery-Seiten."""
-    # beta.barrikade.info zuerst — User 2026-05-28: "versuch mal beta...
-    # und runterzählen". Falls beta antwortet, sind die IDs identisch zum
-    # www-Mirror, aber die Anti-Bot-Konfig ist meist permissiver.
-    candidates = [
-        "https://beta.barrikade.info/",
-        "https://beta.barrikade.info/?lang=de",
-        "https://barrikade.info/",
-        "https://barrikade.info/?lang=de",
-        "https://barrikade.info/spip.php?page=sommaire",
-        "https://barrikade.info/spip.php?page=backend",
-    ]
-    all_ids = set()
-    for url in candidates:
+    """Holt die höchste Article-ID via Firecrawl-Probe gegen die Homepage.
+    Falls Firecrawl nicht verfügbar: DB-Maximum + 50 als Anchor.
+
+    barrikade.info ist SPA — wir müssen die Seite JS-rendern um die
+    Article-Liste zu sehen. Firecrawl ist der einzige Pfad der das tut."""
+    key = os.getenv("FIRECRAWL_API_KEY", "").strip()
+    if key:
         try:
-            html = fetch(url, timeout=15)
-            if not html or len(html) < 200: continue
-            before = len(all_ids)
-            # Kanonisch /article/<id>
-            for m in re.finditer(r"/article/(\d{3,6})\b", html):
-                all_ids.add(int(m.group(1)))
-            # Slug-rewritten /<slug>-<id> (Title-Slug-12345)
-            for m in re.finditer(r'(?:href=["\']|>)/?([A-Za-z0-9][A-Za-z0-9_\-]*?-(\d{3,6}))(?=["\'?#\s/<])', html):
-                aid = int(m.group(2))
-                if 100 <= aid <= 99999:
-                    all_ids.add(aid)
-            # SPIP: ?article<id>, spip.php?article<id>
-            for m in re.finditer(r"\?article(\d{3,6})\b", html):
-                aid = int(m.group(1))
-                if 100 <= aid <= 99999:
-                    all_ids.add(aid)
-            for m in re.finditer(r"spip\.php\?article(\d{3,6})", html):
-                aid = int(m.group(1))
-                if 100 <= aid <= 99999:
-                    all_ids.add(aid)
-            # JSON-Body / Meta-Tags
-            for m in re.finditer(r'"id"\s*:\s*"?(\d{4,5})"?', html):
-                aid = int(m.group(1))
-                if 1000 <= aid <= 99999:
-                    all_ids.add(aid)
-            for m in re.finditer(r'-(\d{4,5})\.html?', html):
-                aid = int(m.group(1))
-                if 1000 <= aid <= 99999:
-                    all_ids.add(aid)
-            # Open-Graph URL Meta (häufig vollqualifiziert)
-            for m in re.finditer(r'og:url[^>]*content=["\'][^"\']*?-(\d{3,6})["\']', html):
-                aid = int(m.group(1))
-                if 100 <= aid <= 99999:
-                    all_ids.add(aid)
-            new_ids = len(all_ids) - before
-            if new_ids == 0:
-                # Diagnose: dump die ersten 240 Bytes des Body damit man im
-                # Log sieht WAS die Site geliefert hat. Hilfreich um zu
-                # erkennen ob Cloudflare-Challenge-Page, JS-Redirect oder
-                # tatsächlich leerer Inhalt.
-                excerpt = re.sub(r'\s+', ' ', html[:240]).strip()
-                log.info(f"barrikade_latest_id [{url}] → 0 IDs (len={len(html)}, excerpt={excerpt!r})")
+            r = requests.post(
+                "https://api.firecrawl.dev/v1/scrape",
+                json={
+                    "url": "https://barrikade.info/",
+                    "formats": ["markdown", "links"],
+                    "waitFor": 3000,
+                    "timeout": 30000,
+                },
+                headers={"Authorization": f"Bearer {key}",
+                         "Content-Type": "application/json"},
+                timeout=60,
+            )
+            if r.status_code == 200:
+                data = r.json() or {}
+                d = data.get("data") or {}
+                body = (d.get("markdown") or "") + "\n" + "\n".join(d.get("links") or [])
+                ids = [int(m.group(1)) for m in re.finditer(r"/article/(\d{3,6})", body)]
+                if ids:
+                    mx = max(ids)
+                    log.info(f"barrikade_latest_id via firecrawl: {mx} (from {len(ids)} matches)")
+                    return mx
+                else:
+                    log.warning(f"barrikade_latest_id via firecrawl: 0 IDs in {len(body)}b body")
             else:
-                log.info(f"barrikade_latest_id [{url}] → +{new_ids} IDs (total={len(all_ids)}, max={max(all_ids)})")
+                log.warning(f"barrikade_latest_id firecrawl HTTP {r.status_code}: {r.text[:160]}")
         except Exception as e:
-            log.info(f"barrikade_latest_id [{url}] err: {str(e)[:120]}")
-        if len(all_ids) >= 20: break  # ausreichend für max-Detection
-    if all_ids:
-        return max(all_ids)
-    # Fallback: nutze die zuletzt-bekannte ID aus der DB, sonst 7600.
-    # User-Hinweis 2026-05-28: articles 7503/7510/5247 fehlen — der
-    # Default 7600 stimmte ungefähr, war aber statisch. Wenn der echte
-    # Site-Probe scheitert, peilen wir lieber das DB-Maximum + 50 an.
+            log.warning(f"barrikade_latest_id firecrawl: {str(e)[:160]}")
+    else:
+        log.warning("barrikade_latest_id: no FIRECRAWL_API_KEY — using DB anchor")
+    # Fallback: DB-Maximum + 50
     try:
         row = db.execute(
             "SELECT MAX(CAST(SUBSTR(url, INSTR(url,'/article/')+9) AS INTEGER)) AS mx "
@@ -5443,1005 +5365,68 @@ def barrikade_latest_id():
         ).fetchone()
         if row and row["mx"] and row["mx"] > 1000:
             anchor = int(row["mx"]) + 50
-            log.warning(f"barrikade_latest_id: site-probe failed, DB-anchor max+50 = {anchor}")
+            log.info(f"barrikade_latest_id: DB-anchor max+50 = {anchor}")
             return anchor
     except Exception:
         pass
-    log.warning("barrikade_latest_id: keine IDs gefunden, default 7600")
+    log.warning("barrikade_latest_id: default 7600")
     return 7600
-
-def _barrikade_normalize_url(raw_url):
-    """Aus einer beliebigen barrikade.info-URL (auch aus CDX-Müll-Daten)
-    die kanonische /article/<id>-Form extrahieren. Returns (clean_url, id)
-    oder None bei nicht-Article-URLs / kaputten URLs.
-
-    CDX liefert oft URLs mit Müll dahinter wie '/article/2283Reitschule'
-    oder '/article/2288[2' — solche werden hier abgelehnt, NICHT 'gefixt'
-    (weil das Risiko ist dass 'Reitschule' ein anderer Article ist)."""
-    if not raw_url or not isinstance(raw_url, str):
-        return None
-    # Normalisieren: Protokoll
-    u = raw_url.strip()
-    if u.startswith("http://"):
-        u = "https://" + u[7:]
-    elif not u.startswith("https://"):
-        u = "https://" + u.lstrip("/")
-    low = u.lower()
-    # Domain-Check
-    if "barrikade.info" not in low:
-        return None
-    # Junk-Filter
-    if any(x in low for x in (
-        "/tag/", "/rubrique-", "/+-", "page=", "redirection=",
-        "javascript:", "mailto:", "#commentaires", "/spip.php?action=",
-        "/ecrire/", ".css", ".js", ".png", ".jpg", ".gif", ".svg",
-    )):
-        return None
-    # Strict /article/<id>$ pattern — ID MUSS terminiert sein, sonst ist es Müll
-    m = re.search(r"barrikade\.info/article/(\d{3,6})(?:[/?#]|$)", low)
-    if m:
-        aid = int(m.group(1))
-        if 1 <= aid <= 99999:  # sanity-cap für SPIP article-IDs
-            return (f"https://barrikade.info/article/{aid}", aid)
-    # Rewritten /<slug>-<id>$ pattern — ID am Ende des Pfades
-    m = re.search(r"barrikade\.info/[a-z0-9][a-z0-9_\-]+?-(\d{3,6})(?:[/?#]|$)", low, re.I)
-    if m:
-        aid = int(m.group(1))
-        if 1 <= aid <= 99999:
-            return (f"https://barrikade.info/article/{aid}", aid)
-    return None
-
-def _barrikade_spip_public_discover(max_results=80, per_request_timeout=6, overall_budget_s=30):
-    """Try the SPIP-specific public endpoints on BOTH domains.
-
-    SPIP-CMSe exposen typischerweise mehrere RSS/Atom-Feeds und einen
-    'plan du site' OHNE Authentifizierung — auch das Editorial-Backend
-    (publish.) hat einen public-readable Backend-RSS unter ?page=backend.
-
-    overall_budget_s: hartes Gesamt-Zeitbudget. Wir versuchen so viele Pfade
-    wie möglich, brechen aber spätestens nach diesem Budget ab."""
-    _t_start = time.time()
-    spip_paths = [
-        # SPIP-spezifische öffentliche Feeds
-        "/spip.php?page=backend",
-        "/spip.php?page=backend&lang=de",
-        "/spip.php?page=backend-mobile",
-        "/spip.php?page=sommaire",
-        "/spip.php?page=plan",
-        "/spip.php?page=site_map",
-        "/?page=backend",
-        "/?page=plan",
-        # Verschiedene Rubric-Backends (1=News, 2=Aktion, 3=Berichte etc.)
-        "/spip.php?page=backend&id_rubrique=1",
-        "/spip.php?page=backend&id_rubrique=2",
-        "/spip.php?page=backend&id_rubrique=3",
-        "/spip.php?page=backend&id_rubrique=4",
-        "/spip.php?page=backend&id_rubrique=5",
-    ]
-    bases = [
-        "https://barrikade.info",
-        "https://publish.barrikade.info",
-    ]
-    found = []
-    seen = set()
-    for base in bases:
-        if (time.time() - _t_start) > overall_budget_s: break
-        for path in spip_paths:
-            if (time.time() - _t_start) > overall_budget_s: break
-            url = base + path
-            try:
-                body = fetch(url, timeout=per_request_timeout)
-                if not body or len(body) < 80:
-                    continue
-                # Beide Schemata extrahieren
-                ids = set()
-                for m in re.finditer(r"/article/(\d+)", body):
-                    ids.add(("num", m.group(1)))
-                for m in re.finditer(r'href="https?://(?:www\.)?barrikade\.info/([A-Za-z0-9][A-Za-z0-9_\-]+-(\d{3,6}))', body):
-                    ids.add(("slug", m.group(1)))
-                # SPIP-typische rewritten Slug-Format: /Title-Slug-<id>
-                for m in re.finditer(r"<loc>https?://(?:www\.)?barrikade\.info/([^<\s\"]+)</loc>", body):
-                    slug = m.group(1)
-                    if re.search(r'-\d{3,6}$', slug):
-                        ids.add(("slug", slug))
-                log.info(f"barrikade spip-pub [{url}] → {len(ids)} matches")
-                for kind, v in ids:
-                    if kind == "num":
-                        u = f"https://barrikade.info/article/{v}"
-                    else:
-                        u = f"https://barrikade.info/{v}"
-                    if u not in seen and len(seen) < max_results:
-                        seen.add(u); found.append(u)
-                if len(found) >= max_results: break
-            except Exception as e:
-                log.info(f"barrikade spip-pub [{url}] failed: {str(e)[:120]}")
-        if len(found) >= max_results: break
-    return found
-
-def _barrikade_discover_urls():
-    """Discover recent barrikade article URLs via multiple strategies.
-    Returns a list of unique URLs sorted newest-first (best-effort).
-    Probiert in dieser Reihenfolge:
-      1. Mehrere RSS-/Atom-Endpoint-Kandidaten (Drupal/WP-Standard-Pfade
-         auf BEIDEN Domains www + publish)
-      2. sitemap.xml und sitemap_index.xml
-      3. Homepage-Scrape mit Regex für /article/<id>
-      4. SPIP-public Pfade als Fallback
-      5. DuckDuckGo + Bing Search-Engine-Discovery
-      6. Wayback CDX als letzte Auffanglinie wenn Cloudflare alles blockt
-    Damit ist der Crawler robust gegenüber Anti-Bot-Schutz auf
-    einzelnen Pfaden — wenn EIN Endpoint geht, kommen die Artikel rein.
-    """
-    candidates = [
-        # RSS/Atom Standard-Pfade — barrikade.info
-        ("rss-feed",      "https://barrikade.info/feed"),
-        ("rss-feed-slash","https://barrikade.info/feed/"),
-        ("rss-rss",       "https://barrikade.info/rss"),
-        ("rss-rss-xml",   "https://barrikade.info/rss.xml"),
-        ("rss-index",     "https://barrikade.info/index.rss"),
-        ("rss-atom",      "https://barrikade.info/atom"),
-        # Drupal default
-        ("drupal-feeds",  "https://barrikade.info/feeds/all.rss.xml"),
-        # Sitemap discovery
-        ("sitemap",       "https://barrikade.info/sitemap.xml"),
-        ("sitemap-index", "https://barrikade.info/sitemap_index.xml"),
-        # Homepage scrape (always last, fewest signals)
-        ("homepage",      "https://barrikade.info/"),
-        # Schwester-Host publish.barrikade.info (typischerweise permissivere Anti-Bot)
-        ("publish-feed",  "https://publish.barrikade.info/feed"),
-        ("publish-home",  "https://publish.barrikade.info/"),
-        # beta-Domain (User 2026-05-28)
-        ("beta-feed",     "https://beta.barrikade.info/feed"),
-        ("beta-home",     "https://beta.barrikade.info/"),
-        ("beta-rss",      "https://beta.barrikade.info/rss"),
-    ]
-    found = []  # preserve order
-    seen  = set()
-    for label, u in candidates:
-        try:
-            body = fetch(u, timeout=12)
-            if not body or len(body) < 100:
-                continue
-            # Extract article URLs/IDs via three different parsers depending
-            # on what we got back.
-            urls = []
-            if "<rss" in body[:200].lower() or "<feed" in body[:200].lower() or "<atom" in body[:200].lower():
-                # RSS/Atom — extract <link> tags
-                for m in re.finditer(r"<link[^>]*>([^<]+)</link>", body):
-                    href = m.group(1).strip()
-                    if "/article/" in href or "barrikade.info" in href:
-                        urls.append(href)
-                # Atom-style <link href="…"/>
-                for m in re.finditer(r'<link[^>]+href=["\']([^"\']+)["\']', body):
-                    href = m.group(1).strip()
-                    if "/article/" in href:
-                        urls.append(href)
-            elif "<urlset" in body[:200].lower() or "<sitemapindex" in body[:200].lower():
-                # sitemap.xml
-                for m in re.finditer(r"<loc>([^<]+)</loc>", body):
-                    href = m.group(1).strip()
-                    if "/article/" in href:
-                        urls.append(href)
-            else:
-                # HTML scrape — barrikade.info verwendet BEIDE URL-Patterns:
-                # kanonisch /article/<id> UND slug-rewritten /<slug>-<id>.
-                # Homepage verlinkt fast nur in slug-Form — Regex muss beide
-                # treffen sonst kommen 0 URLs raus (Bug aus User-Log 26.5.2026).
-                for m in re.finditer(r"/article/(\d{3,6})\b", body):
-                    urls.append(f"https://barrikade.info/article/{m.group(1)}")
-                # Slug-pattern: muss nach <a href=...> oder >...< stehen,
-                # damit wir nicht zufällige Text-Inhalte matchen.
-                for m in re.finditer(r'href=["\'](?:https?://(?:www\.)?barrikade\.info)?/([A-Za-z0-9][A-Za-z0-9_\-]*?-(\d{3,6}))(?=["\'?#])', body):
-                    slug = m.group(1)
-                    if slug.startswith(("tag-","rubrique-","page-","spip.php")): continue
-                    urls.append(f"https://barrikade.info/{slug}")
-            log.info(f"barrikade discover [{label}] HTTP-200, parsed {len(urls)} candidate URLs")
-            for u in urls:
-                if u not in seen:
-                    seen.add(u); found.append(u)
-            # If we have a healthy number, stop probing further endpoints.
-            if len(found) >= 30:
-                break
-        except Exception as e:
-            log.info(f"barrikade discover [{label}] failed: {str(e)[:120]}")
-
-    # ── Fallback-Strategien wenn Standard-Discovery zu wenig liefert ──
-    # Diese laufen nur wenn die ersten 10 RSS/Atom/Sitemap-Pfade weniger
-    # als 25 URLs ergeben haben — sie sind langsamer und sollten nur als
-    # Fallback dienen.
-    if len(found) < 25:
-        log.info(f"barrikade discover: nur {len(found)} URLs — versuche SPIP-public-Pfade")
-        try:
-            extra = _barrikade_spip_public_discover(max_results=60)
-            for u in extra:
-                if u not in seen:
-                    seen.add(u); found.append(u)
-            log.info(f"barrikade discover: SPIP-public ergänzt → {len(found)} URLs total")
-        except Exception as e:
-            log.info(f"barrikade discover: SPIP-public failed: {str(e)[:120]}")
-
-    # User 2026-05-28: alle externen Discovery-Quellen (DDG/Bing/Wayback)
-    # entfernt — sie lieferten konsequent 0 URLs und blockierten Crawl-
-    # Cycles. Verbleibende Pfade: RSS/Atom/Sitemap auf den Barrikade-
-    # Domains + SPIP-public.
-
-    return found
-
-# ─────────────────────────────────────────────────────────────────────
-# publish.barrikade.info — SPIP-CMS Editorial Backend (authenticated)
-# ─────────────────────────────────────────────────────────────────────
-# barrikade.info ist die öffentliche Front, publish.barrikade.info das
-# SPIP-Editorial-Backend. Mit Login bekommt man Zugriff auf Artikel,
-# die noch nicht (oder nicht mehr) öffentlich gelistet sind. Credentials
-# kommen ausschließlich aus ENV-Variablen (BARRIKADE_USER/PASS), niemals
-# aus dem Source. Fehlt eine Variable oder schlägt Login fehl, wird der
-# bestehende un-authentifizierte Crawler als Fallback benutzt.
-# ─────────────────────────────────────────────────────────────────────
-
-_BK_AUTH_SESSION = None        # cached scraper session
-_BK_AUTH_SESSION_TS = 0.0      # epoch seconds when login succeeded
-_BK_AUTH_TTL = 30 * 60         # 30 min — SPIP-Sessions sind länger gültig,
-                                # aber wir rotieren proaktiv
-_BK_LAST_DIAG: dict = {}       # last login diagnostic (für /admin/api/barrikade-test)
-
-def _spip_login_payload_variants(form, user, pw):
-    """Generate up to 3 alternative form payloads for the SPIP login.
-
-    SPIP authentifiziert je nach Version anders:
-      v1) Plain `password` → Server hasht serverseitig.
-      v2) JS-hashed `session_password_md5` + `next_session_password_md5`,
-          basierend auf alea_actuel/alea_futur (SHA256 oder MD5).
-      v3) Plain `p` (kürzeres Feld in manchen Themes).
-
-    Wir bauen für jede Variante einen kompletten Form-Body und versuchen
-    sie nacheinander. Erfolg wird per spip_session-Cookie validiert."""
-    # Alea-Werte aus Form (hidden inputs) und JS-Block (var alea_actuel = "...")
-    base = {}
-    for inp in form.find_all("input"):
-        name = inp.get("name")
-        if not name: continue
-        base[name] = inp.get("value", "") or ""
-
-    alea_actuel = (base.get("alea_actuel") or "").strip()
-    alea_futur  = (base.get("alea_futur")  or "").strip()
-    # JS-eingebettete Alea-Werte aus dem umgebenden HTML extrahieren
-    page_html = str(form.parent) if form.parent else str(form)
-    if not alea_actuel:
-        m = re.search(r"alea_actuel\s*=\s*['\"]([0-9a-f]+)['\"]", page_html, re.I)
-        if m: alea_actuel = m.group(1)
-    if not alea_futur:
-        m = re.search(r"alea_futur\s*=\s*['\"]([0-9a-f]+)['\"]", page_html, re.I)
-        if m: alea_futur = m.group(1)
-
-    variants = []
-
-    # V1: Plain password (häufigster Pfad; SPIP fällt server-seitig drauf zurück)
-    p1 = dict(base)
-    p1["var_login"] = user
-    p1["password"]  = pw
-    variants.append(("plain", p1))
-
-    # V2: SHA256-Hash (SPIP 2.1+)
-    if alea_actuel and alea_futur:
-        import hashlib as _h
-        p2 = dict(base)
-        p2["var_login"] = user
-        p2["password"]  = ""  # SPIP erwartet leeren plain-pwd bei JS-Hash
-        p2["session_password_md5"]      = _h.sha256((alea_actuel + pw).encode()).hexdigest()
-        p2["next_session_password_md5"] = _h.sha256((alea_futur  + pw).encode()).hexdigest()
-        variants.append(("sha256", p2))
-        # V2b: MD5-Variante (legacy SPIP <2.1)
-        p2b = dict(base)
-        p2b["var_login"] = user
-        p2b["password"]  = ""
-        p2b["session_password_md5"]      = _h.md5((alea_actuel + pw).encode()).hexdigest()
-        p2b["next_session_password_md5"] = _h.md5((alea_futur  + pw).encode()).hexdigest()
-        variants.append(("md5", p2b))
-
-    return variants
-
-def _barrikade_login_session(force_refresh: bool = False, capture_diag: bool = False):
-    """Login auf publish.barrikade.info (SPIP). Cached für 30 Min.
-    Liefert None bei fehlenden ENV-Vars oder Login-Fehler.
-
-    capture_diag=True → schreibt einen Diagnose-Dict nach _BK_LAST_DIAG,
-    so dass /admin/api/barrikade-test ihn dem Admin zurückgeben kann."""
-    global _BK_AUTH_SESSION, _BK_AUTH_SESSION_TS, _BK_LAST_DIAG
-
-    diag: dict = {"steps": [], "ts": datetime.now().isoformat()}
-    def _add(step, **kw):
-        if capture_diag:
-            diag["steps"].append({"step": step, **kw})
-
-    user = os.getenv("BARRIKADE_USER")
-    pw   = os.getenv("BARRIKADE_PASS")
-    if not user or not pw:
-        _add("env_missing", user_set=bool(user), pass_set=bool(pw))
-        if capture_diag: _BK_LAST_DIAG = diag
-        return None
-
-    # Cache hit
-    if not force_refresh and _BK_AUTH_SESSION and (time.time() - _BK_AUTH_SESSION_TS) < _BK_AUTH_TTL:
-        _add("cache_hit", age_s=int(time.time() - _BK_AUTH_SESSION_TS))
-        if capture_diag: _BK_LAST_DIAG = diag
-        return _BK_AUTH_SESSION
-
-    login_url = os.getenv(
-        "BARRIKADE_LOGIN_URL",
-        "https://publish.barrikade.info/spip.php?page=login&lang=de",
-    )
-    base_url = os.getenv("BARRIKADE_BASE", "https://publish.barrikade.info")
-
-    if not _HAS_CLOUDSCRAPER:
-        log.warning("barrikade auth: cloudscraper unavailable, cannot login")
-        _add("no_cloudscraper")
-        if capture_diag: _BK_LAST_DIAG = diag
-        return None
-    try:
-        sess = cloudscraper.create_scraper(
-            browser={"browser":"chrome", "platform":"darwin", "mobile":False}
-        )
-        sess.headers.update({
-            "Accept-Language": "de,en;q=0.7",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Referer": base_url + "/",
-        })
-
-        # 1) GET Login-Page → SPIP-Anti-CSRF-Token aus dem Formular extrahieren.
-        # Cloudflare/Render-IP-Verbindungen sind flaky → 3 Retries mit Backoff.
-        r = None
-        last_err = None
-        for attempt in range(3):
-            try:
-                # Längeres connect-timeout (8s), read-timeout (25s) für CF-Challenges
-                r = sess.get(login_url, timeout=(8, 25))
-                _add(f"get_login_try{attempt+1}", status=r.status_code,
-                     body_len=len(r.text or ""))
-                if r.status_code == 200:
-                    break
-                last_err = f"HTTP {r.status_code}"
-            except Exception as e:
-                last_err = str(e)[:200]
-                _add(f"get_login_try{attempt+1}_exc", err=last_err)
-                r = None
-            if attempt < 2:
-                wait_s = 2 ** (attempt + 1)  # 2s, 4s
-                time.sleep(wait_s)
-
-        if r is None or r.status_code != 200:
-            log.warning(f"barrikade auth: Login-Page nach 3 retries fehlgeschlagen — {last_err}")
-            diag["success"] = False
-            diag["fail_reason"] = f"login_page_unreachable: {last_err}"
-            if capture_diag: _BK_LAST_DIAG = diag
-            return None
-        soup = BeautifulSoup(r.text, "html.parser")
-
-        # Login-Form finden.
-        form = None
-        for f in soup.find_all("form"):
-            inputs = {i.get("name","").lower() for i in f.find_all("input")}
-            if "var_login" in inputs or "password" in inputs:
-                form = f; break
-        if not form:
-            log.warning("barrikade auth: kein Login-Formular im HTML — SPIP-Theme geändert?")
-            _add("no_form", forms_found=len(soup.find_all("form")))
-            if capture_diag: _BK_LAST_DIAG = diag
-            return None
-
-        action = form.get("action") or login_url
-        if action.startswith("/"):
-            action = base_url + action
-        elif not action.startswith("http"):
-            action = login_url
-        _add("form_found", action=action, n_inputs=len(form.find_all("input")))
-
-        # 2) Versuche jede Login-Variante.
-        variants = _spip_login_payload_variants(form, user, pw)
-        _add("variants_built", labels=[v[0] for v in variants])
-
-        for label, payload in variants:
-            try:
-                # Frische Cookies pro Versuch wären zu aggressiv (das alea-Set
-                # ist an die Session gebunden). Wir keepe die Session und
-                # tauschen nur den Body.
-                r2 = sess.post(action, data=payload, timeout=30, allow_redirects=True)
-                cookies = {c.name: True for c in sess.cookies}
-                has_spip_cookie = any(c.startswith("spip_session") for c in cookies)
-
-                body_low = (r2.text or "").lower()
-                error_markers = (
-                    "erreur_message", "identifiant ou mot de passe",
-                    "anmeldung fehlgeschlagen", "login failed",
-                    "passwort falsch", "mot de passe incorrect",
-                    "identifiants incorrects",
-                )
-                login_failed = any(m in body_low for m in error_markers)
-
-                # Zweite Erfolgs-Verifikation: Backend-Page abrufen. Wenn die
-                # öffnet (HTTP 200 mit "deconnexion" oder "ecrire"-Marker),
-                # sind wir wirklich eingeloggt.
-                test_url = f"{base_url}/ecrire/"
-                rt = sess.get(test_url, timeout=20, allow_redirects=False)
-                ecrire_ok = (rt.status_code in (200, 302) and
-                             ("deconnexion" in (rt.text or "").lower() or
-                              "spip" in dict(rt.headers).get("Set-Cookie", "").lower() or
-                              has_spip_cookie))
-
-                _add(f"try_{label}",
-                     post_status=r2.status_code, post_len=len(r2.text or ""),
-                     spip_cookie=has_spip_cookie, error_in_body=login_failed,
-                     ecrire_status=rt.status_code, ecrire_ok=ecrire_ok,
-                     cookies=list(cookies.keys()))
-
-                if has_spip_cookie and not login_failed and ecrire_ok:
-                    _BK_AUTH_SESSION = sess
-                    _BK_AUTH_SESSION_TS = time.time()
-                    log.info(f"barrikade auth: session OK (variant={label})")
-                    diag["success"] = True
-                    diag["variant"] = label
-                    if capture_diag: _BK_LAST_DIAG = diag
-                    return sess
-            except Exception as ve:
-                _add(f"try_{label}_exc", err=str(ve)[:200])
-                continue
-
-        log.warning("barrikade auth: alle Login-Varianten fehlgeschlagen")
-        diag["success"] = False
-        if capture_diag: _BK_LAST_DIAG = diag
-        return None
-    except Exception as e:
-        log.warning(f"barrikade auth: exception {str(e)[:200]} — fallback")
-        _add("outer_exception", err=str(e)[:200])
-        diag["success"] = False
-        if capture_diag: _BK_LAST_DIAG = diag
-        return None
-
-def _barrikade_authed_discover_urls(sess):
-    """Pull article URLs from the SPIP editorial backend. Versucht mehrere
-    bekannte SPIP-Backend-Pfade; sammelt Artikel-IDs und mapped auf die
-    kanonischen barrikade.info/article/<id>-URLs."""
-    base = os.getenv("BARRIKADE_BASE", "https://publish.barrikade.info")
-    candidates = [
-        f"{base}/ecrire/?exec=articles_tous",
-        f"{base}/ecrire/?exec=articles_page",
-        f"{base}/ecrire/?exec=plan",
-        f"{base}/ecrire/",
-        f"{base}/spip.php?page=sommaire",
-    ]
-    seen = set()
-    found = []
-    for url in candidates:
-        try:
-            r = sess.get(url, timeout=20)
-            if r.status_code != 200:
-                log.info(f"barrikade authed [{url}] HTTP {r.status_code}")
-                continue
-            body = r.text or ""
-            # SPIP-Artikel-IDs sowohl im neuen (spip.php?article<id>) als
-            # auch im URL-Rewriting-Format (/<id>) und im Backend-Format
-            # (?exec=article&id_article=<id>) finden.
-            ids = set()
-            for m in re.finditer(r"[?&]article(\d+)\b", body):
-                ids.add(m.group(1))
-            for m in re.finditer(r"id_article=(\d+)", body):
-                ids.add(m.group(1))
-            for m in re.finditer(r"/article/(\d+)", body):
-                ids.add(m.group(1))
-            log.info(f"barrikade authed [{url}] → {len(ids)} article IDs")
-            for aid in ids:
-                public_url = f"https://barrikade.info/article/{aid}"
-                if public_url not in seen:
-                    seen.add(public_url); found.append(public_url)
-            if len(found) >= 80:
-                break
-        except Exception as e:
-            log.info(f"barrikade authed [{url}] failed: {str(e)[:120]}")
-    return found
-
-def _fetch_article_multi(sess, link, article_id, *, capture_diag=False):
-    """Versucht einen Artikel über VIELE URL-Patterns zu holen und liefert
-    den ersten erfolgreichen (Volltext, Strategie-Label) zurück.
-
-    Reihenfolge (auf publish wegen Auth-Cookie zuerst):
-      1. publish.barrikade.info/spip.php?article<id>            (public-render on publish)
-      2. publish.barrikade.info/ecrire/?exec=article&id_article=<id>   (editor view)
-      3. publish.barrikade.info/ecrire/?exec=article_edit&id_article=<id>  (editor edit)
-      4. publish.barrikade.info/article/<id>                    (rewritten on publish)
-      5. barrikade.info/article/<id>                            (public-rendering off-domain)
-      6. Wayback Machine snapshot der Public-URL
-
-    Returns: (full_text, strategy_label) oder (None, last_error_string)."""
-    base = os.getenv("BARRIKADE_BASE", "https://publish.barrikade.info")
-    diag_steps = [] if capture_diag else None
-
-    def _add(label, **kw):
-        if diag_steps is not None:
-            diag_steps.append({"step": label, **kw})
-
-    # Helper: aus HTML den Artikel-Body extrahieren
-    def _extract_body(html, prefer_editor=False):
-        if not html or len(html) < 300:
-            return None
-        try:
-            soup = BeautifulSoup(html, "html.parser")
-            # 1. Editor-Textarea (definitive Inhalts-Quelle wenn wir im editor sind)
-            ta = soup.select_one("textarea[name=texte], textarea#texte")
-            if ta and ta.get_text(strip=True):
-                title_el = soup.select_one("input[name=titre], input#titre, #titre_input")
-                title = title_el.get("value","").strip() if title_el else ""
-                t = (title + "\n" + ta.get_text(" ", strip=True)).strip()
-                if len(t) > 100:
-                    return t
-            # 2. Public Article-Body (SPIP default theme selectors)
-            for sel in [
-                ".texte-article", ".texte", ".surface-texte", "#texte",
-                "div.contenu", "article .formo", "article",
-                ".article-body", "main .content", "main",
-            ]:
-                el = soup.select_one(sel)
-                if el:
-                    txt = el.get_text(" ", strip=True)
-                    if len(txt) > 150:
-                        # Title auch dazu
-                        h1 = soup.select_one("h1, .titre, .pagination-titre")
-                        title = h1.get_text(strip=True) if h1 else ""
-                        return (title + "\n" + txt).strip()
-            # 3. Fallback: ganze Page minus Nav/Footer
-            for s in soup(["script","style","nav","footer","header","aside","form"]):
-                s.decompose()
-            txt = soup.get_text(" ", strip=True)
-            if len(txt) > 200:
-                return txt
-        except Exception:
-            pass
-        return None
-
-    candidates = []
-    if article_id:
-        candidates.extend([
-            ("auth-spip",    f"{base}/spip.php?article{article_id}", True),
-            ("auth-editor",  f"{base}/ecrire/?exec=article&id_article={article_id}", True),
-            ("auth-edit",    f"{base}/ecrire/?exec=article_edit&id_article={article_id}", True),
-            ("auth-rewrite", f"{base}/article/{article_id}", True),
-            ("public",       f"https://barrikade.info/article/{article_id}", False),
-        ])
-    # Original-URL (Slug oder Article) als Public-Fallback
-    if link and link not in [c[1] for c in candidates]:
-        candidates.append(("public-link", link, False))
-
-    last_err = "no candidates"
-    for label, url, use_auth in candidates:
-        try:
-            if use_auth:
-                r = sess.get(url, timeout=15, allow_redirects=True)
-            else:
-                # Public path: nutze global session (mit cloudscraper für barrikade.info)
-                try:
-                    text = get_text(url)
-                    if text and len(text) > 200:
-                        _add(label, ok=True, len=len(text), via="get_text")
-                        return text, label
-                    else:
-                        _add(label, ok=False, reason="too_short", via="get_text")
-                        last_err = f"{label}: too short"
-                        continue
-                except Exception as e:
-                    _add(label, ok=False, reason=str(e)[:120], via="get_text")
-                    last_err = f"{label}: {str(e)[:80]}"
-                    continue
-            if r.status_code != 200:
-                _add(label, status=r.status_code, ok=False)
-                last_err = f"{label}: HTTP {r.status_code}"
-                continue
-            full = _extract_body(r.text, prefer_editor=("ecrire" in url))
-            if full:
-                _add(label, status=200, ok=True, len=len(full))
-                return full, label
-            _add(label, status=200, ok=False, reason="no_body_extracted", html_len=len(r.text or ""))
-            last_err = f"{label}: empty body"
-        except Exception as e:
-            _add(label, ok=False, exc=str(e)[:120])
-            last_err = f"{label}: {str(e)[:80]}"
-
-    # User 2026-05-28: "mach ohne wayback ist zu buggy" — Wayback-Fallback
-    # an dieser Stelle gestrichen. _crawl_barrikade_wayback_only steht
-    # weiter als separater Admin-Endpoint zur Verfügung.
-
-    if diag_steps is not None:
-        return None, {"error": last_err, "steps": diag_steps}
-    return None, last_err
-
-def _crawl_barrikade_full(verbose=False, max_articles=200, start_id=None, end_id=None,
-                          progress_callback=None):
-    """ECHTER Full-Crawl: systematische ID-Iteration durch barrikade.info.
-
-    User-Hinweis 2026-05-28: "mach ohne wayback ist zu buggy und nur 1/10
-    ist dort eingetragen". Wayback + archive.today aus dem Default-Pfad
-    entfernt — beide hatten Timeout-Quoten >80% und blockierten den
-    Crawler in 15s-Schritten. Direct cloudscraper-Fetch ist der einzige
-    schnelle Pfad; bei Fehlschlag fällt der Code auf den preloaded
-    Search-Snippet (DDG/Bing) zurück, sofern vorhanden — das gibt zumindest
-    Titel+Snippet zur Klassifikation.
-    Reihenfolge:
-      1) Direct cloudscraper (barrikade.info/article/<id>)
-      2) Search-Snippet aus preloaded DDG/Bing-Index als Notnagel
-    Wayback bleibt im separaten Admin-Endpoint `barrikade-wayback-only`
-    falls explizit gewollt — aus dem Default-Pfad ist er raus.
-
-    start_id: höchste ID zu versuchen (None=auto via barrikade_latest_id)
-    end_id: niedrigste ID (None=start_id-max_articles)
-    max_articles: harter Cap an Versuchen
-    progress_callback(dict) → Live-Updates an UI"""
-    url_results = []
-    inserted = 0
-    fetch_counter = {"direct": 0, "failed": 0}
-
-    if start_id is None:
-        start_id = barrikade_latest_id()
-        log.info(f"barrikade full-crawl: auto-detected latest_id={start_id}")
-    if end_id is None:
-        end_id = max(1, start_id - max_articles)
-
-    log.info(f"barrikade full-crawl: scanning IDs {start_id} → {end_id} (max {max_articles} tries)")
-    if progress_callback:
-        progress_callback({"total_ids": min(start_id - end_id + 1, max_articles),
-                           "tried_urls": 0, "inserted": 0})
-
-    consecutive_404 = 0
-    consecutive_403 = 0
-    tried = 0
-
-    for aid in range(start_id, end_id - 1, -1):
-        if tried >= max_articles: break
-        if consecutive_404 > 30:
-            log.info(f"barrikade full-crawl: 30 konsekutive 404 — abbruch bei id={aid}")
-            break
-        if consecutive_403 > 5:
-            log.warning(f"barrikade full-crawl: 5 konsekutive 403/429 — Cloudflare blockt, abbruch")
-            break
-        tried += 1
-
-        link_canonical = f"https://barrikade.info/article/{aid}"
-        link_used = link_canonical
-        full = None
-        strategy = None
-
-        try:
-            # 1) Direct fetch via cloudscraper
-            try:
-                t = get_text(link_canonical)
-                if t and len(t) > 250:
-                    full = t
-                    strategy = "direct"
-                    fetch_counter["direct"] += 1
-                    consecutive_404 = 0
-                    consecutive_403 = 0
-            except requests.HTTPError as he:
-                code = getattr(he.response, "status_code", 0)
-                if code == 404:
-                    consecutive_404 += 1
-                    if verbose:
-                        url_results.append({"url": link_canonical, "ok": False, "reason": "direct_404"})
-                    if progress_callback:
-                        progress_callback({"tried_urls": tried, "inserted": inserted,
-                                           "fetch_counter": dict(fetch_counter),
-                                           "current_id": aid})
-                    time.sleep(0.15)
-                    continue  # nicht mit Wayback verschwenden bei echtem 404
-                elif code in (403, 429):
-                    consecutive_403 += 1
-                    log.info(f"barrikade direct id={aid} HTTP {code}")
-            except Exception as e:
-                log.info(f"barrikade direct id={aid}: {str(e)[:100]}")
-
-            # Wenn nichts: failed
-            if not full or len(full) < 80:
-                fetch_counter["failed"] += 1
-                if verbose:
-                    url_results.append({"url": link_canonical, "ok": False, "reason": "no_content"})
-                if progress_callback:
-                    progress_callback({"tried_urls": tried, "inserted": inserted,
-                                       "fetch_counter": dict(fetch_counter), "current_id": aid})
-                time.sleep(0.3)
-                continue
-
-            # ── Klassifizieren + speichern ──
-            if not any(kw in full.lower() for kw in BARRIKADE_RELEVANCE_KWS):
-                if verbose:
-                    url_results.append({"url": link_canonical, "ok": False,
-                                        "reason": "no_relevance_kw", "strategy": strategy,
-                                        "len": len(full)})
-            elif is_false_positive(full):
-                if verbose:
-                    url_results.append({"url": link_canonical, "ok": False,
-                                        "reason": "false_positive", "strategy": strategy})
-            else:
-                ai = smart_classify(full)
-                if not ai:
-                    if verbose:
-                        url_results.append({"url": link_canonical, "ok": False,
-                                            "reason": "classify_failed", "strategy": strategy,
-                                            "len": len(full)})
-                else:
-                    saved = save_incident(ai, full, "barrikade.info", link_canonical, date_from_url(link_canonical))
-                    if saved:
-                        inserted += 1
-                        if verbose:
-                            url_results.append({"url": link_canonical, "ok": True,
-                                                "strategy": strategy,
-                                                "category": ai.get("kategorie",""),
-                                                "len": len(full)})
-                    else:
-                        if verbose:
-                            url_results.append({"url": link_canonical, "ok": False,
-                                                "reason": "duplicate_or_filter",
-                                                "strategy": strategy,
-                                                "category": ai.get("kategorie","")})
-            time.sleep(0.35)
-        except Exception as e:
-            log.info(f"barrikade full id={aid}: {str(e)[:100]}")
-            fetch_counter["failed"] += 1
-
-        if progress_callback:
-            progress_callback({"tried_urls": tried, "inserted": inserted,
-                               "fetch_counter": dict(fetch_counter), "current_id": aid})
-
-    log.info(f"barrikade full-crawl: {inserted} inserted, {tried} tried, "
-             f"counter={fetch_counter}")
-    final = {"inserted": inserted, "tried_urls": tried,
-             "start_id": start_id, "end_id": max(end_id, start_id - tried + 1),
-             "fetch_counter": fetch_counter,
-             "url_results": url_results,
-             "strategy_counter": {r["strategy"]: 1 for r in url_results if r.get("ok")}}
-    # Sum up strategy_counter
-    sc = {}
-    for r in url_results:
-        if r.get("ok"):
-            s = r.get("strategy","?")
-            sc[s] = sc.get(s, 0) + 1
-    final["strategy_counter"] = sc
-    if progress_callback:
-        progress_callback({"status": "done", "done": True, **final})
-    if verbose:
-        return final
-    return inserted
-
-def _crawl_barrikade_authed(verbose=False):
-    """Run the authenticated discovery + ingestion path. Returns the
-    number of newly inserted incidents. Returns 0 if auth unavailable.
-
-    Strategy für Article-Fetch (siehe _fetch_article_multi für volle Liste):
-      1. publish.barrikade.info/spip.php?article<id>  (auth)
-      2. publish.barrikade.info/ecrire/?exec=article  (auth, editor view)
-      3. publish.barrikade.info/ecrire/?exec=article_edit (auth, editor with textarea)
-      4. publish.barrikade.info/article/<id>  (auth, rewritten)
-      5. barrikade.info/article/<id>  (public, cloudscraper)
-      6. Wayback Machine snapshot
-
-    verbose=True → liefert pro URL die genutzte Strategie + Status,
-    damit der Admin im UI sieht, welcher Pfad pro Artikel geklappt hat."""
-    sess = _barrikade_login_session()
-    if not sess:
-        return {"inserted": 0, "reason": "auth_failed", "url_results": []} if verbose else 0
-    urls = _barrikade_authed_discover_urls(sess)
-    if not urls:
-        return {"inserted": 0, "reason": "discovery_empty", "url_results": []} if verbose else 0
-
-    inserted = 0
-    strategy_counter = {}
-    url_results = []  # für verbose-Output
-
-    for link in urls[:80]:
-        try:
-            # Article-ID extrahieren — entweder /article/<id> oder /<slug>-<id>
-            aid_m = (re.search(r"/article/(\d+)", link) or
-                     re.search(r"-(\d{3,6})(?:[?#]|$)", link))
-            article_id = aid_m.group(1) if aid_m else None
-
-            full, strategy = _fetch_article_multi(sess, link, article_id, capture_diag=verbose)
-            if full is None:
-                if verbose:
-                    url_results.append({"url": link, "ok": False, "fetch_err": strategy})
-                continue
-
-            strategy_counter[strategy] = strategy_counter.get(strategy, 0) + 1
-
-            # Relevanz-Filter
-            if not any(kw in full.lower() for kw in BARRIKADE_RELEVANCE_KWS):
-                if verbose:
-                    url_results.append({"url": link, "ok": False, "strategy": strategy,
-                                        "reason": "no_relevance_kw", "len": len(full)})
-                continue
-            if is_false_positive(full):
-                if verbose:
-                    url_results.append({"url": link, "ok": False, "strategy": strategy,
-                                        "reason": "false_positive"})
-                continue
-
-            ai = smart_classify(full)
-            if not ai:
-                if verbose:
-                    url_results.append({"url": link, "ok": False, "strategy": strategy,
-                                        "reason": "classify_failed", "len": len(full)})
-                continue
-
-            saved = save_incident(ai, full, "barrikade.info", link, date_from_url(link))
-            if saved:
-                inserted += 1
-                if verbose:
-                    url_results.append({"url": link, "ok": True, "strategy": strategy,
-                                        "category": ai.get("kategorie",""), "len": len(full)})
-            else:
-                if verbose:
-                    url_results.append({"url": link, "ok": False, "strategy": strategy,
-                                        "reason": "duplicate_or_filter", "category": ai.get("kategorie","")})
-            time.sleep(0.3)
-        except Exception as e:
-            log.info(f"barrikade authed link={link}: {str(e)[:120]}")
-            if verbose:
-                url_results.append({"url": link, "ok": False, "exc": str(e)[:120]})
-
-    log.info(f"barrikade authed crawl: {inserted} inserted, strategies={strategy_counter}")
-    if verbose:
-        return {
-            "inserted": inserted,
-            "tried_urls": min(len(urls), 80),
-            "discovered_total": len(urls),
-            "strategy_counter": strategy_counter,
-            "url_results": url_results,
-        }
-    return inserted
 
 
 def crawl_barrikade_range(start_id, stop_id):
-    """Crawl barrikade article IDs from start_id down to stop_id über BEIDE
-    Barrikade-Domains (www + publish).
+    """Pure-Firecrawl-Crawl: ID-Sweep von start_id rückwärts bis stop_id.
 
-    Resilience v6 (Merge AB/AC + main v4):
-      0. (Authed) Wenn BARRIKADE_USER/BARRIKADE_PASS gesetzt sind:
-         Authentifizierter Pull aus publish.barrikade.info-Backend.
-         Bei Erfolg (>=1 neuer Insert) Frühreturn.
-      1. Multi-URL-Discovery (RSS/Atom/Sitemap/Homepage/SPIP/DDG/Bing/Wayback).
-      2. ALLE entdeckten URLs verarbeiten (Commit AC — kein [:80]-Slice mehr);
-         is_seen()-Dedup schützt vor Doppelverarbeitung.
-         source-Label = Hostname aus URL — beide Domains separat in
-         source_health getrackt.
-      3. Discovery + ID-Sweep ergänzen sich (kein Early-Return) damit
-         historische Lücken gefüllt werden.
-    """
-    from urllib.parse import urlparse as _up
+    User-Direktive 2026-05-28: "versuche mal nur artikel mit firecrawl zu
+    crawlen ... nur mit den APIs alles andere löschen verursacht fehler".
+
+    barrikade.info ist Angular-SPA — kein anderer Pfad kann den
+    JS-gerendert Article-Body liefern. Wenn FIRECRAWL_API_KEY fehlt,
+    läuft der Crawler komplett leer (gewollt — kein Fake-Erfolg).
+    Returns: Anzahl gespeicherter Einträge."""
+    if not os.getenv("FIRECRAWL_API_KEY", "").strip():
+        log.warning("crawl_barrikade_range: FIRECRAWL_API_KEY not set — skipping")
+        return 0
     inserted = 0
-
-    # Helper: trenne barrikade.info vs publish.barrikade.info im source_health
-    _ALLOWED_HOSTS = {"barrikade.info", "publish.barrikade.info",
-                      "beta.barrikade.info", "www.barrikade.info"}
-    def _src_from_url(u):
-        try:
-            host = _up(u).netloc.lower()
-            if host.startswith("www."):
-                host = host[4:]
-            return host if host in _ALLOWED_HOSTS else "barrikade.info"
-        except Exception:
-            return "barrikade.info"
-
-    # 0) Authentifizierter Pull (silent skip wenn ENV fehlt)
-    if os.getenv("BARRIKADE_USER") and os.getenv("BARRIKADE_PASS"):
-        try:
-            authed = _crawl_barrikade_authed()
-            inserted += authed
-            if authed > 0:
-                return inserted
-        except Exception as e:
-            log.warning(f"barrikade authed crawler: {str(e)[:160]} — fallback to public")
-
-    # 1) Multi-URL-Discovery (RSS, Atom, Sitemap, Homepage, SPIP, Suchmaschinen)
-    discovered = _barrikade_discover_urls()
-    if discovered:
-        log.info(f"barrikade: {len(discovered)} URLs from discovery — processing ALL")
-        # Commit AC: kein [:80]-Slice — User-Direktive "alles crawlen".
-        # is_seen() pro Hash blockt schon Doppelverarbeitung.
-        for link in discovered:
-            try:
-                h = mk_hash(link, link)
-                if is_seen(h): continue
-                full = None
-                try:
-                    full = get_text(link)
-                except Exception as fe:
-                    log.info(f"barrikade direct-fetch failed for {link}: {str(fe)[:120]}")
-                # User 2026-05-28: "mach ohne wayback ist zu buggy" —
-                # Wayback-Fallback aus dem Default-Pfad entfernt.
-                # Direct cloudscraper-Fetch oder skip.
-                if not full or len(full) < 60: continue
-                if not any(kw in full.lower() for kw in BARRIKADE_RELEVANCE_KWS):
-                    continue
-                if is_false_positive(full): continue
-                ai = smart_classify(full)
-                if ai:
-                    if save_incident(ai, full, _src_from_url(link), link, date_from_url(link)):
-                        inserted += 1
-                time.sleep(0.4)
-            except Exception as e:
-                log.info(f"barrikade link={link}: {str(e)[:100]}")
-        # Commit AC: discovery+ID-sweep ergänzen sich (kein Early-Return)
-        if inserted > 0:
-            log.info(f"barrikade discovery path saved {inserted} new incidents — proceeding to ID sweep")
-
-    # 2) ID-Sweep über alle Domains + Jina-Reader-Fallback
     misses = 0
-    consecutive_403 = 0
-    jina_used = 0
+    classify_errors = 0
     for aid in range(start_id, stop_id - 1, -1):
-        article_text = None
-        winning_host = None
-        article_url  = None
-        # 2a) Direkter Fetch über alle drei Schwester-Domains
-        for host in _BARRIKADE_DOMAINS:
-            url = f"https://{host}/article/{aid}"
-            try:
-                t = get_text(url)
-                if t and len(t) >= 80:
-                    article_text = t
-                    winning_host = host
-                    article_url  = url
-                    misses = 0; consecutive_403 = 0
-                    break
-            except requests.HTTPError as e:
-                code = getattr(e.response, "status_code", 0)
-                if code in (403, 429):
-                    consecutive_403 += 1
-                    if consecutive_403 > 20:
-                        log.warning(f"barrikade: {consecutive_403} consecutive 403/429 — aborting ID sweep")
-                        return inserted
-                elif code != 404:
-                    log.info(f"barrikade {host}/article/{aid} HTTP {code}")
-            except Exception as e:
-                log.info(f"barrikade {host}/article/{aid}: {str(e)[:100]}")
-        # 2b) Jina-Reader als Last-Resort wenn alle drei Domains failed.
-        # Funktioniert WO der Render-IP-Range Cloudflare-geblockt wird.
-        if article_text is None:
-            for host in ("beta.barrikade.info", "barrikade.info"):
-                jina_url = f"https://r.jina.ai/https://{host}/article/{aid}"
-                try:
-                    r = requests.get(jina_url, timeout=20, headers={
-                        "User-Agent": "Mozilla/5.0 LEX-EUROPE-Mirror/2.0",
-                        "Accept": "text/markdown, text/plain, */*",
-                        "X-Return-Format": "text",
-                    })
-                    if r.status_code == 200 and r.text and len(r.text) > 200:
-                        article_text = r.text
-                        winning_host = host
-                        article_url  = f"https://{host}/article/{aid}"
-                        jina_used += 1
-                        misses = 0
-                        break
-                except Exception:
-                    pass
-        if article_text is None:
+        url_canon = f"https://barrikade.info/article/{aid}"
+        # Dedup: ID schon mal gesehen?
+        h_url = mk_hash(url_canon, url_canon)
+        if is_seen(h_url):
+            time.sleep(0.1)
+            continue
+        full = _firecrawl_article(aid)
+        if not full:
             misses += 1
-            # Commit AC: misses-Cap von 40 auf 250 erhöht — User-Direktive
-            # "alles crawlen, aktuell gehen nur 500 Einträge". Bei lückigem
-            # ID-Raum (z.B. nach Massen-Löschungen) waren wir vorher viel
-            # zu früh ausgestiegen.
-            if misses >= 250: break
-            time.sleep(0.2)
+            if misses >= 100:
+                log.warning(f"barrikade: 100 konsekutive Firecrawl-Misses bei id={aid} — abort")
+                break
+            time.sleep(0.3)
             continue
-        h = mk_hash(article_url, article_text)
-        if is_seen(h): time.sleep(0.1); continue
-        if not any(kw in article_text.lower() for kw in BARRIKADE_RELEVANCE_KWS):
-            time.sleep(0.1)
+        misses = 0
+        # Relevance-Filter: nur Artikel mit politisch-relevanten Stichworten
+        if not any(kw in full.lower() for kw in BARRIKADE_RELEVANCE_KWS):
+            time.sleep(0.3)
             continue
-        if is_false_positive(article_text):
-            time.sleep(0.1)
+        if is_false_positive(full):
+            time.sleep(0.3)
             continue
-        ai = smart_classify(article_text)
-        if ai:
-            if save_incident(ai, article_text, winning_host, article_url,
-                             date_from_url(article_url)):
-                inserted += 1
-        time.sleep(0.6)
-    if jina_used:
-        log.info(f"barrikade ID-sweep: {jina_used} URLs via Jina-Reader-Fallback")
+        try:
+            ai = smart_classify(full)
+            if ai:
+                if save_incident(ai, full, "barrikade.info", url_canon,
+                                 date_from_url(url_canon)):
+                    inserted += 1
+                    log.info(f"barrikade {aid}: SAVED ({ai.get('kategorie','?')} / {ai.get('ort','?')})")
+        except Exception as e:
+            classify_errors += 1
+            log.info(f"barrikade {aid} classify err: {str(e)[:120]}")
+            if classify_errors > 10:
+                log.warning("barrikade: >10 classify errors — abort sweep")
+                break
+        time.sleep(0.5)
+    log.info(f"barrikade range {start_id}→{stop_id}: {inserted} saved, {misses} misses-at-end")
     return inserted
 
 # ── INDYMEDIA RSS + PAGE CRAWLER ──────────────────────────────────
@@ -11074,65 +10059,6 @@ async def admin_barrikade_test(_=Depends(require_admin)):
 
     return JSONResponse(diag)
 
-@app.post("/admin/api/barrikade-fullcrawl")
-async def admin_barrikade_fullcrawl(request: Request, _=Depends(require_admin)):
-    """FULL-CRAWL: systematische ID-Iteration durch barrikade.info.
-
-    Query/Body params (optional):
-      start_id: höchste ID (default: auto-detect via barrikade_latest_id)
-      end_id: niedrigste ID (default: start_id - max_articles)
-      max_articles: harter Cap (default 200)
-
-    Pro ID: 4-stufige Fetch-Chain (direct → Wayback → archive.today →
-    search-snippet). Returns detaillierten Per-URL-Bericht."""
-    try:
-        # Optional Params aus Body oder Query
-        body = {}
-        try: body = await request.json()
-        except: pass
-        start_id = body.get("start_id") or request.query_params.get("start_id")
-        end_id = body.get("end_id") or request.query_params.get("end_id")
-        max_articles = body.get("max_articles") or request.query_params.get("max_articles") or 200
-        start_id = int(start_id) if start_id else None
-        end_id = int(end_id) if end_id else None
-        max_articles = int(max_articles)
-        # Hard-cap auf 500 damit der Lauf nicht ausartet
-        max_articles = min(max_articles, 500)
-
-        result = _crawl_barrikade_full(verbose=True, max_articles=max_articles,
-                                        start_id=start_id, end_id=end_id)
-        if isinstance(result, int):
-            result = {"inserted": result, "url_results": []}
-        return JSONResponse({"status": "ok", "path": "full_crawl", **result})
-    except Exception as e:
-        log.error(f"barrikade full-crawl error: {e}", exc_info=True)
-        return JSONResponse({"status": "error", "error": str(e)[:300], "inserted": 0}, status_code=500)
-
-@app.post("/admin/api/barrikade-crawl")
-async def admin_barrikade_crawl(_=Depends(require_admin)):
-    """Synchroner Barrikade-Crawl mit detailliertem Per-URL-Bericht.
-
-    Pipeline (User 2026-05-28: kein Wayback mehr — zu buggy):
-      1) Auth-Pfad (publish.barrikade.info Login + ?exec=article)
-    Liefert den Per-URL-Bericht des Auth-Pfads zurück. Max-Laufzeit ~80s."""
-    try:
-        result_a = _crawl_barrikade_authed(verbose=True)
-        if isinstance(result_a, int):
-            result_a = {"inserted": result_a, "url_results": []}
-        return JSONResponse({
-            "status": "ok",
-            "inserted": result_a.get("inserted", 0),
-            "tried_urls": result_a.get("tried_urls", 0),
-            "discovered_total": result_a.get("discovered_total", 0),
-            "strategy_counter": result_a.get("strategy_counter", {}),
-            "url_results": result_a.get("url_results", []),
-            "auth_path": {"inserted": result_a.get("inserted", 0),
-                          "reason": result_a.get("reason", "ran")},
-        })
-    except Exception as e:
-        log.error(f"barrikade authed crawl error: {e}", exc_info=True)
-        return JSONResponse({"status": "error", "error": str(e)[:300], "inserted": 0}, status_code=500)
-
 @app.get("/admin/api/status")
 async def admin_status(_=Depends(require_admin)):
     b_max  = int(meta_get("hist_b_max") or 0)
@@ -11260,73 +10186,6 @@ async def admin_crawler_probe(url: str, _=Depends(require_admin)):
     return JSONResponse(fetch_diagnostic(url))
 
 
-@app.get("/admin/api/crawler/barrikade-discover")
-async def admin_crawler_barrikade_discover(_=Depends(require_admin)):
-    """Live-Test der barrikade Discovery — beide Domains × 10 Pfade = 20
-    Endpoints. Gibt zurück welche funktionieren und wieviele URLs jeder
-    liefert. Operatoren sehen sofort welche Domain durchgeht."""
-    import re as _re
-    out = {"endpoints": [], "summary": {}, "per_domain": {}}
-    working_total = 0
-    for host in _BARRIKADE_DOMAINS:
-        per_domain_working = 0
-        for label, path in _BARRIKADE_DISCOVERY_PATHS:
-            u = f"https://{host}{path}"
-            diag = fetch_diagnostic(u, timeout=10)
-            n_urls = 0
-            body_marker = ""
-            if diag.get("ok"):
-                working_total += 1
-                per_domain_working += 1
-                excerpt = diag.get("excerpt", "")
-                if "<rss" in excerpt[:200].lower():     body_marker = "RSS"
-                elif "<feed" in excerpt[:200].lower():  body_marker = "Atom"
-                elif "<urlset" in excerpt[:200].lower():body_marker = "Sitemap"
-                elif "<html" in excerpt[:200].lower():  body_marker = "HTML"
-                else: body_marker = "?"
-                n_urls = len(_re.findall(r"/article/\d+", diag.get("excerpt","")))
-            out["endpoints"].append({
-                "domain":      host,
-                "label":       label,
-                "url":         u,
-                "ok":          diag.get("ok"),
-                "status_code": diag.get("status_code"),
-                "content_type":diag.get("content_type"),
-                "len":         diag.get("len"),
-                "elapsed_ms":  diag.get("elapsed_ms"),
-                "winning_ua":  diag.get("winning_ua"),
-                "body_marker": body_marker,
-                "url_hits_excerpt": n_urls,
-                "error":       diag.get("error"),
-            })
-        out["per_domain"][host] = {"working": per_domain_working,
-                                    "total": len(_BARRIKADE_DISCOVERY_PATHS)}
-    out["summary"] = {"working": working_total,
-                       "total": len(out["endpoints"]),
-                       "domains_tested": list(_BARRIKADE_DOMAINS)}
-    return JSONResponse(out)
-
-
-@app.post("/admin/api/crawler/barrikade-run")
-async def admin_crawler_barrikade_run(bg: BackgroundTasks, _=Depends(require_admin)):
-    """Triggert einen Discovery-Run gegen barrikade.info im Hintergrund.
-    Ergebnis ist später in /admin/api/status (running flag) bzw. der
-    incidents-DB sichtbar.
-
-    Commit AC: Range von 50 auf 400 IDs vergrößert — User-Direktive
-    'alles crawlen'. Mit dem 250-Misses-Abbruch im crawl_barrikade_range
-    bleibt das auch bei dünnem ID-Raum beschränkt."""
-    def _run():
-        try:
-            latest = barrikade_latest_id()
-            n = crawl_barrikade_range(latest, max(1, latest - 400))
-            log.info(f"manual barrikade run: {n} new incidents")
-        except Exception as e:
-            log.warning(f"manual barrikade run failed: {e}")
-    bg.add_task(_run)
-    return JSONResponse({"ok": True, "status": "Discovery-Run gestartet"})
-
-
 @app.get("/admin/api/hist-status")
 async def admin_hist_status(_=Depends(require_admin)):
     """Status des automatischen Full-Sweep:
@@ -11386,340 +10245,97 @@ async def admin_hist_trigger(bg: BackgroundTasks, _=Depends(require_admin)):
     return JSONResponse({"ok": True, "triggered": "run_historical"})
 
 
-@app.post("/admin/api/crawler/barrikade-deep-crawl")
-async def admin_crawler_barrikade_deep(bg: BackgroundTasks, _=Depends(require_admin)):
-    """Commit AC: Voller historischer Sweep — durchläuft den gesamten
-    Article-ID-Raum von der aktuellen latest_id bis ID=1. Läuft im
-    Hintergrund (kann mehrere Stunden dauern), respektiert den 250-
-    Misses-Abbruch pro Range-Chunk. Resümiert pro 800-ID-Chunk und setzt
-    `hist_b_curr` so dass parallele run_historical()-Aufrufe nicht in die
-    Quere kommen.
-
-    User-Direktive: 'wir wollen alles crawlen, aktuell gehen nur 500
-    Einträge' — dieser Endpoint öffnet die volle Historie auf Knopfdruck.
-    """
-    def _deep():
-        try:
-            latest = barrikade_latest_id()
-            total = 0
-            chunk = 800
-            curr = latest
-            while curr > 1:
-                stop = max(1, curr - chunk)
-                log.info(f"barrikade DEEP: {curr}→{stop}")
-                n = crawl_barrikade_range(curr, stop)
-                total += n
-                log.info(f"barrikade DEEP chunk done: +{n} (running total {total})")
-                meta_set("hist_b_curr", stop - 1)
-                if stop <= 1:
-                    break
-                curr = stop - 1
-            log.info(f"barrikade DEEP crawl finished: {total} new incidents")
-        except Exception as e:
-            log.warning(f"deep barrikade crawl failed: {e}")
-    bg.add_task(_deep)
-    return JSONResponse({"ok": True,
-                         "status": "Deep-Crawl gestartet (volle Historie, läuft im Hintergrund)"})
-
-@app.post("/admin/api/crawler/barrikade-import-id")
-async def admin_crawler_barrikade_import_id(request: Request, _=Depends(require_admin)):
-    """Direkter Import einzelner Article-IDs — verifying-and-saving Pfad.
-    User 2026-05-28: explizit Article 7490 und 7510 importieren wenn der
-    automatische Crawl sie nicht erreicht.
-
-    Body: {"ids": [7490, 7510, ...]}  (oder einzelne id)
-    Probiert pro ID nacheinander alle Strategien:
-      1. beta.barrikade.info/article/<id>
-      2. barrikade.info/article/<id>
-      3. r.jina.ai-Reverse-Reader für beide URLs
-    Liefert detaillierten Per-ID-Report zurück (welche Strategie geklappt
-    hat, wieviel Bytes, ob save_incident erfolgreich war, warum nicht).
-    """
-    payload = await request.json()
-    ids = payload.get("ids") or ([payload.get("id")] if payload.get("id") else [])
-    if not ids:
-        return JSONResponse({"ok": False, "error": "no ids provided"}, status_code=400)
-    if isinstance(ids, str):
-        ids = [int(x.strip()) for x in re.split(r"[,\s]+", ids) if x.strip().isdigit()]
-    ids = [int(i) for i in ids if str(i).isdigit()]
-    out = []
-    inserted_total = 0
-    for aid in ids:
-        attempts = []
-        full = None
-        winning = None
-        # Reihenfolge: schnellste/günstigste zuerst, teure/langsame zuletzt.
-        # Jeder Eintrag ist (label, fetch-fn) — fetch-fn liefert HTML/Markdown.
-        url_canon = f"https://barrikade.info/article/{aid}"
-        url_beta  = f"https://beta.barrikade.info/article/{aid}"
-        # Reihenfolge: günstigste zuerst, JS-Render-Services dann.
-        # barrikade.info ist Angular-SPA — direct/cloudscraper/jina liefern
-        # nur Skeleton; nur firecrawl/scrapingbee/scraperapi (mit JS-Render)
-        # liefern echten Article-Body.
-        targets = [
-            ("beta-direct",  lambda: get_text(url_beta)),
-            ("www-direct",   lambda: get_text(url_canon)),
-            ("jina-beta",    lambda: _fetch_via_jina_reader(url_beta, 20)),
-            ("jina-www",     lambda: _fetch_via_jina_reader(url_canon, 20)),
-            ("firecrawl",    lambda: _fetch_via_firecrawl(url_canon, 60)),
-            ("scrapingbee",  lambda: _fetch_via_scrapingbee(url_canon, 45)),
-            ("scraperapi",   lambda: _fetch_via_scraperapi(url_canon, 45)),
-            ("archive.org",  lambda: _fetch_via_archive(url_canon, 20)),
-        ]
-        for label, fn in targets:
-            try:
-                t = fn()
-                if t and len(t) > 200:
-                    full = t
-                    winning = label
-                    attempts.append({"label": label, "ok": True, "len": len(t)})
-                    break
-                attempts.append({"label": label, "ok": False, "len": len(t or ""),
-                                 "reason": "too_short" if t else "empty"})
-            except Exception as e:
-                attempts.append({"label": label, "ok": False, "exc": str(e)[:200]})
-
-        if not full:
-            out.append({"id": aid, "ok": False, "attempts": attempts})
-            continue
-
-        # Klassifikation + Speichern
-        try:
-            relevance_ok = any(kw in full.lower() for kw in BARRIKADE_RELEVANCE_KWS)
-            if not relevance_ok:
-                out.append({"id": aid, "ok": False, "winning": winning,
-                            "reason": "no_relevance_kw", "attempts": attempts,
-                            "excerpt": full[:200]})
-                continue
-            if is_false_positive(full):
-                out.append({"id": aid, "ok": False, "winning": winning,
-                            "reason": "false_positive", "attempts": attempts})
-                continue
-            ai = smart_classify(full)
-            if not ai:
-                out.append({"id": aid, "ok": False, "winning": winning,
-                            "reason": "classify_failed", "attempts": attempts})
-                continue
-            url_canon = f"https://barrikade.info/article/{aid}"
-            saved = save_incident(ai, full, "barrikade.info", url_canon,
-                                  date_from_url(url_canon))
-            if saved:
-                inserted_total += 1
-                out.append({"id": aid, "ok": True, "winning": winning,
-                            "saved": True,
-                            "category": ai.get("kategorie", ""),
-                            "location": ai.get("ort", ""),
-                            "tier": ai.get("tier", ""),
-                            "attempts_used": len(attempts)})
-            else:
-                out.append({"id": aid, "ok": False, "winning": winning,
-                            "reason": "already_seen_or_save_failed",
-                            "category": ai.get("kategorie", "")})
-        except Exception as e:
-            out.append({"id": aid, "ok": False, "winning": winning,
-                        "reason": f"exception: {str(e)[:200]}", "attempts": attempts})
-
-    return JSONResponse({
-        "ok": True,
-        "ids_requested": len(ids),
-        "inserted": inserted_total,
-        "results": out,
-    })
-
-
 @app.post("/admin/api/grok-test")
 async def admin_grok(_=Depends(require_admin)):
     res = classify("In Berlin-Kreuzberg wurden drei Polizeifahrzeuge in Brand gesetzt. Bekennerschreiben einer militanten autonomen Gruppe.")
     return JSONResponse(res or {"error": "Keine Antwort"})
 
-@app.get("/admin/api/scrape-test")
-async def admin_scrape_test(url: str = "https://barrikade.info/article/7490",
-                            _=Depends(require_admin)):
-    """Live-Diagnose: testet alle Fetch-Strategien + erkennt SPA-Skeleton-
-    Responses (die zeigen ok=true aber tatsächlich keinen Content liefern).
+@app.get("/admin/api/firecrawl-test")
+async def admin_firecrawl_test(aid: int = 7490, _=Depends(require_admin)):
+    """Testet Firecrawl gegen eine spezifische Article-ID.
+    Zeigt was geliefert wurde, ob es klassifizierbar ist, und ob es
+    gespeichert würde.
 
-    User 2026-05-28: 'sag einfach was ich bei render einstellen muss'.
-    Strategien:
-      - direct          → KEINE ENV-Var, oft blockt oder liefert SPA-Skeleton
-      - cloudscraper    → KEINE ENV-Var, oft liefert SPA-Skeleton
-      - jina            → KEIN Key nötig (gratis); rendert JS partial
-      - firecrawl       → braucht FIRECRAWL_API_KEY (500/Mon, 1 cr/render)
-      - scrapingbee     → braucht SCRAPINGBEE_API_KEY (1000/Mon, ~5 cr/render)
-      - scraperapi      → braucht SCRAPERAPI_KEY (1000/Mon, ~10 cr/render)
-      - archive.org     → KEIN Key, oft veraltet
-    """
-    out = {"url": url, "render_region": os.getenv("RENDER_REGION", "unknown"),
-           "env_keys": {
-               "FIRECRAWL_API_KEY":   bool(os.getenv("FIRECRAWL_API_KEY")),
-               "SCRAPINGBEE_API_KEY": bool(os.getenv("SCRAPINGBEE_API_KEY")),
-               "SCRAPERAPI_KEY":      bool(os.getenv("SCRAPERAPI_KEY")),
-               "BARRIKADE_USER":      bool(os.getenv("BARRIKADE_USER")),
-               "BARRIKADE_PASS":      bool(os.getenv("BARRIKADE_PASS")),
-           },
-           "strategies": []}
+    User 2026-05-28: "versuche mal nur artikel mit firecrawl zu crawlen
+    https://barrikade.info/article/7490 ... nur mit den APIs"."""
+    key = os.getenv("FIRECRAWL_API_KEY", "").strip()
+    if not key:
+        return JSONResponse({"ok": False, "error": "FIRECRAWL_API_KEY nicht in Render-Environment gesetzt"})
     import time as _t
-
-    def _is_spa_skeleton(body):
-        """Erkennt Angular-SPA-Skeleton ohne echten Article-Content."""
-        if not body or len(body) > 80000:
-            return False
-        head = body[:1000].lower()
-        return ("data-beasties-container" in head or
-                "<app-root" in head or
-                ('<base href="/"' in head and "<title>barrikade</title>" in head))
-
-    def _measure(label, fn):
-        t0 = _t.monotonic()
-        try:
-            result = fn()
-            dt = round((_t.monotonic() - t0) * 1000)
-            if result and len(result) > 200:
-                preview = re.sub(r'\s+', ' ', result[:160]).strip()
-                is_skel = _is_spa_skeleton(result)
-                entry = {
-                    "label": label,
-                    "ok": True,
-                    "delivers_content": not is_skel,
-                    "len": len(result), "ms": dt, "preview": preview,
-                }
-                if is_skel:
-                    entry["warning"] = "SPA-Skeleton (kein Article-Content)"
-                out["strategies"].append(entry)
-            else:
-                out["strategies"].append({
-                    "label": label, "ok": False, "ms": dt,
-                    "reason": "empty_or_short", "len": len(result or "")
-                })
-        except Exception as e:
-            dt = round((_t.monotonic() - t0) * 1000)
-            out["strategies"].append({
-                "label": label, "ok": False, "ms": dt,
-                "exc": str(e)[:200]
-            })
-
-    _measure("direct (requests)",   lambda: requests.get(url, timeout=12,
-                                       headers={"User-Agent": "Mozilla/5.0"}).text)
-    _measure("cloudscraper",        lambda: _fetch_via_cloudscraper(url, 15))
-    _measure("jina (r.jina.ai)",    lambda: _fetch_via_jina_reader(url, 20))
-    _measure("firecrawl",           lambda: _fetch_via_firecrawl(url, 60))
-    _measure("scrapingbee",         lambda: _fetch_via_scrapingbee(url, 45))
-    _measure("scraperapi",          lambda: _fetch_via_scraperapi(url, 45))
-    _measure("archive.org mirror",  lambda: _fetch_via_archive(url, 15))
-
-    out["working_count"] = sum(1 for s in out["strategies"] if s.get("ok"))
-    # NEU: zähle nur Strategien die ECHTEN Content liefern (kein SPA-Skel)
-    out["content_delivering"] = [s["label"] for s in out["strategies"]
-                                 if s.get("ok") and s.get("delivers_content")]
-    out["working_strategies"] = [s["label"] for s in out["strategies"] if s.get("ok")]
-    return JSONResponse(out)
+    t0 = _t.monotonic()
+    md = _firecrawl_article(aid)
+    dt = round((_t.monotonic() - t0) * 1000)
+    if not md:
+        return JSONResponse({"ok": False, "aid": aid, "ms": dt,
+                              "reason": "firecrawl returned empty"})
+    relevant = any(kw in md.lower() for kw in BARRIKADE_RELEVANCE_KWS)
+    fp = is_false_positive(md)
+    preview = re.sub(r"\s+", " ", md[:400]).strip()
+    return JSONResponse({
+        "ok": True, "aid": aid,
+        "url": f"https://barrikade.info/article/{aid}",
+        "fetch_ms": dt,
+        "markdown_len": len(md),
+        "preview": preview,
+        "would_save": relevant and not fp,
+        "is_relevant": relevant,
+        "is_false_positive": fp,
+    })
 
 
-@app.get("/admin/api/raw-fetch")
-async def admin_raw_fetch(url: str, _=Depends(require_admin)):
-    """Liefert das volle HTML/Body einer URL zurück (max 60kb) — für die
-    Diagnose von SPA-Seiten oder unbekannten Layouts. User-Hinweis
-    2026-05-28: barrikade.info ist SPA (Angular, data-beasties-container).
-    Wir müssen sehen WAS die SPA an statischem HTML liefert, um den
-    API-Endpoint zu finden."""
+@app.post("/admin/api/firecrawl-import")
+async def admin_firecrawl_import(request: Request, _=Depends(require_admin)):
+    """Direkter Firecrawl-Import einzelner Article-IDs.
+    Body: {"ids": [7490, 7510, ...]}
+    Für jede ID: Firecrawl → classify → save. Liefert Per-ID-Report."""
+    if not os.getenv("FIRECRAWL_API_KEY", "").strip():
+        return JSONResponse({"ok": False, "error": "FIRECRAWL_API_KEY nicht gesetzt"})
     try:
-        body = fetch(url, timeout=25)
-        if not body:
-            return JSONResponse({"ok": False, "reason": "empty"})
-        # Search for SPA-API-Hints im Body
-        api_hints = []
-        for pattern, label in [
-            (r'"apiUrl"\s*:\s*"([^"]+)"',          "apiUrl-literal"),
-            (r'"baseUrl"\s*:\s*"([^"]+)"',          "baseUrl-literal"),
-            (r'fetch\(["\']([^"\']*/api/[^"\']+)',   "fetch-call"),
-            (r'window\.__INITIAL_STATE__\s*=\s*({)', "initial-state"),
-            (r'application/ld\+json[^>]*>\s*({)',    "json-ld"),
-            (r'/api/v?\d*/articles?/\d+',            "api-articles-path"),
-            (r'/api/v?\d*/posts?/\d+',               "api-posts-path"),
-            (r'environment\.apiUrl\s*=\s*["\']([^"\']+)', "env-apiUrl"),
-            (r'src=["\']([^"\']*runtime\.[a-f0-9]+\.js)', "runtime-js"),
-            (r'src=["\']([^"\']*main\.[a-f0-9]+\.js)',    "main-bundle-js"),
-        ]:
-            for m in re.finditer(pattern, body):
-                api_hints.append({"label": label, "hit": m.group(0)[:160]})
-                if len(api_hints) > 30: break
-            if len(api_hints) > 30: break
-
-        # OG-Meta + canonical
-        og_url = re.search(r'<meta\s+property=["\']og:url["\']\s+content=["\']([^"\']+)', body)
-        canonical = re.search(r'<link\s+rel=["\']canonical["\']\s+href=["\']([^"\']+)', body)
-
-        return JSONResponse({
-            "ok": True,
-            "url": url,
-            "length": len(body),
-            "head_excerpt": body[:600],
-            "mid_excerpt":  body[len(body)//2 : len(body)//2 + 400],
-            "tail_excerpt": body[-400:],
-            "api_hints": api_hints,
-            "og_url": og_url.group(1) if og_url else None,
-            "canonical": canonical.group(1) if canonical else None,
-            "looks_like_spa": ("data-beasties-container" in body or
-                               "<app-root" in body or
-                               "id=\"root\"" in body or
-                               '<base href="/"' in body),
-        })
-    except Exception as e:
-        return JSONResponse({"ok": False, "exc": str(e)[:300]})
-
-
-# ── SPA-API-Discovery: barrikade.info ist eine Angular-SPA ──────────────
-# Statisches HTML ist nur Skeleton. Echte Artikel-Daten werden per
-# JS-Fetch von einem JSON-API geladen. Wir probieren bekannte SPA-API-
-# Patterns ab. Die erste 200er-JSON-Response gewinnt.
-_BARRIKADE_API_PATTERNS = [
-    "https://barrikade.info/api/articles/{aid}",
-    "https://barrikade.info/api/v1/articles/{aid}",
-    "https://barrikade.info/api/v2/articles/{aid}",
-    "https://barrikade.info/api/v1/posts/{aid}",
-    "https://barrikade.info/api/posts/{aid}",
-    "https://barrikade.info/api/article/{aid}",
-    "https://barrikade.info/api/article?id={aid}",
-    "https://barrikade.info/api/v1/article/{aid}",
-    "https://barrikade.info/wp-json/wp/v2/posts/{aid}",  # WP-API
-    "https://barrikade.info/api/items/{aid}",
-    "https://beta.barrikade.info/api/articles/{aid}",
-    "https://beta.barrikade.info/api/v1/articles/{aid}",
-    "https://beta.barrikade.info/api/v2/articles/{aid}",
-    "https://beta.barrikade.info/api/posts/{aid}",
-    "https://beta.barrikade.info/api/article/{aid}",
-]
-
-def _barrikade_fetch_via_spa_api(aid):
-    """Probiert bekannte SPA-API-Patterns für eine Article-ID.
-    Returns (api_url, json_dict) bei Treffer oder None.
-
-    Erkennt JSON-Response am Content-Type oder am Body-Prefix."""
-    for pattern in _BARRIKADE_API_PATTERNS:
-        api_url = pattern.format(aid=aid)
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "invalid JSON body"}, status_code=400)
+    ids = body.get("ids") or []
+    if isinstance(ids, str):
+        ids = [int(x.strip()) for x in re.split(r"[,\s]+", ids) if x.strip().isdigit()]
+    ids = [int(i) for i in ids if str(i).isdigit()]
+    if not ids:
+        return JSONResponse({"ok": False, "error": "no valid ids"}, status_code=400)
+    out = []
+    inserted = 0
+    for aid in ids:
+        url_canon = f"https://barrikade.info/article/{aid}"
+        md = _firecrawl_article(aid)
+        if not md:
+            out.append({"id": aid, "ok": False, "reason": "firecrawl_empty"})
+            continue
+        if not any(kw in md.lower() for kw in BARRIKADE_RELEVANCE_KWS):
+            out.append({"id": aid, "ok": False, "reason": "not_relevant",
+                        "preview": md[:160]})
+            continue
+        if is_false_positive(md):
+            out.append({"id": aid, "ok": False, "reason": "false_positive"})
+            continue
         try:
-            r = requests.get(api_url, timeout=10, headers={
-                "User-Agent": "Mozilla/5.0 LEX-EUROPE-Mirror/2.0",
-                "Accept": "application/json, text/plain, */*",
-            }, allow_redirects=True)
-            if r.status_code != 200: continue
-            # JSON-Body
-            ct = r.headers.get("Content-Type", "")
-            body = r.text.strip()
-            if "application/json" in ct or body.startswith(("{", "[")):
-                try:
-                    data = r.json()
-                    # Heuristik: muss eine plausible "article"-Struktur sein
-                    if isinstance(data, dict) and (
-                        data.get("title") or data.get("body") or
-                        data.get("content") or data.get("text") or
-                        data.get("article")):
-                        log.info(f"barrikade SPA-API HIT [{api_url}]")
-                        return (api_url, data)
-                except Exception:
-                    pass
-        except Exception:
-            pass
-    return None
+            ai = smart_classify(md)
+            if not ai:
+                out.append({"id": aid, "ok": False, "reason": "classify_returned_none"})
+                continue
+            saved = save_incident(ai, md, "barrikade.info", url_canon,
+                                  date_from_url(url_canon))
+            if saved:
+                inserted += 1
+                out.append({"id": aid, "ok": True, "saved": True,
+                            "category": ai.get("kategorie", ""),
+                            "tier": ai.get("tier", ""),
+                            "location": ai.get("ort", "")})
+            else:
+                out.append({"id": aid, "ok": False,
+                            "reason": "save_failed_or_dedup",
+                            "category": ai.get("kategorie", "")})
+        except Exception as e:
+            out.append({"id": aid, "ok": False, "reason": f"exc: {str(e)[:200]}"})
+    return JSONResponse({"ok": True, "inserted": inserted,
+                          "requested": len(ids), "results": out})
 
 
 @app.get("/admin/api/export-csv")
@@ -11879,6 +10495,18 @@ async def startup():
             log.warning(f"geocode_fix_v2 at startup failed: {e}")
     # Always attempt to seed funding (idempotent — no-op if already present).
     seed_funding_data()
+    # Auto-Reset bei FIRECRAWL_API_KEY-Verfügbarkeit + leerer Historie:
+    # User 2026-05-28: hist_b_done=true aber total_inserted=0 weil ohne
+    # FIRECRAWL_API_KEY der ganze Sweep durchlief ohne Saves. Bei neuem
+    # API-Key wollen wir den Sweep automatisch wiederholen.
+    if os.getenv("FIRECRAWL_API_KEY", "").strip():
+        b_total = int(meta_get("hist_b_total_inserted") or 0)
+        b_done  = bool(meta_get("hist_b_done"))
+        if b_done and b_total == 0:
+            log.info("Auto-reset: hist_b_done=true but 0 saves — FIRECRAWL_API_KEY now set, restarting sweep")
+            for k in ("hist_b_done","hist_b_curr","hist_b_max",
+                      "hist_b_total_inserted","b_live_max"):
+                meta_del(k)
     # Säule 2 — populate the Frühwarn-Cluster table on boot so the footer
     # counter and /api/early-warning.{rss,json} have data immediately.
     try:
