@@ -97,6 +97,9 @@ def get_db():
                       ("prosec_status","TEXT DEFAULT 'unknown'"),
                       ("case_ref","TEXT DEFAULT ''"),
                       ("last_status_check","TEXT DEFAULT ''"),
+                      # M4 — cross-source corroboration: how many *additional*
+                      # independent sources documented the same incident.
+                      ("corroboration","INTEGER DEFAULT 0"),
                       # MS-5 (Säule 4) — Quellensicherung
                       ("evidence_path","TEXT DEFAULT ''"),
                       ("evidence_sha","TEXT DEFAULT ''"),
@@ -414,7 +417,6 @@ def _safe_get(scraper_or_session, url, timeout, **kwargs):
     """GET mit manueller Redirect-Folge (max 5 hops). Simpler als
     allow_redirects=True weil cloudscraper's Auto-Redirect manchmal
     Cookies vergisst zwischen Hops."""
-    from urllib.parse import urljoin
     current = url
     for _hop in range(6):
         r = scraper_or_session.get(current, timeout=timeout,
@@ -1115,223 +1117,25 @@ def regeocode_all_inconsistent():
     return fixed
 
 # ── GROK ─────────────────────────────────────────────────────────
-CATEGORIES = [
-    "Brandanschlag","Sabotage","Gewalt","Schmiererei","Aufruf zu Gewalt",
-    "Militante Aktion","Sachbeschädigung","Demo/Kundgebung","Besetzung",
-    "Repression","Verhaftung","Sonstiges"
-]
-
-# ── SEVERITY SCORING ─────────────────────────────────────────────
-SEVERITY_MAP = {
-    "Brandanschlag": 5, "Gewalt": 5, "Militante Aktion": 5,
-    "Aufruf zu Gewalt": 4, "Sabotage": 4,
-    "Sachbeschädigung": 3, "Besetzung": 3, "Demo/Kundgebung": 2,
-    "Verhaftung": 2, "Repression": 2,
-    "Schmiererei": 1, "Sonstiges": 1,
-}
-
-def score_severity(category, text=""):
-    """
-    Schwere 1..5 — Basis aus SEVERITY_MAP, dann text-basiert hochgestuft.
-    Mehrere Signale können stapeln (bis Cap 5). Reihenfolge nach Härte:
-      Personen-Schaden > Brandwaffe/Sprengstoff > Sachschadens-Magnitude.
-    """
-    base = SEVERITY_MAP.get(category, 1)
-    t = (text or "").lower()
-    # Personenschaden = unmittelbarer Härte-Faktor
-    if re.search(r"\b(schwer\s+verletzt|getötet|getoetet|\btot\b|tote\b|todesopfer|"
-                 r"lebensgefahr|reanim(iert|ation)|krankenhaus(?!\w))",
-                 t):
-        base = min(base + 2, 5)
-    elif re.search(r"\b(verletzt|verletzung|verletzte|geprellt|prellung|gebrochen|"
-                   r"blutung)", t):
-        base = min(base + 1, 5)
-    # Brandwaffe / Sprengstoff / Werkzeugmilieu
-    if re.search(r"\b(brandsatz|molotov|molotow|brand(?:flasche|beschleuniger)|"
-                 r"sprengsatz|sprengstoff|usbv|brandsetzung)\b", t):
-        base = min(base + 1, 5)
-    # Sachschadens-Magnitude (€-Hinweise)
-    m = re.search(r"(\d{1,3}(?:[.,]\d{3})+|\d{4,})\s*(?:€|euro|chf|franken)", t)
-    if m:
-        try:
-            amt = int(re.sub(r"[.,]", "", m.group(1)))
-            if   amt >= 1_000_000: base = min(base + 2, 5)
-            elif amt >=   100_000: base = min(base + 1, 5)
-        except Exception:
-            pass
-    # Mehrfach-Anschlag / koordinierte Aktion
-    if re.search(r"(\bserien?anschl|\bkoordinier|\bmehrere\s+anschl|"
-                 r"\bin\s+der\s+gleichen\s+nacht|\bsimultan|"
-                 r"\b(?:fünf|sechs|sieben|acht|neun|zehn|\d{2,})\s+(?:fahrzeuge|"
-                 r"autos|wagen|tesla|streifen|polizei))", t):
-        base = min(base + 1, 5)
-    return base
-
-# ── ACTOR / GROUP TRACKING ────────────────────────────────────────
-# Each entry: (display name, regex patterns, fedpol_tier).
-# Tier mapping is intentionally conservative (Concept §C3 #2 — keine
-# Vorverurteilung). Only attribute "act" where public record clearly
-# connects the name to concrete violent acts (claim letters or convictions);
-# "enable" for groups that organise support/propaganda for the milieu;
-# "endorse" for scene/neighbourhood labels and movements that explicitly
-# disavow violence themselves but are part of the broader endorsement layer.
-KNOWN_ACTORS = [
-    # ── DACH ───────────────────────────────────────────────────────
-    ("Rote Flora",          [r"rote\s+flora"],                                "endorse"),
-    ("Rigaer 94",           [r"rigaer\s*(?:94|straße|str\.)", r"liebig\s*34"], "endorse"),
-    ("Ende Gelände",        [r"ende\s+gel[äa]nde"],                            "endorse"),
-    ("Schwarzer Block",     [r"schwarzer\s+block", r"black\s+bloc"],           "act"),
-    ("Rev. Zellen",         [r"revolutionäre\s+zellen", r"\brz\b"],            "act"),
-    ("Letzte Generation",   [r"letzte\s+generation"],                          "endorse"),
-    ("Lina E. Netzwerk",    [r"\blina\s+e[\.\b]", r"hammerbande"],             "act"),
-    ("Rote Hilfe",          [r"rote\s+hilfe"],                                 "enable"),
-    ("Antifa Leipzig",      [r"antifa\s+leipzig", r"connewitz"],               "endorse"),
-    ("Autonome Gruppe",     [r"eine?\s+autonome\s+gruppe", r"autonome\s+zelle"], "act"),
-    ("Junge Welt Umfeld",   [r"junge\s+welt\s+gruppe"],                        "enable"),
-    ("Interventionist Left",[r"interventionistische\s+linke", r"\bil\b.*linke"], "endorse"),
-    ("Vulkangruppe",        [r"vulkangruppe", r"vulkan\s+gruppe"],             "act"),
-    # ── Schweiz ────────────────────────────────────────────────────
-    ("Reitschule-Umfeld",   [r"reitschule(?:\s+bern)?\b"],                     "endorse"),
-    ("Revolutionärer Aufbau",[r"revolutionäre?r?\s+aufbau"],                   "enable"),
-    # ── USA / Nordamerika (per US 2026 CT-Strategy als Threat-Tier 1)
-    ("Rose City Antifa",    [r"\brose\s+city\s+antifa\b", r"\brca\b\s+portland"], "endorse"),
-    ("Portland Antifa",     [r"\bantifa\s+portland\b", r"\bpdx\s+antifa\b"],   "endorse"),
-    ("Stop Cop City",       [r"\bstop\s+cop\s+city\b", r"\bdefend\s+the\s+atlanta\s+forest\b",
-                              r"\bweelaunee\s+forest\b"],                       "act"),
-    ("Crimethinc",          [r"\bcrimethinc\b"],                               "enable"),
-    ("John Brown Gun Club", [r"\bjohn\s+brown\s+gun\s+club\b", r"\bjbgc\b"],   "endorse"),
-    ("By Any Means Necessary", [r"\bby\s+any\s+means\s+necessary\b",
-                                  r"\bbamn\b"],                                "endorse"),
-    ("Smash Racial Capitalism",[r"\bsmash\s+racial\s+capital"],                "endorse"),
-    # ── Griechenland (Exarchia-Komplex, in mehreren NDB/EU-INTCEN-Berichten)
-    ("Exarchia-Strukturen", [r"\bexarch(ia|eia)\b", r"\bvouli\s+\d+\b"],       "endorse"),
-    ("Conspiracy of Fire Cells",[r"\bconspiracy\s+of\s+fire\s+cells\b",
-                                  r"\bsynomos[íi]a\s+pyr[íi]non\b"],            "act"),
-    # ── Frankreich ─────────────────────────────────────────────────
-    ("ZAD / Soulèvements",  [r"\bzad\b", r"\bzone\s+[àa]\s+d[ée]fendre\b",
-                              r"\bsoul[èe]vements\s+de\s+la\s+terre\b"],       "endorse"),
-    ("Action Antifasciste FR",[r"\baction\s+antifasciste\b.*\b(paris|france|lyon)",
-                                r"\bafa\s+paris\b"],                            "endorse"),
-    ("Black Bloc France",   [r"\bblack[\s-]?bloc\b.*\b(paris|france|toulouse|nantes)"], "act"),
-    # ── Italien ────────────────────────────────────────────────────
-    ("Centro Sociale",      [r"\bcentro\s+sociale\b", r"\bcsoa\b"],            "endorse"),
-    ("NoTAV",               [r"\bnotav\b", r"\bno[\s-]?tav\b",
-                              r"\bval\s+di\s+susa\b.*\b(protest|aktion)"],      "act"),
-    ("Antifa Italia",       [r"\bantifa\s+(?:italia|bologna|roma|milano)\b"],  "endorse"),
-    # ── Niederlande / Skandinavien / UK ────────────────────────────
-    ("AFA Nederland",       [r"\bafa\s+nederland\b",
-                              r"\bantifascistische\s+aktie\b.*(?:nl|nederland)"], "endorse"),
-    ("AFA Stockholm",       [r"\bafa\s+stockholm\b",
-                              r"\bantifascistisk\s+aktion\b"],                  "endorse"),
-    ("Antifa Network UK",   [r"\bantifa\s+(?:uk|london|britain)\b",
-                              r"\banti[\s-]?fascist\s+network\b"],              "endorse"),
-    ("Class War",           [r"\bclass\s+war\b.*\b(uk|britain|london)\b"],     "enable"),
-    # ── Spanien ────────────────────────────────────────────────────
-    ("Acción Antifascista", [r"\bacci[óo]n\s+antifascista\b"],                 "endorse"),
-    # ── Tag-X-Komitees (Lina-E.-Komplex) ──────────────────────────
-    ("Tag-X-Komitee",       [r"\btag[\s-]?x[\s-]?komitee\b",
-                              r"\btag\s+x\b"],                                  "enable"),
-    # ── Internationale Erweiterung ────────────────────────────────
-    ("Antifascistisk Aktion",[r"\bantifascistisk\s+aks?jon\b",
-                                r"\bafa\s+(?:no|oslo|norge)\b"],                "endorse"),
-    ("Anti-Cop-City Italia", [r"\banti[\s-]?cop[\s-]?city\b.*\b(italia|brescia|bologna)\b"], "endorse"),
-    ("Vulkangruppe Bay Area",[r"\bvulkangruppe\s+bay\s+area\b"],               "act"),
-    ("Defend the Atlanta Forest",
-                            [r"\bdefend\s+the\s+atlanta\s+forest\b",
-                              r"\bweelaunee\s+(?:forest|defenders)\b"],         "act"),
-    ("Soulèvements de la Terre",
-                            [r"\bsoul[èe]vements\s+de\s+la\s+terre\b",
-                              r"\bsdt\b\s+(?:france|paris)\b"],                 "enable"),
-    ("Carlos-Komitee",      [r"\bcarlos[\s-]?komitee\b"],                      "enable"),
-    # ── Weitere internationale ────────────────────────────────────
-    ("AFA Göteborg",        [r"\bafa\s+g[öo]teborg\b"],                       "endorse"),
-    ("Antifa Network Bristol",[r"\bantifa\s+network\s+bristol\b",
-                                r"\bafn\s+bristol\b"],                          "endorse"),
-    ("Anti-RNC-Komitee",    [r"\banti[\s-]?rnc\b",
-                              r"\brnc[\s-]?(welcoming|protest)"],               "enable"),
-    ("Anti-DNC-Komitee",    [r"\banti[\s-]?dnc\b",
-                              r"\bdnc[\s-]?(welcoming|protest)"],               "enable"),
-    ("Cellule autonome FR", [r"\bcellule\s+autonome\b"],                       "act"),
-    ("Anarchistische Zellen DE",
-                            [r"\banarchistisch[er]?\s+zelle"],                  "act"),
-    ("Welcoming Committee USA",
-                            [r"\bwelcoming\s+committee\b"],                    "enable"),
-    ("Eastmont-Front (Oakland)",
-                            [r"\beastmont[\s-]?front\b"],                      "endorse"),
-    ("Anti-Cybertruck",     [r"\banti[\s-]?cybertruck\b",
-                              r"\bvulkangruppe\s+tesla\b"],                    "act"),
-    ("Anti-Elon-Musk-Front", [r"\banti[\s-]?elon\b"],                          "endorse"),
-    ("AntiCop Brescia",     [r"\banti[\s-]?cop\s+brescia\b"],                  "endorse"),
-    ("Black Bloc Mailand",  [r"\bblack[\s-]?bloc\s+(milano|mailand)\b"],       "act"),
-    ("AntiFa Frankfurt",    [r"\bantifa\s+frankfurt\b"],                       "endorse"),
-    ("AntiFa Hamburg",      [r"\bantifa\s+hamburg\b"],                         "endorse"),
-    ("Black Bloc Lyon",     [r"\bblack[\s-]?bloc\s+lyon\b"],                   "act"),
-]
-
-ACTOR_TIER = {name: tier for name, _patterns, tier in KNOWN_ACTORS}
-
-def extract_actors(text):
-    found = []
-    t = (text or "").lower()
-    for entry in KNOWN_ACTORS:
-        name, patterns = entry[0], entry[1]
-        if any(re.search(p, t) for p in patterns):
-            found.append(name)
-    return ",".join(found)
-
-# ── SOURCE CONFIDENCE SCORING ─────────────────────────────────────
-SOURCE_CONFIDENCE = {
-    "verfassungsschutz.de": 5,
-    # Konfidenz 5 — Behörden-Primärquellen (Polizei-Press, Parlamente)
-    "polizei-": 5, "presseportal.de": 5,
-    "bundestag.de": 5, "bundestag-": 5,
-    "bundesregierung.de": 5, "bundesregierung": 5,
-    # US-Behörden-Primärquellen
-    "justice.gov": 5, "us-attorney-press": 5,
-    "fbi.gov": 5, "dhs.gov": 5, "dhs-cisa-alerts": 5,
-    "nsa-press": 5, "usga-bureau-investigation": 5,
-    "spd-blotter-seattle": 5, "portland-police": 5, "nypd-news": 5,
-    "lapd-news": 5, "sfpd-news": 5, "philly-police": 5,
-    "apd-atlanta": 5, "dpd-denver": 5, "mpd-minneapolis": 5,
-    # Konfidenz 4 — öffentlich-rechtlich oder etablierte Leitmedien
-    "tagesschau.de": 4, "zdf.de": 4, "deutschlandfunk.de": 4,
-    "spiegel.de": 4, "zeit.de": 4, "sueddeutsche.de": 4, "faz.net": 4,
-    "welt.de": 4,
-    "srf.ch": 4, "orf.at": 4, "derstandard.at": 4, "nzz.ch": 4,
-    "tagesanzeiger.ch": 4, "diepresse.com": 4,
-    "lemonde.fr": 4, "liberation.fr": 4, "repubblica.it": 4, "corriere.it": 4,
-    "elpais.com": 4, "euronews.com": 4,
-    # US Mainstream-Outlets
-    "nytimes-us": 4, "washingtonpost-politics": 4, "politico-politics": 4,
-    "bbc-us-canada": 4, "axios-politics": 4, "usatoday-news": 4, "thehill": 4,
-    "splcenter.org": 4, "gwu-extremism": 4,
-    "apnews-politics": 4, "reuters-us": 4, "counterextremism.com": 4, "adl.org": 4,
-    "npr-national": 4,
-    # Konfidenz 3 — regionale öffentlich-rechtliche + Boulevard-Leit
-    "tagesspiegel.de": 3, "mdr.de": 3, "rbb24.de": 3, "ndr.de": 3,
-    "wdr.de": 3, "br.de": 3, "hr.de": 3, "swr.de": 3, "ntv.de": 3,
-    "taz.de": 3, "blick.ch": 3, "20min.ch": 3, "belltower.news": 3,
-    "bzbasel.ch": 3, "watson.ch": 3, "rts.ch": 3,
-    "kurier.at": 3, "kleinezeitung.at": 3, "noen.at": 3, "krone.at": 3,
-    "wien.orf.at": 3,
-    "willamette-week-portland": 3, "ajc-atlanta": 3,
-    # Konfidenz 2 — szenenahe Quellen, brauchen Cross-Check
-    "barrikade.info": 2, "publish.barrikade.info": 2,
-    "de.indymedia.org": 2, "nd-aktuell.de": 2,
-    "jungle.world": 2, "gnews": 2, "labournet.de": 2, "woz.ch": 2,
-    "jungewelt.de": 2,
-    # Konfidenz 1 — Bewegungs-Outlets / Mailing-Listen-Archive
-    "perspektive-online.net": 1, "radikal.news": 1, "klassegegenklasse.org": 1,
-    "lists.riseup.net": 1,
-    "Archiv": 3, "Manuell": 2,
-}
-
-def score_confidence(source):
-    src = source or ""
-    for k, v in SOURCE_CONFIDENCE.items():
-        if k in src:
-            return v
-    return 2
+# ── SEVERITY / ACTOR / CONFIDENCE SCORING  →  extracted to lex/scoring.py (M1) ──
+# CATEGORIES, SEVERITY_MAP, score_severity, KNOWN_ACTORS, ACTOR_TIER,
+# extract_actors, SOURCE_CONFIDENCE and score_confidence now live in
+# lex/scoring.py so they can be unit-tested in isolation (tests/test_scoring.py)
+# and reused by the M4 verification/quality score. Behaviour is identical;
+# re-imported under their original names so every existing call site keeps working.
+from lex.scoring import (  # noqa: E402
+    CATEGORIES,
+    SEVERITY_MAP,
+    score_severity,
+    KNOWN_ACTORS,
+    ACTOR_TIER,
+    extract_actors,
+    SOURCE_CONFIDENCE,
+    score_confidence,
+    quality_score,
+    corroboration_key,
+    same_event,
+)
 
 # ── KEYWORD CLASSIFICATION (AI-free) ─────────────────────────────
 KEYWORD_MAP = [
@@ -4297,356 +4101,25 @@ def clean_description(text):
     return text
 
 # ════════════════════════════════════════════════════════════════════
-# PII / DOXXING REDACTION
+# PII / DOXXING REDACTION  →  extracted to lex/privacy.py (M1)
 # ════════════════════════════════════════════════════════════════════
-# Doxxing-Texte aus der autonomen Szene (insbesondere Indymedia-Outings
-# gegen vermeintliche Rechte) enthalten Klarnamen + Wohnadressen. Diese
-# Daten dürfen NIE in unsere öffentliche DB oder UI gelangen — sonst
-# verlängern wir die Reichweite der Doxxing-Aktion. Vor jeder Speicherung
-# laufen Beschreibungen UND Zusammenfassungen durch redact_pii().
-#
-# Strategie:
-#   1. Adressen (Straße + Hausnummer, Plätze, Gassen, Alleen, Wege) → entfernt
-#   2. Doxxing-Marker ("wurden X, Y und Z geoutet") triggern Heavy-Redaction:
-#      die gesamte Namensliste in solchen Sätzen wird durch "[Namen entfernt]"
-#      ersetzt, NICHT nur einzelne Namen.
-#   3. Telefon-, Mail-, Geburtsdaten-Muster → entfernt.
-#   4. Auto-Kennzeichen → entfernt.
-# Bewusst NICHT entfernt: Namen bekannter Politiker, öffentliche Personen
-# in Pressekontext (Olaf Scholz, Donald Trump etc.) — diese werden über
-# Whitelist verschont.
-
-_PII_ADDRESS_RE = re.compile(
-    r'\b([A-ZÄÖÜ][a-zäöüß\-]{2,}(?:[\- ][A-ZÄÖÜ][a-zäöüß\-]+)*'
-    r'(?:straße|str\.|platz|gasse|allee|weg|ufer|damm|ring|chaussee|landstraße|hof))'
-    r'\s+\d{1,4}[a-z]?',
-    re.IGNORECASE
+# The PII redaction, doxxing sanitization and defamation-neutralization
+# guardrails now live in lex/privacy.py so they can be unit-tested in
+# isolation (tests/test_privacy.py). Behaviour is identical; they are
+# re-imported here under their original names so every existing call site
+# in this module keeps working unchanged. These safeguards are mandatory
+# pipeline stages and must only ever get stricter, never looser.
+from lex.privacy import (  # noqa: E402
+    is_doxxing_text,
+    classify_doxxing_target,
+    sanitize_doxxing_event,
+    redact_pii,
+    neutralize_political_labels,
+    _PII_ADDRESS_RE,
+    _PII_EMAIL_RE,
+    _PII_PHONE_RE,
+    _PII_PUBLIC_FIGURES,
 )
-# Name unit: First+Last OR First+Middle+Last (up to 3 capitalised tokens)
-_NAME_UNIT = r'[A-ZÄÖÜ][a-zäöüß\-]+(?:\s+[A-ZÄÖÜ][a-zäöüß\-]+){1,2}'
-# Trigger words allow upper/lower variants explicitly. We do NOT use
-# re.IGNORECASE here because that would make _NAME_UNIT also match
-# lowercase tokens like "und"/"als"/"die", causing the regex to gobble
-# past name boundaries and leave later names un-redacted.
-_PII_DOXXING_LIST_RE = re.compile(
-    # "wurden X, Y und Z [geoutet|outet|enttarnt|veröffentlicht]"
-    r'\b[Ww]urden?\b\s+'
-    r'(' + _NAME_UNIT +
-    r'(?:\s*,\s*' + _NAME_UNIT + r'){0,5}'
-    r'(?:\s+und\s+' + _NAME_UNIT + r')?)'
-    r'\s+(?:durch|von|als|in\s+ihrem|in\s+ihrer|[Gg]eoutet|[Ee]nttarnt|[Oo]utet|veröffentlicht|bekannt)'
-)
-_PII_DOXXING_OPENER_RE = re.compile(
-    # Headline-Muster: "Wir haben X, Y und Z [in ihrem Wohnumfeld] geoutet."
-    r'\b(?:[Ww]ir\s+haben|[Aa]ntifa\s+outet|[Gg]eoutet:)\s+'
-    r'(' + _NAME_UNIT +
-    r'(?:\s*,\s*' + _NAME_UNIT + r'){0,5}'
-    r'(?:\s+und\s+' + _NAME_UNIT + r')?)'
-)
-_PII_EMAIL_RE  = re.compile(r'\b[\w\.\-]+@[\w\.\-]+\.[a-z]{2,}\b', re.IGNORECASE)
-_PII_PHONE_RE  = re.compile(r'\b(?:\+?\d{1,3}[\s\-/]?)?(?:0\d{2,4}[\s\-/]?\d{4,10})\b')
-_PII_LICENSE_RE = re.compile(r'\b[A-ZÄÖÜ]{1,3}[\s\-][A-Z]{1,2}\s?\d{1,4}\b')
-_PII_BIRTHDATE_RE = re.compile(r'\bgeb(?:oren|\.)?\s*(?:am)?\s*\d{1,2}[./]\d{1,2}[./]\d{2,4}\b', re.IGNORECASE)
-
-# Doxxing-Kontext-Detektor: triggert is_pii_heavy() = True
-_DOXXING_CONTEXT_RE = re.compile(
-    # Verb-Stämme ohne trailing \b, weil deutsche Flexionen
-    # ("veröffentlicht/veröffentlichte/veröffentlichten") sonst nicht matchen.
-    r'\b(geoutet|geout|enttarnt|outing|outet|outed|'
-    r'wohnumfeld|nachbarn\s+infor|'
-    r'klarnamen?\s+ver[öo]ffentlich|'
-    r'persönliche\s+daten\s+ver[öo]ffentlich|'
-    r'arbeitgeber\s+ver[öo]ffentlich|'
-    r'privat(?:adresse|anschrift)|'
-    r'wohn(?:adresse|anschrift|ort)\s+ver[öo]ffentlich)',
-    re.IGNORECASE
-)
-
-# Politisch öffentliche Personen — bewusst nicht maskiert. Liste minimal halten.
-_PII_PUBLIC_FIGURES = {
-    "olaf scholz","friedrich merz","alice weidel","tino chrupalla","markus söder",
-    "robert habeck","annalena baerbock","christian lindner","sahra wagenknecht",
-    "donald trump","joe biden","kamala harris","emmanuel macron","giorgia meloni",
-    "ursula von der leyen","viktor orban","lina e.","horst seehofer",
-    "thomas haldenwang","sandro brotz","alain berset","viola amherd",
-    "karl nehammer","wolfgang sobotka",
-}
-
-def is_doxxing_text(text: str) -> bool:
-    """True if the text reads like a Klarnamen-Outing.
-    Sicherheits-Politik v3 (User-Hinweis): Doxxing-Vorfälle werden NICHT
-    mehr komplett verworfen; sie werden als anonymisierter Kontext-Eintrag
-    aufgenommen — siehe sanitize_doxxing_event() unten. is_doxxing_text()
-    bleibt der Trigger, der in save_incident() die Sanitisierung aktiviert.
-    Erweiterte Erkennung: Doxxing-Kontext PLUS *irgendein* PII-Signal
-    reicht — Adresse, E-Mail, Telefon, Geburtsdatum, Auto-Kennzeichen,
-    Opener-Muster ('Wir haben X geoutet'). Damit sind auch Outings
-    erfasst, die nur Klarname+E-Mail oder Wohnumfeld-Hinweis ohne
-    konkrete Adresse enthalten."""
-    if not text: return False
-    t = text.lower()
-    if not _DOXXING_CONTEXT_RE.search(t):
-        return False
-    return bool(
-        _PII_ADDRESS_RE.search(text)        or
-        _PII_DOXXING_OPENER_RE.search(text) or
-        _PII_DOXXING_LIST_RE.search(text)   or
-        _PII_EMAIL_RE.search(text)          or
-        _PII_PHONE_RE.search(text)          or
-        _PII_BIRTHDATE_RE.search(text)      or
-        re.search(r"\bwohnumfeld\b|\bnachbarn\s+infor", t)
-    )
-
-def classify_doxxing_target(text: str) -> str:
-    """Bestimmt die Rolle der gedoxxten Person aus Textsignalen.
-    Bleibt absichtlich grob — wir wollen die Rolle benennen, nicht die Person."""
-    t = (text or "").lower()
-    if re.search(r"\b(afd|cdu|csu|spd|fdp|grüne|linke|bsw|fpö|svp|övp|spö)\b.*"
-                 r"\b(politiker|abgeordnet|kandidat|stadtrat|landtag|bundestag|"
-                 r"gemeinderat|nationalrat|kreisvorstand|parteivorstand)", t):
-        return "Politiker:in"
-    if re.search(r"\b(politiker|abgeordnet|nationalrat|landtag|bundestag)\b", t):
-        return "Politiker:in"
-    if re.search(r"\b(polizist|polizeibeamt|polizeif[üu]hr|kommissar|polizeichef|"
-                 r"leitend.{0,15}polizei)", t):
-        return "Polizeibeamte:r"
-    if re.search(r"\b(richter|staatsanwalt|justiz|amtsrichter)\b", t):
-        return "Justiz-Person"
-    if re.search(r"\b(unternehmer|gesch[äa]ftsf[üu]hr|investor|immobilien(?:firm|invest)|"
-                 r"hausverwalt|vermieter|bauherr)", t):
-        return "Unternehmer:in"
-    if re.search(r"\b(journalist|redakteur|medien|chefredakteur|herausgeber)\b", t):
-        return "Journalist:in"
-    if re.search(r"\b(junge\s+tat|\bjt\b|identit[äa]r|neonazi|kameradschaft|"
-                 r"rechtsextrem|nationalsozialist|rechte\s+szene)", t):
-        return "rechtsextrem aktive Person"
-    return "Privatperson"
-
-def sanitize_doxxing_event(ai: dict, text: str, source: str):
-    """
-    Sicherheits-Politik (User-Hinweis): wenn ein Doxxing/Outing-Bericht
-    erkannt wird, wird der EVENT dokumentiert, aber:
-      - Quelle (source_url) wird gelöscht — sie selbst trägt die PII weiter.
-      - Description wird durch einen Rollen-Hinweis ersetzt — keine Namen,
-        keine Adressen, keine Identifikatoren bleiben in der DB.
-      - Tier wird auf 'context' gesetzt (T3) — wir dokumentieren, dass das
-        Ereignis stattfand, ohne es als T1-Akt selbst zu zertifizieren.
-      - Kategorie wird 'Doxxing' — eigene Kategorie damit User-seitig
-        sichtbar/filterbar als eigene Bedrohungsklasse.
-      - Source-String wird auf 'censored:datenschutz' normalisiert,
-        die ursprüngliche Plattform-Domain (barrikade.info / indymedia /
-        nazifrei) wird als Plattform-Hinweis vorangestellt.
-    Returns: (sanitized_summary, sanitized_description, sanitized_url_norm)
-    """
-    role = classify_doxxing_target(text)
-    ort  = (ai.get("ort") or "unbekanntem Ort").strip() or "unbekanntem Ort"
-    summ = f"{role} in {ort} wurde gedoxxt — Quelle zurückgehalten (Datenschutz)."
-    desc = (
-        f"Doxxing/Outing-Bericht. Zielrolle: {role}. Ort: {ort}. "
-        f"Inhalt und Originalquelle werden zum Schutz der betroffenen "
-        f"Person nicht angezeigt (Plattform-Politik §C3 #1: keine "
-        f"Klarnamen, Adressen, Arbeitgeber oder Familiendaten in der DB)."
-    )
-    return summ, desc, ""
-
-def redact_pii(text: str) -> str:
-    """
-    Replace personally identifying details with neutral placeholders.
-    Conservative: errs on the side of redacting more, because the cost
-    of a false-negative (publishing a private address) is much higher
-    than the cost of a false-positive (slightly less specific summary).
-    """
-    if not text:
-        return ""
-    # 1. Email + phone + license plate + birthdate
-    out = _PII_EMAIL_RE.sub("[E-Mail entfernt]", text)
-    out = _PII_PHONE_RE.sub("[Telefon entfernt]", out)
-    out = _PII_LICENSE_RE.sub("[Kennzeichen entfernt]", out)
-    out = _PII_BIRTHDATE_RE.sub("[Geburtsdatum entfernt]", out)
-    # 2. Address: street + number
-    out = _PII_ADDRESS_RE.sub("[Adresse entfernt]", out)
-    # 3. Doxxing-Namenslisten (zwei Muster)
-    def _strip_names_keep_publics(m):
-        names_block = m.group(1)
-        # Wenn alle genannten Namen öffentliche Figuren sind, lass sie stehen.
-        candidates = [n.strip().lower() for n in re.split(r',|\s+und\s+', names_block) if n.strip()]
-        if candidates and all(c in _PII_PUBLIC_FIGURES for c in candidates):
-            return m.group(0)
-        # Sonst maskieren.
-        return m.group(0).replace(names_block, "[Namen entfernt]")
-    out = _PII_DOXXING_LIST_RE.sub(_strip_names_keep_publics, out)
-    out = _PII_DOXXING_OPENER_RE.sub(_strip_names_keep_publics, out)
-    # 4. Cleanup: doppelte Platzhalter zusammenfassen
-    out = re.sub(r'(\[(?:Namen|Adresse|Telefon|E-Mail|Kennzeichen|Geburtsdatum) entfernt\])'
-                 r'(\s+\1){1,}', r'\1', out)
-    return out
-
-# ──────────────────────────────────────────────────────────────────────
-# Defamation-Sanitisation (§C3 #4: keine Vorverurteilung)
-# ──────────────────────────────────────────────────────────────────────
-# Rechtsschutz: ein Bekennerschreiben einer antifaschistischen Gruppe
-# bedeutet NICHT, dass die Zielperson tatsächlich "rechtsextrem" oder
-# "Nazi" ist. Solche Labels sind in DE/AT/CH justiziabel als Beleidigung/
-# üble Nachrede/Verleumdung (StGB §§ 185-187, § 111 öStGB, Art. 173/174
-# StGB CH). Wir entfernen sie aus jeder von uns gespeicherten Beschreibung
-# und aus jeder Zusammenfassung — auch wenn die Originalquelle sie führt.
-# Was bleibt: die Tat (Brand, Sabotage, Sachbeschädigung), das politische
-# Motiv-Signal der TÄTER-Seite (Bekennerschreiben antifaschistischer
-# Gruppe), und neutrale Rollenbeschreibungen ohne Bewertung der Zielperson.
-_NEUTRALIZE_PATTERNS = [
-    # 1. "als <Ideologie> [bekannt/eingestuft/geltend/geoutet]" inkl. nach-
-    #    folgendem Substantiv (Kader/Funktionär/Organisation/Person).
-    #    Output: gleicher Artikel, dann "politisch zugeordneten <Noun>".
-    (re.compile(
-        r"\b(eines?|einer?|einem|einen|den?|der|die|das)\s+"
-        r"als\s+"
-        r"(?:rechtsextrem(?:istisch)?\w*|rechtsradikal\w*|neonazistisch\w*|"
-        r"neonazi\w*|nazi(?!onal)\w*|faschistisch\w*|faschist\w*)\s+"
-        r"(?:bekannten?|eingestuften?|geltenden?|verd[äa]chtigen?|"
-        r"geouteten?|enttarnt(?:en)?)\s+"
-        r"(\w+)",
-        re.IGNORECASE,
-    ), r"\1 politisch zugeordneten \2"),
-    # 2. "wurde als <Ideologie>(...) [geoutet|bezeichnet|enttarnt|...]"
-    (re.compile(
-        r"\b(wurde|wird|gilt|outet[e]?\s+sich|enttarnt|enttarnte)\s+"
-        r"(?:als\s+|zum\s+)?"
-        r"(?:rechtsextrem(?:istisch)?\w*|neonazi\w*|nazi(?!onal)\w*|"
-        r"faschist\w*|rechtsradikal\w*)"
-        r"(?:\s+(?:geoutet|bezeichnet|beschimpft|enttarnt|abgestempelt|"
-        r"verurteilt|tituliert|dargestellt))?",
-        re.IGNORECASE,
-    ), r"\1 politisch eingeordnet"),
-    # 2b. "als <Ideologie> beschimpft/bezeichnet/tituliert" ohne Verb davor
-    (re.compile(
-        r"\bals\s+"
-        r"(?:rechtsextrem(?:istisch)?\w*|neonazi\w*|nazi(?!onal)\w*|"
-        r"faschist\w*|rechtsradikal\w*)\s+"
-        r"(beschimpft|bezeichnet|tituliert|verleumdet|dargestellt|"
-        r"abgestempelt|verurteilt)",
-        re.IGNORECASE,
-    ), r"politisch eingeordnet \1"),
-    # 3. "Nazi-Schwein/Sau/Pack" und Hetzphrasen
-    (re.compile(
-        r"\b(?:nazi|fascho)[\-–\s]?"
-        r"(?:schwein|sau|pack|gesindel|abschaum|bande)\w*",
-        re.IGNORECASE,
-    ), "[politische Beleidigung entfernt]"),
-    # 4. "<Artikel> [bekannten/mutmasslichen] <Partei>-<Rolle>" → neutralisieren
-    (re.compile(
-        r"\b(eines?|einer?|den?|der|die|das|einem|einen)\s+"
-        r"(?:bekannten?\s+|mutma[ßs]lichen?\s+|f[üu]hrenden?\s+|"
-        r"hochrangigen?\s+|langj[äa]hrigen?\s+)?"
-        r"(?:afd|svp|fp[öo]|cdu|csu|spd|fdp|gr[üu]ne[rn]?|linke[rn]?|"
-        r"bsw|[öo]vp|sp[öo]|npd|junge\s+alternative|ja-|jl-|jvp)"
-        r"[\-–\s]+"
-        r"(?:funktion[äa]r(?:in|s|en)?|kader[ns]?|politiker(?:in|s|en)?|"
-        r"abgeordnete[rmn]?|mitglied(?:s|er)?|kandidat(?:in|en)?|"
-        r"aktivist(?:in|en)?|vorstand(?:s|es)?|chef(?:in|s)?|"
-        r"sprecher(?:in|s)?)\b",
-        re.IGNORECASE,
-    ), lambda m: f"{m.group(1)} Person mit politischer Funktion"),
-    # 5. "<Artikel> [bekannten] <Ideologie>-<Rolle>" oder
-    #    zusammengeschrieben "Identitärer-Aktivist". → Privatperson.
-    #    Wichtig: NICHT für "Identitäre Bewegung" (formelle Organisation).
-    (re.compile(
-        r"\b(eines?|einer?|den?|der|die|das|einem|einen)\s+"
-        r"(?:bekannten?\s+|mutma[ßs]lichen?\s+|f[üu]hrenden?\s+|"
-        r"hochrangigen?\s+|sogenannten?\s+|angeblichen?\s+)?"
-        r"(?:rechtsextrem(?:istisch)?\w*|rechtsradikal\w*|neonazistisch\w*|"
-        r"neonazi\w*|nazi(?!onal)\w*|faschistisch\w*|faschist\w*|"
-        r"identit[äa]r\w*|junge[\-\s]tat)"
-        r"(?:[\-–\s]+)?"
-        r"(?:aktivist(?:in|en)?|kader[ns]?|funktion[äa]r(?:in|s|en)?|"
-        r"politiker(?:in|s|en)?|mitglied(?:s|er)?|anh[äa]nger(?:in|s)?|"
-        r"k[äa]mpfer(?:in|s)?|person|sympathisant(?:in|en)?|"
-        r"szene[\-\s](?:angeh[öo]riger?|mitglied))\b",
-        re.IGNORECASE,
-    ), lambda m: f"{m.group(1)} Privatperson"),
-    # 6. Solitäres Personen-Substantiv "ein Rechtsextremer" / "der Nazi"
-    #    Negative Lookahead: nicht für Bewegung/Partei/Szene/Aufmarsch
-    #    (das sind Organisations-/Event-Begriffe, keine Personen-Etiketten).
-    (re.compile(
-        r"\b(eines?|einer?|den?|der|die|das|einem|einen)\s+"
-        r"(?:bekannten?\s+|mutma[ßs]lichen?\s+)?"
-        r"(?:rechtsextreme[rmns]?|neonazis?|nazis?(?!onal)|"
-        r"faschist(?:en|in)?|rechtsradikale[rmns]?)"
-        r"\b(?!\s+(?:bewegung|partei|szene|aufmarsch|demonstration))",
-        re.IGNORECASE,
-    ), lambda m: f"{m.group(1)} Privatperson"),
-    # 7. "<Ideologie>-<Rolle>" ohne Artikel ("AfD-Politiker", "Nazi-Kader")
-    #    als Satzfragment-Subjekt. Hier ersetzen wir nur das Etikett.
-    (re.compile(
-        r"\b(?:afd|svp|fp[öo]|cdu|csu|spd|fdp|[öo]vp|sp[öo]|npd|junge\s+"
-        r"alternative)[\-–\s]+(funktion[äa]r(?:in|s|en)?|kader[ns]?|"
-        r"politiker(?:in|s|en)?|abgeordnete[rmn]?|mitglied(?:s|er)?|"
-        r"aktivist(?:in|en)?|sprecher(?:in|s)?)",
-        re.IGNORECASE,
-    ), "Person mit politischer Funktion"),
-    (re.compile(
-        r"\b(?:rechtsextrem(?:istisch)?|rechtsradikal|neonazistisch|"
-        r"neonazi|nazi(?!onal)|faschistisch|faschist|identit[äa]r|"
-        r"junge[\-\s]tat)\w*"
-        r"[\-–\s]+(aktivist(?:in|en)?|kader[ns]?|funktion[äa]r(?:in|s|en)?|"
-        r"politiker(?:in|s|en)?|mitglied(?:s|er)?|anh[äa]nger(?:in|s)?)",
-        re.IGNORECASE,
-    ), "Privatperson"),
-    # 8. Solo-Substantive in der Ziel-Rolle, z.B. "Ein Nazi verhaftet"
-    (re.compile(
-        r"\b(ein|der|die|das|den)\s+"
-        r"(?:rechtsextremer?|neonazi|nazi(?!onal)|faschist)\b"
-        r"(?!\s+(?:bewegung|partei|szene|aufmarsch))",
-        re.IGNORECASE,
-    ), lambda m: f"{'eine' if m.group(1).lower() == 'ein' else 'die'} Privatperson"),
-]
-
-# Genitiv-/Akkusativ-Korrekturen nach Geschlechtswechsel: ein maskulines
-# "eines/einen <Subjekt>" wird in der Neutralisierung zu femininem
-# "einer <Person>" — der Artikel muss mitwandern.
-_NEUTRALIZE_GENDER_FIXUPS = [
-    (re.compile(r"\beines\s+(Privatperson|Person\s+mit\s+politischer\s+Funktion)\b"),
-     r"einer \1"),
-    (re.compile(r"\beinen\s+(Privatperson|Person\s+mit\s+politischer\s+Funktion)\b"),
-     r"eine \1"),
-    (re.compile(r"\bein\s+(Privatperson|Person\s+mit\s+politischer\s+Funktion)\b"),
-     r"eine \1"),
-    (re.compile(r"\beinem\s+(Privatperson|Person\s+mit\s+politischer\s+Funktion)\b"),
-     r"einer \1"),
-    (re.compile(r"\bden\s+(Privatperson|Person\s+mit\s+politischer\s+Funktion)\b"),
-     r"die \1"),
-    (re.compile(r"\bdes\s+(Privatperson|Person\s+mit\s+politischer\s+Funktion)\b"),
-     r"der \1"),
-    (re.compile(r"\bdem\s+(Privatperson|Person\s+mit\s+politischer\s+Funktion)\b"),
-     r"der \1"),
-]
-
-def neutralize_political_labels(text: str) -> str:
-    """
-    Entferne diffamierende Personen-Etiketten ("rechtsextrem", "Nazi",
-    "AfD-Funktionär" etc.) aus einem Text.
-
-    Wichtige Abgrenzung:
-      - Bekenner- und Akteurs-Bezeichnungen auf der TÄTER-Seite bleiben
-        erhalten ("antifaschistische Gruppe", "Bekennerschreiben") —
-        das ist die Selbst-Beschreibung der Täter, kein Vorwurf an einen
-        Dritten.
-      - Politisch-Motiv-Signale für die Tat-Klassifikation bleiben
-        erhalten (`_POLITICAL_MOTIVE_RE` greift weiter).
-      - Verbleibende Lücken werden im sauberen `clean_description()`-
-        Pass nach diesem Helper kompaktiert.
-    """
-    if not text:
-        return ""
-    out = text
-    for rx, repl in _NEUTRALIZE_PATTERNS:
-        out = rx.sub(repl, out)
-    # Grammatik-Pass: Geschlechts-Übergänge korrigieren
-    for rx, repl in _NEUTRALIZE_GENDER_FIXUPS:
-        out = rx.sub(repl, out)
-    # Cleanup: doppelte Leerzeichen + ", ," → ","
-    out = re.sub(r"\s{2,}", " ", out)
-    out = re.sub(r",\s*[\.,]", ".", out)
-    return out.strip(" ,;")
 
 # Political-motive signal for Sachbeschädigung: without one of these (or a
 # known actor), the incident is treated as non-political vandalism and dropped.
@@ -5110,6 +4583,47 @@ def backfill_prosec_status():
     if fixed:
         log.info(f"backfill_prosec_status: {fixed} incidents enriched")
     return fixed
+
+
+def recompute_corroboration():
+    """Recompute the per-incident `corroboration` count (M4).
+
+    For each incident, count how many *additional* independent sources
+    documented the same event (see lex.scoring.same_event). corroboration =
+    (distinct sources among same-event records) - 1, capped at 2 to match the
+    quality_score weighting. Incidents are bucketed by (country, category)
+    first so the O(n^2) comparison only runs within small groups.
+
+    Idempotent: recomputes from scratch each call, safe to run on startup and
+    after a crawl. Returns the number of rows whose value changed.
+    """
+    rows = [dict(r) for r in db.execute(
+        "SELECT id, country, category, location, date, source, "
+        "COALESCE(corroboration,0) AS corroboration FROM incidents"
+    ).fetchall()]
+    buckets = {}
+    for r in rows:
+        buckets.setdefault(corroboration_key(r["country"], r["category"]), []).append(r)
+
+    changed = 0
+    for group in buckets.values():
+        for r in group:
+            sources = set()
+            for other in group:
+                if other is r or same_event(r, other):
+                    src = (other.get("source") or "").strip().lower()
+                    # Fall back to the row id so a missing source still counts
+                    # as one distinct witness (never inflates beyond reality).
+                    sources.add(src or f"#{other['id']}")
+            new_val = max(0, min(len(sources) - 1, 2))
+            if new_val != (r.get("corroboration") or 0):
+                db.execute("UPDATE incidents SET corroboration=? WHERE id=?",
+                           (new_val, r["id"]))
+                changed += 1
+    if changed:
+        db.commit()
+        log.info(f"recompute_corroboration: {changed} incidents updated")
+    return changed
 
 
 def backfill_summaries_and_flags():
@@ -5641,95 +5155,17 @@ def crawl_nazifrei_feed():
         time.sleep(0.4)
     return inserted
 
-# ── RSS FEEDS ─────────────────────────────────────────────────────
-RSS_KEYWORDS = [
-    "linksextrem","linksradikal","antifa","anarchi","schwarzer block","black bloc",
-    "brandanschlag","sabotage","molotow","farbbeutel","bekennerschreiben","militante",
-    "besetzung","blockade","rigaer","rote flora","sachbeschädigung","in brand",
-    "autonome gruppe","autonome szene","autonome aktion","autonome linke",
-    "verfassungsschutz extremis","linksradikal verhaftung","linksextrem anschlag",
-    "direkte aktion","barrikade","hausbesetzung","fahrzeugbrand","fahrzeuge in brand",
-]
-
-# ── FALSE-POSITIVE FILTER ─────────────────────────────────────────
-# Reject articles that match RSS_KEYWORDS superficially but are NOT political extremism
-_FP = [
-    # Technology / autonomous vehicles
-    r'\bautonomes?\s+(fahren|fahrzeuge?|autos?\b|lkw|pkw|bus\b|roboter|drohnen?|flugzeug)',
-    r'\bself.?driving\b', r'\bautopilot\b',
-    r'\bautonomes?\s+(parken|laden|liefern)',
-    r'\bautonome[srm]?\s+(mobilitäts?|verkehrs?|transport)',
-    r'\belektroauto[s]?\b', r'\be-auto[s]?\b', r'\belektromobilit',
-    r'\bdigitale\s+revolution\b',
-    r'\bkünstliche\s+intelligenz\b',
-    r'\bki-?\s*(modell|system|assistent|tool|chip)',
-    r'\bmobilitäts?revolution\b', r'\benergie(wende|revolution)\b',
-    r'\bkrypto|bitcoin|blockchain\b',
-    r'\baktienmarkt|börsen?kurse?\b',
-    r'\blandwirtschaft.*sabotag|sabotag.*landwirtschaft',
-    r'\bautonomie\s+(schweiz|österreich|deutschland|region)',
-    # Non-European conflicts / disasters (not relevant to DACH extremism)
-    r'\bkongo\b', r'\bebola\b', r'\bafrika\b', r'\bnigeria\b', r'\bsomalia\b',
-    r'\bsyrien\b', r'\bjemen\b', r'\biraq\b', r'\bafghanistan\b', r'\bukraine.*front\b',
-    r'\bpalästina.*rakete|rakete.*palästina\b',
-    r'\bdemokratische\s+republik\s+kongo\b',
-    # Right-wing perpetrators attacking others (we track LEFT extremism only)
-    r'\bneonazi.*angriff\b', r'\bnazi.*überfall\b', r'\bnazi.*attack\b',
-    r'\brechtsextrem.*täter\b', r'\brechtsextrem.*angreifer\b',
-    r'\bneonazi.*täter\b', r'\bfaschistisch.*motiv\b', r'\brechts.*täter\b',
-    r'\bRechtsterror\b', r'\bPKK\b', r'\bIslamist\b', r'\bdschihadist\b',
-    # Navigation/website content accidentally scraped
-    r'\bTutorials\s+Videos\s+Archiv\b', r'\bdont\s+hate\s+the\s+media\b',
-    r'\bDirekt\s+zum\s+Inhalt\b',
-    # ── Plan §0 out-of-scope: solidarity / culture / repression-reports ──
-    r'\bsolidaritätsaufruf\b', r'\bsolidaritätskundgebung\b',
-    r'\bgedenken\b(?!.*anschlag)', r'\bmahnwache\b(?!.*anschlag)',
-    r'\bprozessbeobachtung\b', r'\brepressionsbericht\b',
-    r'\blesung\b', r'\bvokü\b', r'\btresen\b', r'\binfoveranstaltung\b',
-    r'\bdiskussionsveranstaltung\b', r'\bkonzert\b', r'\bsoliparty\b',
-    r'\bkneipenabend\b',
-    # ── Non-DACH foreign-policy items that bypass the EU/perpetrator gate ──
-    r'\b(gaza|israel|palästina|hamas)\b',
-    r'\b(trump|biden|harris|usa\b|united\s+states)\b',
-    r'\b(china|taiwan|tibet|xinjiang|hongkong)\b',
-    r'\b(iran|saudi|yemen|libanon|hisbollah)\b',
-    # ── Polizei-Press-FP: typische Nicht-Extremismus-Meldungen ────
-    # Polizei-Pressestellen publizieren TÄGLICH Verkehrsunfälle,
-    # Ladendiebstähle, Drogendelikte usw. Diese MUESSEN raus, sonst
-    # frisst der Grok-Classifier eine 5stellige Token-Rechnung weg.
-    r'\b(verkehrsunfall|verkehrskontrolle|geschwindigkeitskontrolle|alkohol\s*am\s+steuer)\b',
-    r'\b(ladendiebstahl|taschendiebstahl|fahrraddiebstahl|wohnungseinbruch)\b',
-    r'\b(drogenfund|btmg|cannabis|kokain|crystal\s*meth)\b(?!.*demo)',
-    r'\bvermisst.*person\b', r'\bsenioren?\b.*\btrickbetrug\b',
-    r'\bbrand\s+in\s+wohnung\b(?!.*polit)',
-    r'\benkeltrick|schockanruf\b',
-    r'\bsexual.*delikt\b(?!.*polit)',
-    r'\bversicherungs?betrug|sozialleistungs?betrug\b',
-    r'\bgemein(de|sames)?\s+spendenaufruf\b',
-    r'\btierrettung|tierquäler', r'\bunwetter|hochwasser|sturm\b(?!.*demo)',
-    # ── Bundestags-Drucksachen: vieles davon ist Lesung/Anhörung ────
-    r'\b(lesung|abstimmung|anhörung|haushalts(beratung|debatte))\b(?!.*linksex)',
-    r'\bgrundgesetz.*änderung\b(?!.*linksex)',
-]
-
-def is_false_positive(text):
-    """Tightened per plan §0 — strict OSINT scope for DACH violent left."""
-    t = text.lower()
-    # Pure non-DACH foreign-policy hits should NOT veto an article that also
-    # contains a DACH city + a real attack keyword (e.g. a Berlin Brandanschlag
-    # framed as anti-Israel). Allow if a strong primary attack keyword is present.
-    strong_attack = re.search(
-        r'\b(brandanschlag|brandsatz|molotow|in\s+brand\s+gesetzt|sabotage\s+an|'
-        r'bekennerschreiben|sprengstoff|militante\s+aktion)\b', t)
-    for p in _FP:
-        if re.search(p, t, re.IGNORECASE):
-            # Exempt foreign-policy patterns only if a strong attack keyword + DACH city co-occur.
-            if strong_attack and re.search(
-                r'\b(berlin|hamburg|leipzig|münchen|köln|frankfurt|dresden|stuttgart|'
-                r'wien|graz|linz|zürich|bern|basel|genf|lausanne)\b', t):
-                continue
-            return True
-    return False
+# ── RELEVANCE / FALSE-POSITIVE FILTER  →  extracted to lex/filters.py (M1) ──
+# RSS_KEYWORDS, the _FP false-positive pattern list, is_false_positive() and
+# BARRIKADE_RELEVANCE_KWS now live in lex/filters.py so the "no random
+# Zeitungsartikel" gate can be unit-tested in isolation (tests/test_filters.py).
+# Behaviour is identical; re-imported under their original names so every
+# existing call site in this module keeps working unchanged.
+from lex.filters import (  # noqa: E402
+    RSS_KEYWORDS,
+    is_false_positive,
+    BARRIKADE_RELEVANCE_KWS,
+)
 
 # ── GEOCODE COUNTRY BOUNDS ────────────────────────────────────────
 # (min_lat, min_lon, max_lat, max_lon) — generous margins to avoid false rejections
@@ -6068,17 +5504,7 @@ def crawl_gnews():
         time.sleep(0.5)
     return inserted
 
-# ── BARRIKADE RELEVANCE PRE-FILTER ───────────────────────────────
-BARRIKADE_RELEVANCE_KWS = [
-    "angriff","brand","sabotage","ausschreitungen","krawalle","randalen",
-    "besetzung","verhaftung","razzia","molotow","bekennerschreiben",
-    "autonome","antifa","schwarzer block","linksextrem","schäden","verletzt",
-    "festnahmen","überfall","protest","demonstration","blockade","besetzt",
-    # Actions against right-wing groups (barrikade.info coverage)
-    "junge tat","identitär","neonazi","faschistisch"," nazi","rechtsextrem",
-    "eingelackt","lackiert","lack ","besprüht","outing","dox","antifaschist",
-    "aktion gegen","solidarität","hausdurchsuchung",
-]
+# ── BARRIKADE RELEVANCE PRE-FILTER  →  BARRIKADE_RELEVANCE_KWS in lex/filters.py (M1) ──
 
 # ── MASTER CRAWLER ────────────────────────────────────────────────
 _running   = [False]
@@ -6136,6 +5562,13 @@ def run_crawler(force=False):
 
         # 5. Re-geocode any null-coord incidents
         regeocode_nulls()
+
+        # 6. M4 — refresh cross-source corroboration so newly-saved incidents
+        # that corroborate (or are corroborated by) existing ones get scored.
+        try:
+            recompute_corroboration()
+        except Exception as e:
+            log.warning(f"recompute_corroboration after crawl failed: {e}")
 
     except Exception as e:
         log.error(f"run_crawler: {e}", exc_info=True)
@@ -8669,7 +8102,7 @@ async def get_incidents(
     q = ("SELECT id,date,location,country,category,description,summary,url,"
          "lat,lon,manual,source,severity_score,actors,confidence,"
          "is_primary,is_high_risk,tier,target_type,"
-         "prosec_status,case_ref,last_status_check,"
+         "prosec_status,case_ref,last_status_check,corroboration,"
          "evidence_path,evidence_sha,evidence_ts FROM incidents WHERE 1=1")
     p = []
     if country:   q += " AND country=?";   p.append(country)
@@ -8710,7 +8143,26 @@ async def get_incidents(
         q += " AND target_type=?"
         p.append(target_type)
     q += " ORDER BY date DESC, timestamp DESC"
-    return JSONResponse([dict(r) for r in db.execute(q, p).fetchall()])
+    out = []
+    for r in db.execute(q, p).fetchall():
+        d = dict(r)
+        # M4: attach the per-entry verification/quality score so the UI can
+        # render a credibility badge.
+        d["quality"] = quality_score(
+            confidence=d.get("confidence") or 0,
+            prosec_status=d.get("prosec_status") or "unknown",
+            case_ref=d.get("case_ref") or "",
+            has_evidence=bool((d.get("evidence_path") or "").strip()),
+            corroboration=d.get("corroboration") or 0,
+        )
+        # M4: a T1 "act" published as fact but still unverified (single low-
+        # confidence source, no court anchor, no corroboration) belongs in a
+        # review queue. Surfaced as a derived flag — does not alter publication.
+        d["needs_review"] = bool(
+            d.get("tier") == "act" and d["quality"]["label"] == "unverified"
+        )
+        out.append(d)
+    return JSONResponse(out)
 
 @app.get("/api/stats")
 async def stats():
@@ -10553,6 +10005,12 @@ async def startup():
         backfill_prosec_status()
     except Exception as e:
         log.warning(f"backfill_prosec_status failed: {e}")
+    # M4 — cross-source corroboration: count independent sources per event so
+    # the per-entry verification score reflects multi-source agreement.
+    try:
+        recompute_corroboration()
+    except Exception as e:
+        log.warning(f"recompute_corroboration failed: {e}")
     # Geocoding-Fix (Userhinweis): alte Substring-Match-Bugs in den vor-
     # handenen Koordinaten korrigieren. Wipe-and-rebuild des geocache läuft
     # einmal, sobald die DB-Meta nicht den aktuellen geocode-Fix-Marker

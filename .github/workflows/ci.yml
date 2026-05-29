@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Smoke import (app + extracted modules)
+        env:
+          DB_PATH: /tmp/lex_ci.db
+          EVIDENCE_DIR: /tmp/lex_ci_evidence
+        run: python -c "import lex.privacy, main; print('import OK')"
+
+      - name: Unit tests (pytest)
+        run: pytest
