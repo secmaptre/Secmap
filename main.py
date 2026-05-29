@@ -97,6 +97,9 @@ def get_db():
                       ("prosec_status","TEXT DEFAULT 'unknown'"),
                       ("case_ref","TEXT DEFAULT ''"),
                       ("last_status_check","TEXT DEFAULT ''"),
+                      # M4 — cross-source corroboration: how many *additional*
+                      # independent sources documented the same incident.
+                      ("corroboration","INTEGER DEFAULT 0"),
                       # MS-5 (Säule 4) — Quellensicherung
                       ("evidence_path","TEXT DEFAULT ''"),
                       ("evidence_sha","TEXT DEFAULT ''"),
@@ -1130,6 +1133,8 @@ from lex.scoring import (  # noqa: E402
     SOURCE_CONFIDENCE,
     score_confidence,
     quality_score,
+    corroboration_key,
+    same_event,
 )
 
 # ── KEYWORD CLASSIFICATION (AI-free) ─────────────────────────────
@@ -4580,6 +4585,47 @@ def backfill_prosec_status():
     return fixed
 
 
+def recompute_corroboration():
+    """Recompute the per-incident `corroboration` count (M4).
+
+    For each incident, count how many *additional* independent sources
+    documented the same event (see lex.scoring.same_event). corroboration =
+    (distinct sources among same-event records) - 1, capped at 2 to match the
+    quality_score weighting. Incidents are bucketed by (country, category)
+    first so the O(n^2) comparison only runs within small groups.
+
+    Idempotent: recomputes from scratch each call, safe to run on startup and
+    after a crawl. Returns the number of rows whose value changed.
+    """
+    rows = [dict(r) for r in db.execute(
+        "SELECT id, country, category, location, date, source, "
+        "COALESCE(corroboration,0) AS corroboration FROM incidents"
+    ).fetchall()]
+    buckets = {}
+    for r in rows:
+        buckets.setdefault(corroboration_key(r["country"], r["category"]), []).append(r)
+
+    changed = 0
+    for group in buckets.values():
+        for r in group:
+            sources = set()
+            for other in group:
+                if other is r or same_event(r, other):
+                    src = (other.get("source") or "").strip().lower()
+                    # Fall back to the row id so a missing source still counts
+                    # as one distinct witness (never inflates beyond reality).
+                    sources.add(src or f"#{other['id']}")
+            new_val = max(0, min(len(sources) - 1, 2))
+            if new_val != (r.get("corroboration") or 0):
+                db.execute("UPDATE incidents SET corroboration=? WHERE id=?",
+                           (new_val, r["id"]))
+                changed += 1
+    if changed:
+        db.commit()
+        log.info(f"recompute_corroboration: {changed} incidents updated")
+    return changed
+
+
 def backfill_summaries_and_flags():
     """
     For existing rows, derive summary + is_primary + is_high_risk so the new
@@ -5516,6 +5562,13 @@ def run_crawler(force=False):
 
         # 5. Re-geocode any null-coord incidents
         regeocode_nulls()
+
+        # 6. M4 — refresh cross-source corroboration so newly-saved incidents
+        # that corroborate (or are corroborated by) existing ones get scored.
+        try:
+            recompute_corroboration()
+        except Exception as e:
+            log.warning(f"recompute_corroboration after crawl failed: {e}")
 
     except Exception as e:
         log.error(f"run_crawler: {e}", exc_info=True)
@@ -8049,7 +8102,7 @@ async def get_incidents(
     q = ("SELECT id,date,location,country,category,description,summary,url,"
          "lat,lon,manual,source,severity_score,actors,confidence,"
          "is_primary,is_high_risk,tier,target_type,"
-         "prosec_status,case_ref,last_status_check,"
+         "prosec_status,case_ref,last_status_check,corroboration,"
          "evidence_path,evidence_sha,evidence_ts FROM incidents WHERE 1=1")
     p = []
     if country:   q += " AND country=?";   p.append(country)
@@ -8094,14 +8147,13 @@ async def get_incidents(
     for r in db.execute(q, p).fetchall():
         d = dict(r)
         # M4: attach the per-entry verification/quality score so the UI can
-        # render a credibility badge. corroboration is not yet persisted —
-        # default 0 until the cross-source corroboration step lands.
+        # render a credibility badge.
         d["quality"] = quality_score(
             confidence=d.get("confidence") or 0,
             prosec_status=d.get("prosec_status") or "unknown",
             case_ref=d.get("case_ref") or "",
             has_evidence=bool((d.get("evidence_path") or "").strip()),
-            corroboration=0,
+            corroboration=d.get("corroboration") or 0,
         )
         out.append(d)
     return JSONResponse(out)
@@ -9947,6 +9999,12 @@ async def startup():
         backfill_prosec_status()
     except Exception as e:
         log.warning(f"backfill_prosec_status failed: {e}")
+    # M4 — cross-source corroboration: count independent sources per event so
+    # the per-entry verification score reflects multi-source agreement.
+    try:
+        recompute_corroboration()
+    except Exception as e:
+        log.warning(f"recompute_corroboration failed: {e}")
     # Geocoding-Fix (Userhinweis): alte Substring-Match-Bugs in den vor-
     # handenen Koordinaten korrigieren. Wipe-and-rebuild des geocache läuft
     # einmal, sobald die DB-Meta nicht den aktuellen geocode-Fix-Marker

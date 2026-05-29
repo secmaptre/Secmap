@@ -298,3 +298,51 @@ def quality_score(confidence=0, prosec_status="unknown", case_ref="",
 
     return {"score": score, "label": label, "components": components}
 
+
+# ── CROSS-SOURCE CORROBORATION (M4) ──────────────────────────────────────
+# Two independent sources reporting the same act is a strong credibility
+# signal. These pure helpers decide whether two incident records describe the
+# *same event*, so a DB pass can count distinct corroborating sources. Kept
+# conservative: a false merge would wrongly inflate a record's credibility, so
+# we require same country + same category + a location match + a tight date
+# window. (Side-effect-free; see tests/test_scoring.py.)
+
+def _norm_loc(location):
+    return (location or "").strip().lower()
+
+def corroboration_key(country, category):
+    """Coarse bucket so only plausibly-related incidents are compared."""
+    return ((country or "").strip().upper(), (category or "").strip())
+
+def _days_between(date_a, date_b):
+    """Whole-day distance between two YYYY-MM-DD strings, or None if unparseable."""
+    from datetime import date
+    def _p(s):
+        try:
+            y, m, d = (s or "")[:10].split("-")
+            return date(int(y), int(m), int(d))
+        except Exception:
+            return None
+    a, b = _p(date_a), _p(date_b)
+    if a is None or b is None:
+        return None
+    return abs((a - b).days)
+
+def same_event(a, b, day_window=3):
+    """True if incident dicts ``a`` and ``b`` plausibly describe one event.
+
+    Requires identical country + category, a location match (equal, or one
+    name contained in the other — handles "Leipzig" vs "Leipzig-Connewitz"),
+    and report dates within ``day_window`` days. Unparseable dates do not match.
+    """
+    if corroboration_key(a.get("country"), a.get("category")) != \
+       corroboration_key(b.get("country"), b.get("category")):
+        return False
+    la, lb = _norm_loc(a.get("location")), _norm_loc(b.get("location"))
+    if not la or not lb:
+        return False
+    if not (la == lb or la in lb or lb in la):
+        return False
+    dist = _days_between(a.get("date"), b.get("date"))
+    return dist is not None and dist <= day_window
+

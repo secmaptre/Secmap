@@ -4,6 +4,8 @@ from lex.scoring import (
     score_confidence,
     extract_actors,
     quality_score,
+    corroboration_key,
+    same_event,
     CATEGORIES,
     KNOWN_ACTORS,
     ACTOR_TIER,
@@ -129,6 +131,53 @@ class TestQualityScore:
         assert set(r["components"]) == {
             "source", "case_ref", "prosecution", "evidence", "corroboration"
         }
+
+
+class TestCorroboration:
+    def _evt(self, **kw):
+        base = {"country": "DE", "category": "Brandanschlag",
+                "location": "Leipzig", "date": "2024-05-01", "source": "a"}
+        base.update(kw)
+        return base
+
+    def test_same_event_distinct_sources(self):
+        a = self._evt(source="tagesschau.de")
+        b = self._evt(source="spiegel.de", date="2024-05-02")
+        assert same_event(a, b) is True
+
+    def test_location_substring_match(self):
+        # "Leipzig" vs "Leipzig-Connewitz" should count as the same place.
+        a = self._evt(location="Leipzig")
+        b = self._evt(location="Leipzig-Connewitz")
+        assert same_event(a, b) is True
+
+    def test_outside_date_window_no_match(self):
+        a = self._evt(date="2024-05-01")
+        b = self._evt(date="2024-05-20")
+        assert same_event(a, b) is False
+
+    def test_different_category_no_match(self):
+        a = self._evt(category="Brandanschlag")
+        b = self._evt(category="Sabotage")
+        assert same_event(a, b) is False
+
+    def test_different_country_no_match(self):
+        a = self._evt(country="DE")
+        b = self._evt(country="AT")
+        assert same_event(a, b) is False
+
+    def test_unparseable_date_no_match(self):
+        a = self._evt(date="")
+        b = self._evt(date="2024-05-01")
+        assert same_event(a, b) is False
+
+    def test_missing_location_no_match(self):
+        a = self._evt(location="")
+        b = self._evt(location="Leipzig")
+        assert same_event(a, b) is False
+
+    def test_corroboration_key_normalizes(self):
+        assert corroboration_key("de", "Brandanschlag") == ("DE", "Brandanschlag")
 
 
 class TestDataIntegrity:
