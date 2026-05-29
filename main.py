@@ -5,6 +5,7 @@ from urllib.parse import urljoin, quote_plus
 import xml.etree.ElementTree as ET
 import requests
 from lex.http_util import build_conditional_headers, parse_retry_after
+from lex.budget import month_key, over_budget
 from bs4 import BeautifulSoup
 import sqlite3
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -473,6 +474,29 @@ def _fetch_via_jina_reader(url, timeout=25):
         log.info(f"jina-reader FAIL {url}: {str(e)[:160]}")
     return None
 
+# ── PAID-FETCHER BUDGET GUARD (M2) ───────────────────────────────────
+# Default monthly caps mirror the free tiers; override via env
+# (FIRECRAWL_MONTHLY_CAP, SCRAPINGBEE_MONTHLY_CAP, SCRAPERAPI_MONTHLY_CAP).
+_PAID_CAPS = {"FIRECRAWL": 500, "SCRAPINGBEE": 1000, "SCRAPERAPI": 1000}
+_BUDGET_WARNED = set()
+
+def _budget_allow(provider):
+    """Return True if a paid call to `provider` is within this month's cap,
+    counting the call. When the cap is hit, log once per provider/month and
+    return False so the caller skips the paid fetch (no runaway cost)."""
+    cap = int(os.getenv(f"{provider}_MONTHLY_CAP", _PAID_CAPS.get(provider, 0)))
+    mk = month_key()
+    key = f"budget:{provider}:{mk}"
+    used = int(meta_get(key) or 0)
+    if over_budget(used, cap):
+        warn_key = f"{provider}:{mk}"
+        if warn_key not in _BUDGET_WARNED:
+            log.warning(f"paid-fetcher budget reached: {provider} {used}/{cap} for {mk} — skipping paid calls")
+            _BUDGET_WARNED.add(warn_key)
+        return False
+    meta_set(key, str(used + 1))
+    return True
+
 def _fetch_via_scrapingbee(url, timeout=45):
     """ScrapingBee API mit JS-Rendering — für SPAs wie barrikade.info
     (Angular). Benötigt SCRAPINGBEE_API_KEY. 1000 free credits/Monat,
@@ -480,6 +504,8 @@ def _fetch_via_scrapingbee(url, timeout=45):
     Doku: https://www.scrapingbee.com/documentation/"""
     key = os.getenv("SCRAPINGBEE_API_KEY", "").strip()
     if not key:
+        return None
+    if not _budget_allow("SCRAPINGBEE"):
         return None
     try:
         r = requests.get(
@@ -508,6 +534,8 @@ def _fetch_via_scraperapi(url, timeout=45):
     ~10 credits = ~100 renders/Monat."""
     key = os.getenv("SCRAPERAPI_KEY", "").strip()
     if not key:
+        return None
+    if not _budget_allow("SCRAPERAPI"):
         return None
     try:
         r = requests.get(
@@ -538,6 +566,8 @@ def _fetch_via_firecrawl(url, timeout=60):
     Doku: https://docs.firecrawl.dev/api-reference/endpoint/scrape"""
     key = os.getenv("FIRECRAWL_API_KEY", "").strip()
     if not key:
+        return None
+    if not _budget_allow("FIRECRAWL"):
         return None
     try:
         r = requests.post(
@@ -4892,6 +4922,8 @@ def _firecrawl_article(aid):
     Skeleton. Firecrawl rendert die SPA und gibt Article-Body als Markdown."""
     key = os.getenv("FIRECRAWL_API_KEY", "").strip()
     if not key:
+        return None
+    if not _budget_allow("FIRECRAWL"):
         return None
     url = f"https://barrikade.info/article/{aid}"
     try:
