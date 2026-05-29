@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from urllib.parse import urljoin, quote_plus
 import xml.etree.ElementTree as ET
 import requests
+from lex.http_util import build_conditional_headers, parse_retry_after
 from bs4 import BeautifulSoup
 import sqlite3
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -265,6 +266,17 @@ def get_db():
         active INTEGER DEFAULT 1
     )''')
     c.execute("CREATE INDEX IF NOT EXISTS idx_sh_active ON source_health(active)")
+
+    # ── CONDITIONAL-GET CACHE (M3 delta scraping) ──────────────────
+    # Stores the ETag / Last-Modified validators per feed URL so the next
+    # crawl can send If-None-Match / If-Modified-Since and skip unchanged
+    # feeds on a 304 Not Modified — less bandwidth, fewer bans, faster cycles.
+    c.execute('''CREATE TABLE IF NOT EXISTS conditional_get (
+        url TEXT PRIMARY KEY,
+        etag TEXT DEFAULT '',
+        last_modified TEXT DEFAULT '',
+        updated TEXT DEFAULT ''
+    )''')
 
     # ── FTS5 FULL-TEXT SEARCH ──────────────────────────────────────
     # Virtuelle Tabelle deckt Beschreibung + Summary + Ort + Aktoren ab.
@@ -626,6 +638,7 @@ def fetch(url, timeout=25):
     last_err = None
     last_status = 0
     last_excerpt = ""
+    retry_after_hint = None
     for attempt in range(3):
         try:
             # _safe_get vermeidet Redirects auf blocked Hosts wie
@@ -647,13 +660,21 @@ def fetch(url, timeout=25):
                         r = r2
                         break
             last_excerpt = (r.text or "")[:200].replace("\n", " ")
+            # M2: capture a server-provided cool-down before raise_for_status.
+            if r.status_code in (429, 503):
+                retry_after_hint = parse_retry_after(r.headers.get("Retry-After"))
             r.raise_for_status()
             return r.text
         except Exception as e:
             last_err = e
             if attempt == 2:
                 break
-            time.sleep(2 ** attempt)
+            # M2 resilience: if the server told us how long to wait (429/503
+            # Retry-After), honour it (capped at 30s) instead of blind backoff.
+            delay = 2 ** attempt
+            if retry_after_hint is not None:
+                delay = min(retry_after_hint, 30)
+            time.sleep(delay)
 
     # ── Fallback 2: cloudscraper für nicht-CF-Hosts ──────────────
     if last_status in (403, 429, 503) and _HAS_CLOUDSCRAPER:
@@ -5464,13 +5485,60 @@ def record_crawl_result(source: str, url: str, ok: bool, items: int = 0,
         )
     db.commit()
 
+def fetch_feed_conditional(feed_url, timeout=18):
+    """Conditional GET of an RSS feed (M3 delta scraping).
+
+    Sends If-None-Match / If-Modified-Since from the stored validators. Returns
+    a tuple ``(text, not_modified)``:
+      * (xml, False) — feed changed (or first fetch); validators are persisted.
+      * (None, True) — server replied 304 Not Modified; caller should skip.
+      * (None, False) — conditional path failed; caller falls back to fetch().
+
+    Also honours a Retry-After header on 429/503 by recording a short cool-down
+    in source_health is left to the caller; here we just surface the signal.
+    """
+    row = db.execute(
+        "SELECT etag, last_modified FROM conditional_get WHERE url=?", (feed_url,)
+    ).fetchone()
+    headers = build_conditional_headers(
+        row["etag"] if row else "", row["last_modified"] if row else ""
+    )
+    try:
+        r = _safe_get(session, feed_url, timeout, headers=headers)
+    except Exception:
+        return (None, False)
+    if r.status_code == 304:
+        return (None, True)
+    if r.status_code == 200 and r.text:
+        et = r.headers.get("ETag", "") or ""
+        lm = r.headers.get("Last-Modified", "") or ""
+        if et or lm:
+            db.execute(
+                "INSERT OR REPLACE INTO conditional_get (url, etag, last_modified, updated) "
+                "VALUES (?,?,?,?)",
+                (feed_url, et, lm, datetime.now().isoformat(timespec="seconds"))
+            )
+            db.commit()
+        return (r.text, False)
+    # Non-200/304 (incl. 429/503): let the caller's robust fetch() chain handle it.
+    return (None, False)
+
+
 def crawl_rss_feed(source, feed_url, max_items=15):
     if should_skip_feed(source):
         return 0
     inserted = 0
     err_msg  = ""
     try:
-        xml   = fetch(feed_url, timeout=18)
+        # M3 delta: conditional GET first. 304 → feed unchanged, skip the whole
+        # parse/classify pass for this cycle. Otherwise fall back to the robust
+        # multi-stage fetch() (cloudscraper/jina/etc.).
+        xml, not_modified = fetch_feed_conditional(feed_url, timeout=18)
+        if not_modified:
+            record_crawl_result(source, feed_url, ok=True, items=0)
+            return 0
+        if not xml:
+            xml = fetch(feed_url, timeout=18)
         items = parse_rss(xml)
         hits  = 0
         for title, link, desc, pub in items:
