@@ -6,6 +6,9 @@ from lex.scoring import (
     quality_score,
     corroboration_key,
     same_event,
+    funding_transparency,
+    actor_profile,
+    ACTOR_PROFILES,
     CATEGORIES,
     KNOWN_ACTORS,
     ACTOR_TIER,
@@ -186,6 +189,63 @@ class TestCorroboration:
 
     def test_corroboration_key_normalizes(self):
         assert corroboration_key("de", "Brandanschlag") == ("DE", "Brandanschlag")
+
+
+class TestFundingTransparency:
+    def test_verified_is_primary(self):
+        r = funding_transparency(confidence=5, verified=True, has_source=True)
+        assert r["label"] == "primärbelegt"
+        assert r["score"] == 100
+
+    def test_unverified_official_is_belegt(self):
+        # confidence 5, has source, not verified -> 60 + 10 = 70 -> belegt
+        r = funding_transparency(confidence=5, verified=False, has_source=True)
+        assert r["label"] == "belegt"
+        assert r["score"] == 70
+
+    def test_low_confidence_no_source_indicative(self):
+        r = funding_transparency(confidence=1, verified=False, has_source=False)
+        assert r["score"] == 12
+        assert r["label"] == "indikativ"
+
+    def test_teilbelegt_band(self):
+        # confidence 3 + source -> 36 + 10 = 46 -> teilbelegt
+        r = funding_transparency(confidence=3, verified=False, has_source=True)
+        assert r["label"] == "teilbelegt"
+
+    def test_capped_and_components(self):
+        r = funding_transparency(confidence=5, verified=True, has_source=True)
+        assert r["score"] == 100
+        assert set(r["components"]) == {"source", "verified", "has_source"}
+
+    def test_empty_safe(self):
+        r = funding_transparency()
+        assert r["score"] == 0
+        assert r["label"] == "indikativ"
+
+
+class TestActorProfile:
+    def test_known_actor_has_dossier(self):
+        p = actor_profile("Lina E. Netzwerk")
+        assert p["country"] == "DE"
+        assert p["summary"]
+        assert p["basis"]
+        assert p["tier"] == "act"
+
+    def test_unknown_actor_typed_default(self):
+        p = actor_profile("Nonexistent Group")
+        assert p == {"country": "", "summary": "", "basis": "", "tier": "endorse"}
+
+    def test_all_profiles_have_required_fields(self):
+        for name, prof in ACTOR_PROFILES.items():
+            assert "country" in prof and "summary" in prof and "basis" in prof
+            assert prof["summary"].strip()
+
+    def test_profiled_actors_are_known(self):
+        # Every dossier must correspond to a real KNOWN_ACTORS entry.
+        known = {n for n, _p, _t in KNOWN_ACTORS}
+        for name in ACTOR_PROFILES:
+            assert name in known, f"dossier for unknown actor: {name}"
 
 
 class TestDataIntegrity:

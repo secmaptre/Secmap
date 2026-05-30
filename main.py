@@ -1186,6 +1186,8 @@ from lex.scoring import (  # noqa: E402
     quality_score,
     corroboration_key,
     same_event,
+    funding_transparency,
+    actor_profile,
 )
 
 # ── KEYWORD CLASSIFICATION (AI-free) ─────────────────────────────
@@ -4689,11 +4691,12 @@ def recompute_corroboration():
 #     role only; perpetrator side via group label / public case reference).
 # Each tuple:
 #   (date, location, country, lat, lon, category, severity, actors,
-#    prosec_status, case_ref, summary, description)
+#    prosec_status, case_ref, source, url, summary, description)
 _DOCUMENTED_SEED = [
     ("2023-02-10", "Budapest", "HU", 47.4979, 19.0402, "Gewalt", 5,
      "Lina E. Netzwerk", "charged",
      "Fővárosi Törvényszék Budapest + GBA Karlsruhe (Antifa-Ost-Komplex, Budapest-Angriffe 2/2023)",
+     "dokumentiert:Gerichtsakte", "",
      "Hammer-Angriffe in Budapest auf mutmaßliche Rechte — mehrere Schwerverletzte; Verfahren in Budapest und beim GBA (§129).",
      "Im Umfeld des rechtsextremen 'Tag der Ehre' wurden mehrere Personen von einer "
      "mutmaßlich linksextremen Gruppe mit Hämmern, Schlagstöcken und Reizgas angegriffen; "
@@ -4702,6 +4705,7 @@ _DOCUMENTED_SEED = [
     ("2023-06-03", "Leipzig", "DE", 51.3397, 12.3731, "Gewalt", 4,
      "Antifa Leipzig,Lina E. Netzwerk", "investigating",
      "StA Leipzig — 'Tag-X'-Ausschreitungen Connewitz 6/2023",
+     "dokumentiert:Gerichtsakte", "",
      "'Tag X' in Leipzig-Connewitz: Pyrotechnik, Steine und Flaschen gegen Polizei, mehrere verletzte Beamte.",
      "Nach dem Lina-E.-Urteil kam es in Leipzig-Connewitz zu Ausschreitungen: Angriffe auf "
      "Polizeikräfte mit Steinen, Flaschen und Feuerwerkskörpern sowie Barrikaden; mehrere "
@@ -4709,12 +4713,14 @@ _DOCUMENTED_SEED = [
     ("2023-05-31", "Dresden", "DE", 51.0504, 13.7373, "Gewalt", 5,
      "Lina E. Netzwerk", "convicted",
      "OLG Dresden 4 OJs 9/21 (Verurteilung Lina E. + 3 Mitangeklagte, 5/2023)",
+     "dokumentiert:Gerichtsakte", "",
      "OLG Dresden: Verurteilung im Antifa-Ost-Komplex wegen Angriffsserie auf (vermeintliche) Rechtsextreme.",
      "Verurteilung wegen mehrerer Angriffe auf tatsächliche oder vermeintliche Rechtsextreme "
      "in Sachsen und Thüringen (2018–2020) sowie Bildung einer kriminellen Vereinigung."),
     ("2024-03-05", "Grünheide", "DE", 52.3940, 13.8000, "Brandanschlag", 5,
      "Vulkangruppe", "investigating",
      "GStA Berlin 4 BJs 4/24 (§129a — Brandanschlag Strommast Tesla Grünheide)",
+     "dokumentiert:Gerichtsakte", "",
      "Brandanschlag auf einen Strommast bei der Tesla-Gigafactory; Werk und tausende Haushalte ohne Strom.",
      "Brandanschlag auf einen Strommast nahe der Tesla-Gigafactory; Stromausfall für das Werk "
      "und tausende Haushalte. Bekennerschreiben einer 'Vulkangruppe'. Ermittlungen wegen "
@@ -4722,27 +4728,103 @@ _DOCUMENTED_SEED = [
     ("2017-07-07", "Hamburg", "DE", 53.5511, 9.9937, "Militante Aktion", 4,
      "Schwarzer Block", "convicted",
      "LG Hamburg 612 KLs (Rondenbarg-Verfahren, Teilverurteilungen 2020–23)",
+     "dokumentiert:Gerichtsakte", "",
      "G20 Hamburg / Rondenbarg: militante Aktion und Angriffe am Rande des Gipfels; Teilverurteilungen.",
      "Am Rande des G20-Gipfels kam es im Komplex Rondenbarg zu einer militanten Aktion mit "
      "Angriffen auf Einsatzkräfte; mehrere Teilverurteilungen durch das LG Hamburg."),
     ("2023-03-25", "Sainte-Soline", "FR", 46.2330, -0.0760, "Militante Aktion", 4,
      "Soulèvements de la Terre", "charged",
      "TGI Niort — 'violences en réunion' (Megabassine-Zusammenstöße 3/2023)",
+     "dokumentiert:Gerichtsakte", "",
      "Sainte-Soline: gewaltsame Zusammenstöße mit Gendarmerie bei Protest gegen ein Wasserbecken; viele Verletzte.",
      "Bei einer Demonstration gegen ein landwirtschaftliches Wasserreservoir kam es zu "
      "gewaltsamen Zusammenstößen mit der Gendarmerie; zahlreiche Verletzte. Verfahren am TGI Niort."),
     ("2023-03-05", "Atlanta", "US", 33.7490, -84.3880, "Militante Aktion", 4,
      "Stop Cop City", "charged",
      "Fulton County GA 23SC183872 (RICO-Anklage 'Stop Cop City', 9/2023)",
+     "dokumentiert:Gerichtsakte", "",
      "Stop Cop City Atlanta: militante Aktion gegen die Polizei-Trainingsanlage; Georgia-RICO-Anklage.",
      "Im Kontext der Kampagne gegen die Polizei-Trainingsanlage ('Cop City') kam es zu einer "
      "militanten Aktion mit Sachbeschädigung und Angriffen auf die Baustelle; RICO-Anklage in Fulton County."),
     ("2020-05-28", "Minneapolis", "US", 44.9778, -93.2650, "Brandanschlag", 5,
      "Autonome Gruppe", "convicted",
      "U.S. District Court D.Minn. 0:20-cr-00203 (Federal Arson 18 USC §844)",
+     "dokumentiert:Gerichtsakte", "",
      "Minneapolis: Brandstiftung am 3rd Police Precinct während der Unruhen 2020; Bundes-Verurteilungen.",
      "Während der Unruhen 2020 wurde das dritte Polizeirevier in Brand gesetzt; mehrere "
      "Bundes-Verurteilungen wegen Brandstiftung (18 USC §844)."),
+    # Lyon, 2026: death of a far-right activist; further suspects charged.
+    # Sourced directly from Le Monde (2026-03-07). NB: published after this
+    # assistant's knowledge cutoff and not fetchable from the sandbox, so the
+    # description is kept strictly to what the source headline states — no victim
+    # name, no assertion of the suspects' guilt or affiliation beyond "charged".
+    # Date is the reporting/charging date (the underlying incident date should be
+    # corrected from the article).
+    ("2026-03-07", "Lyon", "FR", 45.7640, 4.8357, "Gewalt", 5,
+     "", "charged",
+     "Parquet de Lyon — Tötungsdelikt Lyon, weitere Beschuldigte angeklagt (Le Monde 3/2026)",
+     "lemonde.fr",
+     "https://www.lemonde.fr/en/france/article/2026/03/07/death-of-far-right-activist-in-lyon-two-more-suspects-charged_6751194_7.html",
+     "Lyon: tödlicher Gewaltvorfall, zwei weitere Verdächtige angeklagt (Le Monde, 3/2026).",
+     "In Lyon kam ein Mann nach einem Gewaltvorfall ums Leben; im laufenden Verfahren "
+     "wurden zwei weitere Verdächtige angeklagt. Einordnung des Opfers, Tatumstände und "
+     "Tatdatum gemäß Le-Monde-Bericht (7.3.2026) — siehe verlinkte Quelle."),
+    # ── Weitere dokumentierte europäische Fälle (öffentlicher Bericht) ────────
+    ("2020-10-09", "Berlin", "DE", 52.5200, 13.4050, "Gewalt", 4,
+     "Rigaer 94", "investigating",
+     "StA Berlin — Ausschreitungen nach Liebig34-Räumung 10/2020",
+     "dokumentiert:öffentlicher Bericht", "",
+     "Berlin: Ausschreitungen nach der Räumung des Hausprojekts Liebig34; Angriffe auf Polizei, verletzte Beamte.",
+     "Nach der Räumung des linksautonomen Hausprojekts Liebig34 kam es in Berlin zu "
+     "Ausschreitungen mit Angriffen auf Einsatzkräfte und Sachbeschädigungen; mehrere "
+     "verletzte Beamte. Ermittlungen der StA Berlin."),
+    ("2019-12-31", "Leipzig", "DE", 51.3300, 12.3650, "Gewalt", 5,
+     "Antifa Leipzig", "convicted",
+     "StA Leipzig — Silvester-Angriff Connewitz 2019/20 (schwer verletzter Beamter)",
+     "dokumentiert:öffentlicher Bericht", "",
+     "Leipzig-Connewitz: Silvester-Angriff auf Polizei, ein Beamter schwer verletzt; Verurteilungen.",
+     "In der Silvesternacht wurden in Leipzig-Connewitz Einsatzkräfte angegriffen; ein "
+     "Beamter wurde schwer verletzt und musste notoperiert werden. Es folgten Anklagen "
+     "und Verurteilungen."),
+    ("2014-01-24", "Wien", "AT", 48.2082, 16.3738, "Militante Aktion", 4,
+     "Black Bloc France", "convicted",
+     "LG Wien — Akademikerball-Krawalle 1/2014 (u.a. Verfahren wg. schwerer Sachbeschädigung)",
+     "dokumentiert:öffentlicher Bericht", "",
+     "Wien: Ausschreitungen am Rande der Akademikerball-Proteste; Sachbeschädigung, Angriffe auf Polizei.",
+     "Am Rande der Proteste gegen den Wiener Akademikerball kam es zu Ausschreitungen "
+     "mit erheblichen Sachbeschädigungen und Angriffen auf Einsatzkräfte; mehrere "
+     "Verfahren am Landesgericht Wien."),
+    ("2021-03-21", "Bristol", "UK", 51.4545, -2.5879, "Gewalt", 4,
+     "", "convicted",
+     "Bristol Crown Court — 'Kill the Bill' Bridewell-Angriff 3/2021 (mehrere Verurteilungen)",
+     "dokumentiert:öffentlicher Bericht", "",
+     "Bristol: Angriff auf die Bridewell-Polizeiwache bei 'Kill the Bill'-Protest; mehrere Verurteilungen.",
+     "Bei einem 'Kill the Bill'-Protest wurde in Bristol die Bridewell-Polizeiwache "
+     "angegriffen und beschädigt, Fahrzeuge in Brand gesetzt, Beamte verletzt; es folgten "
+     "zahlreiche Verurteilungen am Bristol Crown Court."),
+    ("2018-05-01", "Paris", "FR", 48.8566, 2.3522, "Militante Aktion", 4,
+     "Black Bloc France", "charged",
+     "Parquet de Paris — 1er-Mai Black-Bloc-Ausschreitungen 2018",
+     "dokumentiert:öffentlicher Bericht", "",
+     "Paris: Black-Bloc-Ausschreitungen am 1. Mai; Sachbeschädigung, Brandstiftung, Festnahmen.",
+     "Am 1. Mai kam es in Paris zu Black-Bloc-Ausschreitungen mit erheblicher "
+     "Sachbeschädigung (u.a. ein in Brand gesetztes Fast-Food-Restaurant) und zahlreichen "
+     "Festnahmen; Verfahren der Pariser Staatsanwaltschaft."),
+    ("2018-04-09", "Notre-Dame-des-Landes", "FR", 47.3500, -1.7167, "Militante Aktion", 4,
+     "ZAD / Soulèvements", "convicted",
+     "TGI Saint-Nazaire — ZAD-Räumung NDDL 2018 (Teilverurteilungen)",
+     "dokumentiert:öffentlicher Bericht", "",
+     "Notre-Dame-des-Landes: Zusammenstöße bei der ZAD-Räumung; Angriffe auf Gendarmerie.",
+     "Bei der Räumung der ZAD Notre-Dame-des-Landes kam es zu mehrtägigen Zusammenstößen "
+     "mit der Gendarmerie; Verletzte auf beiden Seiten. Mehrere Verfahren am TGI Saint-Nazaire."),
+    ("2011-07-03", "Susa", "IT", 45.1380, 7.0520, "Militante Aktion", 4,
+     "NoTAV", "charged",
+     "Tribunale di Torino — NoTAV-Zusammenstöße Val di Susa 7/2011",
+     "dokumentiert:öffentlicher Bericht", "",
+     "Val di Susa: NoTAV-Zusammenstöße mit der Polizei an der Baustelle; Angriffe, Verletzte, Anklagen.",
+     "An der TAV-Baustelle im Val di Susa kam es zu Zusammenstößen zwischen NoTAV-"
+     "Aktivisten und der Polizei; Steinwürfe, Brandsätze und Verletzte. Verfahren am "
+     "Tribunale di Torino."),
 ]
 
 
@@ -4754,7 +4836,7 @@ def seed_documented_incidents():
     apply. Returns the number of newly inserted rows.
     """
     inserted = 0
-    for (d, loc, country, lat, lon, cat, sev, actors, prosec, case_ref, summ, desc) in _DOCUMENTED_SEED:
+    for (d, loc, country, lat, lon, cat, sev, actors, prosec, case_ref, src, url_in, summ, desc) in _DOCUMENTED_SEED:
         desc_clean = neutralize_political_labels(redact_pii(desc))[:500]
         summ_clean = neutralize_political_labels(redact_pii(summ))[:200]
         h = mk_hash("seed:" + case_ref, desc_clean)
@@ -4771,7 +4853,7 @@ def seed_documented_incidents():
                     manual,timestamp,severity_score,actors,confidence,
                     summary,is_primary,is_high_risk,tier,prosec_status,case_ref)
                    VALUES (?,?,?,?,?,?,?,?,?,?,1,datetime('now'),?,?,?,?,?,?,?,?,?)""",
-                (d, loc, country, cat, desc_clean, "dokumentiert:Gerichtsakte", "", h,
+                (d, loc, country, cat, desc_clean, src, url_in, h,
                  lat, lon, sev, actors, conf,
                  summ_clean, is_primary, is_high_risk, tier, prosec, case_ref)
             )
@@ -7315,7 +7397,8 @@ async def public_actor_profile(actor_slug: str):
     actor = unquote(actor_slug or "").strip()
     if not actor or len(actor) < 3:
         return HTMLResponse("<h1>Unbekannter Akteur</h1>", status_code=404)
-    # Tier-Klassifikation
+    # Tier-Klassifikation + factual dossier
+    prof = actor_profile(actor)
     actor_tier = ACTOR_TIER.get(actor, "endorse")
     tier_label = {"act":"Verüben (T1)", "enable":"Fördern (T2)",
                   "endorse":"Befürworten (T3)"}.get(actor_tier, actor_tier)
@@ -7422,6 +7505,9 @@ body{{font-family:ui-monospace,Menlo,Consolas,monospace;background:#080c12;color
 h1{{font-family:'Inter',system-ui,sans-serif;font-size:30px;font-weight:600;color:#e9eef3;letter-spacing:0.5px;margin-bottom:8px;}}
 .tier-badge{{display:inline-block;font-family:ui-monospace;font-size:9px;letter-spacing:2px;padding:3px 10px;border:1px solid currentColor;text-transform:uppercase;}}
 .sub{{font-size:10px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;margin:14px 0 24px;}}
+.dossier{{background:#0d141c;border-left:2px solid #6aa9c9;padding:12px 16px;margin:14px 0 0;}}
+.dossier-sum{{font-family:'Inter',system-ui,sans-serif;font-size:14px;color:#e9eef3;line-height:1.6;}}
+.dossier-basis{{font-size:10px;color:#8a98a6;margin-top:8px;}}.dossier-basis b{{color:#6aa9c9;}}
 .kpi-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;}}
 .kpi{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:16px 20px;}}
 .kpi .lbl{{font-size:8px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;margin-bottom:4px;}}
@@ -7454,6 +7540,8 @@ h2{{font-size:10px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-trans
 <div class="page">
   <h1>{esc(actor)}</h1>
   <span class="tier-badge" style="color:{tier_color}">{esc(tier_label)}</span>
+  {(f'<span class="tier-badge" style="color:#6aa9c9;margin-left:6px">{esc(prof["country"])}</span>' if prof.get("country") and prof["country"] != "—" else "")}
+  {(f'<div class="dossier"><div class="dossier-sum">{esc(prof["summary"])}</div>' + (f'<div class="dossier-basis"><b>Einstufungsgrundlage:</b> {esc(prof["basis"])}</div>' if prof.get("basis") else "") + "</div>") if prof.get("summary") else ""}
   <div class="sub">OSINT-Akteursprofil · automatisch aggregiert · Stand {datetime.now().date().isoformat()}</div>
 
   <div class="kpi-grid">
@@ -8517,6 +8605,9 @@ async def get_actors():
             actor_map[a]["high"]  += row["hi"]
             if (row["last_seen"] or "") > actor_map[a]["last_seen"]:
                 actor_map[a]["last_seen"] = row["last_seen"]
+    # Attach the factual dossier (country, summary, basis) per actor.
+    for a in actor_map.values():
+        a["profile"] = actor_profile(a["name"])
     result = sorted(actor_map.values(), key=lambda x: x["count"], reverse=True)[:15]
     return JSONResponse(result)
 
@@ -8562,7 +8653,18 @@ async def get_funding(
     q += sort_map.get(sort, sort_map["year_desc"])
     q += " LIMIT ?"
     p.append(max(1, min(limit, 2000)))
-    return JSONResponse([dict(r) for r in db.execute(q, p).fetchall()])
+    out = []
+    for r in db.execute(q, p).fetchall():
+        d = dict(r)
+        # M5: per-record transparency score so the money trail is credibility-
+        # graded like the incidents (verified primary doc > confidence > citation).
+        d["transparency"] = funding_transparency(
+            confidence=d.get("confidence") or 0,
+            verified=bool(d.get("verified")),
+            has_source=bool((d.get("source_url") or "").strip()),
+        )
+        out.append(d)
+    return JSONResponse(out)
 
 # ── REGION EXTRACTION (Säule 3, MS-4 polish) ──────────────────────
 # Leitet aus donor_name eine grobe Region ab — Stadt > Land/Kanton > Bund.
