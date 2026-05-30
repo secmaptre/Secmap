@@ -4689,11 +4689,12 @@ def recompute_corroboration():
 #     role only; perpetrator side via group label / public case reference).
 # Each tuple:
 #   (date, location, country, lat, lon, category, severity, actors,
-#    prosec_status, case_ref, summary, description)
+#    prosec_status, case_ref, source, url, summary, description)
 _DOCUMENTED_SEED = [
     ("2023-02-10", "Budapest", "HU", 47.4979, 19.0402, "Gewalt", 5,
      "Lina E. Netzwerk", "charged",
      "Fővárosi Törvényszék Budapest + GBA Karlsruhe (Antifa-Ost-Komplex, Budapest-Angriffe 2/2023)",
+     "dokumentiert:Gerichtsakte", "",
      "Hammer-Angriffe in Budapest auf mutmaßliche Rechte — mehrere Schwerverletzte; Verfahren in Budapest und beim GBA (§129).",
      "Im Umfeld des rechtsextremen 'Tag der Ehre' wurden mehrere Personen von einer "
      "mutmaßlich linksextremen Gruppe mit Hämmern, Schlagstöcken und Reizgas angegriffen; "
@@ -4702,6 +4703,7 @@ _DOCUMENTED_SEED = [
     ("2023-06-03", "Leipzig", "DE", 51.3397, 12.3731, "Gewalt", 4,
      "Antifa Leipzig,Lina E. Netzwerk", "investigating",
      "StA Leipzig — 'Tag-X'-Ausschreitungen Connewitz 6/2023",
+     "dokumentiert:Gerichtsakte", "",
      "'Tag X' in Leipzig-Connewitz: Pyrotechnik, Steine und Flaschen gegen Polizei, mehrere verletzte Beamte.",
      "Nach dem Lina-E.-Urteil kam es in Leipzig-Connewitz zu Ausschreitungen: Angriffe auf "
      "Polizeikräfte mit Steinen, Flaschen und Feuerwerkskörpern sowie Barrikaden; mehrere "
@@ -4709,12 +4711,14 @@ _DOCUMENTED_SEED = [
     ("2023-05-31", "Dresden", "DE", 51.0504, 13.7373, "Gewalt", 5,
      "Lina E. Netzwerk", "convicted",
      "OLG Dresden 4 OJs 9/21 (Verurteilung Lina E. + 3 Mitangeklagte, 5/2023)",
+     "dokumentiert:Gerichtsakte", "",
      "OLG Dresden: Verurteilung im Antifa-Ost-Komplex wegen Angriffsserie auf (vermeintliche) Rechtsextreme.",
      "Verurteilung wegen mehrerer Angriffe auf tatsächliche oder vermeintliche Rechtsextreme "
      "in Sachsen und Thüringen (2018–2020) sowie Bildung einer kriminellen Vereinigung."),
     ("2024-03-05", "Grünheide", "DE", 52.3940, 13.8000, "Brandanschlag", 5,
      "Vulkangruppe", "investigating",
      "GStA Berlin 4 BJs 4/24 (§129a — Brandanschlag Strommast Tesla Grünheide)",
+     "dokumentiert:Gerichtsakte", "",
      "Brandanschlag auf einen Strommast bei der Tesla-Gigafactory; Werk und tausende Haushalte ohne Strom.",
      "Brandanschlag auf einen Strommast nahe der Tesla-Gigafactory; Stromausfall für das Werk "
      "und tausende Haushalte. Bekennerschreiben einer 'Vulkangruppe'. Ermittlungen wegen "
@@ -4722,27 +4726,47 @@ _DOCUMENTED_SEED = [
     ("2017-07-07", "Hamburg", "DE", 53.5511, 9.9937, "Militante Aktion", 4,
      "Schwarzer Block", "convicted",
      "LG Hamburg 612 KLs (Rondenbarg-Verfahren, Teilverurteilungen 2020–23)",
+     "dokumentiert:Gerichtsakte", "",
      "G20 Hamburg / Rondenbarg: militante Aktion und Angriffe am Rande des Gipfels; Teilverurteilungen.",
      "Am Rande des G20-Gipfels kam es im Komplex Rondenbarg zu einer militanten Aktion mit "
      "Angriffen auf Einsatzkräfte; mehrere Teilverurteilungen durch das LG Hamburg."),
     ("2023-03-25", "Sainte-Soline", "FR", 46.2330, -0.0760, "Militante Aktion", 4,
      "Soulèvements de la Terre", "charged",
      "TGI Niort — 'violences en réunion' (Megabassine-Zusammenstöße 3/2023)",
+     "dokumentiert:Gerichtsakte", "",
      "Sainte-Soline: gewaltsame Zusammenstöße mit Gendarmerie bei Protest gegen ein Wasserbecken; viele Verletzte.",
      "Bei einer Demonstration gegen ein landwirtschaftliches Wasserreservoir kam es zu "
      "gewaltsamen Zusammenstößen mit der Gendarmerie; zahlreiche Verletzte. Verfahren am TGI Niort."),
     ("2023-03-05", "Atlanta", "US", 33.7490, -84.3880, "Militante Aktion", 4,
      "Stop Cop City", "charged",
      "Fulton County GA 23SC183872 (RICO-Anklage 'Stop Cop City', 9/2023)",
+     "dokumentiert:Gerichtsakte", "",
      "Stop Cop City Atlanta: militante Aktion gegen die Polizei-Trainingsanlage; Georgia-RICO-Anklage.",
      "Im Kontext der Kampagne gegen die Polizei-Trainingsanlage ('Cop City') kam es zu einer "
      "militanten Aktion mit Sachbeschädigung und Angriffen auf die Baustelle; RICO-Anklage in Fulton County."),
     ("2020-05-28", "Minneapolis", "US", 44.9778, -93.2650, "Brandanschlag", 5,
      "Autonome Gruppe", "convicted",
      "U.S. District Court D.Minn. 0:20-cr-00203 (Federal Arson 18 USC §844)",
+     "dokumentiert:Gerichtsakte", "",
      "Minneapolis: Brandstiftung am 3rd Police Precinct während der Unruhen 2020; Bundes-Verurteilungen.",
      "Während der Unruhen 2020 wurde das dritte Polizeirevier in Brand gesetzt; mehrere "
      "Bundes-Verurteilungen wegen Brandstiftung (18 USC §844)."),
+    # Lyon, 2026: death of a far-right activist; further suspects charged.
+    # Sourced directly from Le Monde (2026-03-07). NB: published after this
+    # assistant's knowledge cutoff and not fetchable from the sandbox, so the
+    # description is kept strictly to what the source headline states — no victim
+    # name, no assertion of the suspects' guilt or affiliation beyond "charged".
+    # Date is the reporting/charging date (the underlying incident date should be
+    # corrected from the article).
+    ("2026-03-07", "Lyon", "FR", 45.7640, 4.8357, "Gewalt", 5,
+     "", "charged",
+     "Parquet de Lyon — Tötungsdelikt Lyon, weitere Beschuldigte angeklagt (Le Monde 3/2026)",
+     "lemonde.fr",
+     "https://www.lemonde.fr/en/france/article/2026/03/07/death-of-far-right-activist-in-lyon-two-more-suspects-charged_6751194_7.html",
+     "Lyon: tödlicher Gewaltvorfall, zwei weitere Verdächtige angeklagt (Le Monde, 3/2026).",
+     "In Lyon kam ein Mann nach einem Gewaltvorfall ums Leben; im laufenden Verfahren "
+     "wurden zwei weitere Verdächtige angeklagt. Einordnung des Opfers, Tatumstände und "
+     "Tatdatum gemäß Le-Monde-Bericht (7.3.2026) — siehe verlinkte Quelle."),
 ]
 
 
@@ -4754,7 +4778,7 @@ def seed_documented_incidents():
     apply. Returns the number of newly inserted rows.
     """
     inserted = 0
-    for (d, loc, country, lat, lon, cat, sev, actors, prosec, case_ref, summ, desc) in _DOCUMENTED_SEED:
+    for (d, loc, country, lat, lon, cat, sev, actors, prosec, case_ref, src, url_in, summ, desc) in _DOCUMENTED_SEED:
         desc_clean = neutralize_political_labels(redact_pii(desc))[:500]
         summ_clean = neutralize_political_labels(redact_pii(summ))[:200]
         h = mk_hash("seed:" + case_ref, desc_clean)
@@ -4771,7 +4795,7 @@ def seed_documented_incidents():
                     manual,timestamp,severity_score,actors,confidence,
                     summary,is_primary,is_high_risk,tier,prosec_status,case_ref)
                    VALUES (?,?,?,?,?,?,?,?,?,?,1,datetime('now'),?,?,?,?,?,?,?,?,?)""",
-                (d, loc, country, cat, desc_clean, "dokumentiert:Gerichtsakte", "", h,
+                (d, loc, country, cat, desc_clean, src, url_in, h,
                  lat, lon, sev, actors, conf,
                  summ_clean, is_primary, is_high_risk, tier, prosec, case_ref)
             )
