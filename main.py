@@ -4767,6 +4767,62 @@ _DOCUMENTED_SEED = [
      "In Lyon kam ein Mann nach einem Gewaltvorfall ums Leben; im laufenden Verfahren "
      "wurden zwei weitere Verdächtige angeklagt. Einordnung des Opfers, Tatumstände und "
      "Tatdatum gemäß Le-Monde-Bericht (7.3.2026) — siehe verlinkte Quelle."),
+    # ── Weitere dokumentierte europäische Fälle (öffentlicher Bericht) ────────
+    ("2020-10-09", "Berlin", "DE", 52.5200, 13.4050, "Gewalt", 4,
+     "Rigaer 94", "investigating",
+     "StA Berlin — Ausschreitungen nach Liebig34-Räumung 10/2020",
+     "dokumentiert:öffentlicher Bericht", "",
+     "Berlin: Ausschreitungen nach der Räumung des Hausprojekts Liebig34; Angriffe auf Polizei, verletzte Beamte.",
+     "Nach der Räumung des linksautonomen Hausprojekts Liebig34 kam es in Berlin zu "
+     "Ausschreitungen mit Angriffen auf Einsatzkräfte und Sachbeschädigungen; mehrere "
+     "verletzte Beamte. Ermittlungen der StA Berlin."),
+    ("2019-12-31", "Leipzig", "DE", 51.3300, 12.3650, "Gewalt", 5,
+     "Antifa Leipzig", "convicted",
+     "StA Leipzig — Silvester-Angriff Connewitz 2019/20 (schwer verletzter Beamter)",
+     "dokumentiert:öffentlicher Bericht", "",
+     "Leipzig-Connewitz: Silvester-Angriff auf Polizei, ein Beamter schwer verletzt; Verurteilungen.",
+     "In der Silvesternacht wurden in Leipzig-Connewitz Einsatzkräfte angegriffen; ein "
+     "Beamter wurde schwer verletzt und musste notoperiert werden. Es folgten Anklagen "
+     "und Verurteilungen."),
+    ("2014-01-24", "Wien", "AT", 48.2082, 16.3738, "Militante Aktion", 4,
+     "Black Bloc France", "convicted",
+     "LG Wien — Akademikerball-Krawalle 1/2014 (u.a. Verfahren wg. schwerer Sachbeschädigung)",
+     "dokumentiert:öffentlicher Bericht", "",
+     "Wien: Ausschreitungen am Rande der Akademikerball-Proteste; Sachbeschädigung, Angriffe auf Polizei.",
+     "Am Rande der Proteste gegen den Wiener Akademikerball kam es zu Ausschreitungen "
+     "mit erheblichen Sachbeschädigungen und Angriffen auf Einsatzkräfte; mehrere "
+     "Verfahren am Landesgericht Wien."),
+    ("2021-03-21", "Bristol", "UK", 51.4545, -2.5879, "Gewalt", 4,
+     "", "convicted",
+     "Bristol Crown Court — 'Kill the Bill' Bridewell-Angriff 3/2021 (mehrere Verurteilungen)",
+     "dokumentiert:öffentlicher Bericht", "",
+     "Bristol: Angriff auf die Bridewell-Polizeiwache bei 'Kill the Bill'-Protest; mehrere Verurteilungen.",
+     "Bei einem 'Kill the Bill'-Protest wurde in Bristol die Bridewell-Polizeiwache "
+     "angegriffen und beschädigt, Fahrzeuge in Brand gesetzt, Beamte verletzt; es folgten "
+     "zahlreiche Verurteilungen am Bristol Crown Court."),
+    ("2018-05-01", "Paris", "FR", 48.8566, 2.3522, "Militante Aktion", 4,
+     "Black Bloc France", "charged",
+     "Parquet de Paris — 1er-Mai Black-Bloc-Ausschreitungen 2018",
+     "dokumentiert:öffentlicher Bericht", "",
+     "Paris: Black-Bloc-Ausschreitungen am 1. Mai; Sachbeschädigung, Brandstiftung, Festnahmen.",
+     "Am 1. Mai kam es in Paris zu Black-Bloc-Ausschreitungen mit erheblicher "
+     "Sachbeschädigung (u.a. ein in Brand gesetztes Fast-Food-Restaurant) und zahlreichen "
+     "Festnahmen; Verfahren der Pariser Staatsanwaltschaft."),
+    ("2018-04-09", "Notre-Dame-des-Landes", "FR", 47.3500, -1.7167, "Militante Aktion", 4,
+     "ZAD / Soulèvements", "convicted",
+     "TGI Saint-Nazaire — ZAD-Räumung NDDL 2018 (Teilverurteilungen)",
+     "dokumentiert:öffentlicher Bericht", "",
+     "Notre-Dame-des-Landes: Zusammenstöße bei der ZAD-Räumung; Angriffe auf Gendarmerie.",
+     "Bei der Räumung der ZAD Notre-Dame-des-Landes kam es zu mehrtägigen Zusammenstößen "
+     "mit der Gendarmerie; Verletzte auf beiden Seiten. Mehrere Verfahren am TGI Saint-Nazaire."),
+    ("2011-07-03", "Susa", "IT", 45.1380, 7.0520, "Militante Aktion", 4,
+     "NoTAV", "charged",
+     "Tribunale di Torino — NoTAV-Zusammenstöße Val di Susa 7/2011",
+     "dokumentiert:öffentlicher Bericht", "",
+     "Val di Susa: NoTAV-Zusammenstöße mit der Polizei an der Baustelle; Angriffe, Verletzte, Anklagen.",
+     "An der TAV-Baustelle im Val di Susa kam es zu Zusammenstößen zwischen NoTAV-"
+     "Aktivisten und der Polizei; Steinwürfe, Brandsätze und Verletzte. Verfahren am "
+     "Tribunale di Torino."),
 ]
 
 
