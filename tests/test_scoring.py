@@ -7,6 +7,8 @@ from lex.scoring import (
     corroboration_key,
     same_event,
     funding_transparency,
+    actor_profile,
+    ACTOR_PROFILES,
     CATEGORIES,
     KNOWN_ACTORS,
     ACTOR_TIER,
@@ -220,6 +222,30 @@ class TestFundingTransparency:
         r = funding_transparency()
         assert r["score"] == 0
         assert r["label"] == "indikativ"
+
+
+class TestActorProfile:
+    def test_known_actor_has_dossier(self):
+        p = actor_profile("Lina E. Netzwerk")
+        assert p["country"] == "DE"
+        assert p["summary"]
+        assert p["basis"]
+        assert p["tier"] == "act"
+
+    def test_unknown_actor_typed_default(self):
+        p = actor_profile("Nonexistent Group")
+        assert p == {"country": "", "summary": "", "basis": "", "tier": "endorse"}
+
+    def test_all_profiles_have_required_fields(self):
+        for name, prof in ACTOR_PROFILES.items():
+            assert "country" in prof and "summary" in prof and "basis" in prof
+            assert prof["summary"].strip()
+
+    def test_profiled_actors_are_known(self):
+        # Every dossier must correspond to a real KNOWN_ACTORS entry.
+        known = {n for n, _p, _t in KNOWN_ACTORS}
+        for name in ACTOR_PROFILES:
+            assert name in known, f"dossier for unknown actor: {name}"
 
 
 class TestDataIntegrity:

@@ -196,6 +196,105 @@ def extract_actors(text):
             found.append(name)
     return ",".join(found)
 
+# ── ACTOR DOSSIERS (M-actors) ────────────────────────────────────────────
+# Sober, factual context per known actor so the UI shows *what* a group is and
+# *why* it is classified — not just a name and a count. Strictly about
+# organisations / movements / publicly-prosecuted complexes (never private
+# individuals). "basis" cites the classification ground (VS report, court case,
+# claim letters, or that it is an action-form rather than a fixed group).
+# Fields: country, summary, basis. Keyed by the KNOWN_ACTORS display name.
+ACTOR_PROFILES = {
+    "Lina E. Netzwerk": {
+        "country": "DE",
+        "summary": "Linksextremistisches Netzwerk ('Antifa Ost' / 'Hammerbande') um die 2023 verurteilte Lina E.; Angriffsserie auf tatsächliche oder vermeintliche Rechtsextreme.",
+        "basis": "OLG Dresden 4 OJs 9/21 (rechtskräftige Verurteilung 2023); Budapest-Angriffe 2/2023.",
+    },
+    "Vulkangruppe": {
+        "country": "DE",
+        "summary": "Anonyme Bekenner-Marke für Sabotage- und Brandanschläge auf Infrastruktur (u.a. Strommast Tesla Grünheide 2024).",
+        "basis": "Bekennerschreiben; GStA-Berlin-Ermittlungen wegen §129a.",
+    },
+    "Rote Hilfe": {
+        "country": "DE",
+        "summary": "Bundesweite Solidaritäts- und Prozesskostenhilfe-Organisation für das linke Spektrum.",
+        "basis": "Im BfV-Verfassungsschutzbericht als linksextremistisch beeinflusst geführt.",
+    },
+    "Schwarzer Block": {
+        "country": "—",
+        "summary": "Aktionsform (vermummter, geschlossener Block) bei Demonstrationen — keine feste Organisation.",
+        "basis": "Aktionsform, wiederkehrend bei gewaltsamen Ausschreitungen.",
+    },
+    "Rev. Zellen": {
+        "country": "DE",
+        "summary": "Revolutionäre Zellen — historische linksterroristische Struktur (1970er–1990er).",
+        "basis": "Historische Anschlagsserie; abgeschlossene Verfahren.",
+    },
+    "Rote Flora": {
+        "country": "DE",
+        "summary": "Besetztes Autonomen-Zentrum in Hamburg; Szene-Knotenpunkt.",
+        "basis": "Szene-Liegenschaft; Ausgangspunkt wiederkehrender Ausschreitungen.",
+    },
+    "Rigaer 94": {
+        "country": "DE",
+        "summary": "Linksautonomes Hausprojekt in Berlin-Friedrichshain.",
+        "basis": "Szene-Liegenschaft; wiederkehrende Auseinandersetzungen bei Einsätzen.",
+    },
+    "Stop Cop City": {
+        "country": "US",
+        "summary": "Kampagne gegen ein Polizei-Trainingszentrum ('Cop City') in Atlanta; militanter Flügel.",
+        "basis": "Fulton County GA RICO-Anklage gegen 61 Beschuldigte (2023).",
+    },
+    "Soulèvements de la Terre": {
+        "country": "FR",
+        "summary": "Französisches Öko-Bewegungsbündnis; Zusammenstöße u.a. in Sainte-Soline.",
+        "basis": "Verfahren am TGI Niort ('violences en réunion').",
+    },
+    "NoTAV": {
+        "country": "IT",
+        "summary": "Bewegung gegen die Hochgeschwindigkeitsstrecke Turin–Lyon im Val di Susa.",
+        "basis": "Wiederholte Zusammenstöße; Verfahren am Tribunale di Torino.",
+    },
+    "ZAD / Soulèvements": {
+        "country": "FR",
+        "summary": "Besetzungs-/Widerstandszonen (Zone à défendre), u.a. Notre-Dame-des-Landes.",
+        "basis": "Räumungs-Zusammenstöße; Verfahren u.a. am TGI Saint-Nazaire.",
+    },
+    "Conspiracy of Fire Cells": {
+        "country": "GR",
+        "summary": "Griechische anarchistische Gruppe (Synomosía Pyrínon tis Fotiás); Brand- und Sprengstoffanschläge.",
+        "basis": "Mehrere Verurteilungen in Griechenland.",
+    },
+    "Bure-Widerstand": {
+        "country": "FR",
+        "summary": "Widerstand gegen das geplante Atommüll-Endlager Cigéo bei Bure.",
+        "basis": "Besetzungen/Räumungen; Verfahren in Frankreich.",
+    },
+    "Tarnac-Komplex": {
+        "country": "FR",
+        "summary": "Historischer französischer Verfahrenskomplex (SNCF-Sabotage 2008).",
+        "basis": "Verfahren bis 2018 (überwiegend Freisprüche).",
+    },
+    "Antifa Leipzig": {
+        "country": "DE",
+        "summary": "Antifaschistische Szene im Leipziger Stadtteil Connewitz.",
+        "basis": "Ausgangspunkt wiederkehrender Ausschreitungen (u.a. 'Tag X' 2023).",
+    },
+}
+
+def actor_profile(name):
+    """Return the dossier dict for an actor, or a neutral default.
+
+    Side-effect-free. Unknown actors get an empty-but-typed profile so callers
+    can rely on the shape. tier comes from ACTOR_TIER.
+    """
+    base = ACTOR_PROFILES.get(name, {})
+    return {
+        "country": base.get("country", ""),
+        "summary": base.get("summary", ""),
+        "basis": base.get("basis", ""),
+        "tier": ACTOR_TIER.get(name, "endorse"),
+    }
+
 # ── SOURCE CONFIDENCE SCORING ─────────────────────────────────────
 SOURCE_CONFIDENCE = {
     "verfassungsschutz.de": 5,

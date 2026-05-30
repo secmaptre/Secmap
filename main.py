@@ -1187,6 +1187,7 @@ from lex.scoring import (  # noqa: E402
     corroboration_key,
     same_event,
     funding_transparency,
+    actor_profile,
 )
 
 # ── KEYWORD CLASSIFICATION (AI-free) ─────────────────────────────
@@ -7396,7 +7397,8 @@ async def public_actor_profile(actor_slug: str):
     actor = unquote(actor_slug or "").strip()
     if not actor or len(actor) < 3:
         return HTMLResponse("<h1>Unbekannter Akteur</h1>", status_code=404)
-    # Tier-Klassifikation
+    # Tier-Klassifikation + factual dossier
+    prof = actor_profile(actor)
     actor_tier = ACTOR_TIER.get(actor, "endorse")
     tier_label = {"act":"Verüben (T1)", "enable":"Fördern (T2)",
                   "endorse":"Befürworten (T3)"}.get(actor_tier, actor_tier)
@@ -7503,6 +7505,9 @@ body{{font-family:ui-monospace,Menlo,Consolas,monospace;background:#080c12;color
 h1{{font-family:'Inter',system-ui,sans-serif;font-size:30px;font-weight:600;color:#e9eef3;letter-spacing:0.5px;margin-bottom:8px;}}
 .tier-badge{{display:inline-block;font-family:ui-monospace;font-size:9px;letter-spacing:2px;padding:3px 10px;border:1px solid currentColor;text-transform:uppercase;}}
 .sub{{font-size:10px;letter-spacing:2px;color:#6c7986;text-transform:uppercase;margin:14px 0 24px;}}
+.dossier{{background:#0d141c;border-left:2px solid #6aa9c9;padding:12px 16px;margin:14px 0 0;}}
+.dossier-sum{{font-family:'Inter',system-ui,sans-serif;font-size:14px;color:#e9eef3;line-height:1.6;}}
+.dossier-basis{{font-size:10px;color:#8a98a6;margin-top:8px;}}.dossier-basis b{{color:#6aa9c9;}}
 .kpi-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;}}
 .kpi{{background:#0d141c;border:1px solid rgba(255,255,255,0.06);padding:16px 20px;}}
 .kpi .lbl{{font-size:8px;letter-spacing:2.5px;color:#6c7986;text-transform:uppercase;margin-bottom:4px;}}
@@ -7535,6 +7540,8 @@ h2{{font-size:10px;letter-spacing:2.5px;color:#6aa9c9;font-weight:700;text-trans
 <div class="page">
   <h1>{esc(actor)}</h1>
   <span class="tier-badge" style="color:{tier_color}">{esc(tier_label)}</span>
+  {(f'<span class="tier-badge" style="color:#6aa9c9;margin-left:6px">{esc(prof["country"])}</span>' if prof.get("country") and prof["country"] != "—" else "")}
+  {(f'<div class="dossier"><div class="dossier-sum">{esc(prof["summary"])}</div>' + (f'<div class="dossier-basis"><b>Einstufungsgrundlage:</b> {esc(prof["basis"])}</div>' if prof.get("basis") else "") + "</div>") if prof.get("summary") else ""}
   <div class="sub">OSINT-Akteursprofil · automatisch aggregiert · Stand {datetime.now().date().isoformat()}</div>
 
   <div class="kpi-grid">
@@ -8598,6 +8605,9 @@ async def get_actors():
             actor_map[a]["high"]  += row["hi"]
             if (row["last_seen"] or "") > actor_map[a]["last_seen"]:
                 actor_map[a]["last_seen"] = row["last_seen"]
+    # Attach the factual dossier (country, summary, basis) per actor.
+    for a in actor_map.values():
+        a["profile"] = actor_profile(a["name"])
     result = sorted(actor_map.values(), key=lambda x: x["count"], reverse=True)[:15]
     return JSONResponse(result)
 
