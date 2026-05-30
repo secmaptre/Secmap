@@ -279,6 +279,36 @@ ACTOR_PROFILES = {
         "summary": "Antifaschistische Szene im Leipziger Stadtteil Connewitz.",
         "basis": "Ausgangspunkt wiederkehrender Ausschreitungen (u.a. 'Tag X' 2023).",
     },
+    "Revolutionärer Aufbau": {
+        "country": "CH",
+        "summary": "Schweizer linksextremistisches Organisationsnetz (Aufbau-Bewegung).",
+        "basis": "Vom NDB im Lagebericht als gewaltbereit-linksextrem geführt.",
+    },
+    "Reitschule-Umfeld": {
+        "country": "CH",
+        "summary": "Umfeld des autonomen Kulturzentrums Reitschule in Bern.",
+        "basis": "Szene-Liegenschaft; wiederkehrende Ausschreitungen im Umfeld.",
+    },
+    "Rose City Antifa": {
+        "country": "US",
+        "summary": "Antifaschistische Gruppe in Portland (Oregon), eine der ältesten in den USA.",
+        "basis": "Szene-Akteur; im US-Kontext wiederholt mit Konfrontationen verbunden.",
+    },
+    "Exarchia-Strukturen": {
+        "country": "GR",
+        "summary": "Anarchistisch geprägtes Milieu im Athener Stadtteil Exarchia.",
+        "basis": "Wiederkehrende Zusammenstöße; Bezugspunkt griechischer anarchistischer Gruppen.",
+    },
+    "Interventionist Left": {
+        "country": "DE",
+        "summary": "Interventionistische Linke (IL) — bundesweites postautonomes Bündnis.",
+        "basis": "Vom BfV als linksextremistisch beeinflusst geführt; Mobilisierungsstruktur (u.a. G20).",
+    },
+    "Letzte Generation": {
+        "country": "DE",
+        "summary": "Klima-Protestgruppe; Aktionsform ziviler Ungehorsam (Blockaden), erklärt gewaltfrei.",
+        "basis": "§129-Ermittlungen der GStA München (anhängig); Einstufung umstritten — endorse-Layer.",
+    },
 }
 
 def actor_profile(name):
