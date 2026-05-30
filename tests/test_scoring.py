@@ -8,6 +8,7 @@ from lex.scoring import (
     same_event,
     funding_transparency,
     actor_profile,
+    recipient_proximity,
     ACTOR_PROFILES,
     CATEGORIES,
     KNOWN_ACTORS,
@@ -222,6 +223,33 @@ class TestFundingTransparency:
         r = funding_transparency()
         assert r["score"] == 0
         assert r["label"] == "indikativ"
+
+
+class TestRecipientProximity:
+    def test_enable_recipient(self):
+        r = recipient_proximity("Rote Hilfe e.V.")
+        assert r["level"] == "enable"
+        assert r["label"] == "fördernd"
+
+    def test_endorse_recipient(self):
+        r = recipient_proximity("Letzte Generation (Wandelbündnis e.V.)")
+        assert r["level"] == "endorse"
+
+    def test_unclassified_mainstream_recipient_is_none(self):
+        # A mainstream foundation that matches no known actor must NOT be
+        # imputed any proximity to violence.
+        r = recipient_proximity("Rosa-Luxemburg-Stiftung")
+        assert r["level"] == "none"
+        assert r["label"] == "keine Einstufung"
+
+    def test_empty_is_none(self):
+        assert recipient_proximity("")["level"] == "none"
+        assert recipient_proximity(None)["level"] == "none"
+
+    def test_strongest_tier_wins(self):
+        # If a name matched multiple tiers, the strongest is reported.
+        r = recipient_proximity("Vulkangruppe")
+        assert r["level"] == "act"
 
 
 class TestActorProfile:

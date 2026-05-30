@@ -1188,6 +1188,7 @@ from lex.scoring import (  # noqa: E402
     same_event,
     funding_transparency,
     actor_profile,
+    recipient_proximity,
 )
 
 # ── KEYWORD CLASSIFICATION (AI-free) ─────────────────────────────
@@ -8663,6 +8664,9 @@ async def get_funding(
             verified=bool(d.get("verified")),
             has_source=bool((d.get("source_url") or "").strip()),
         )
+        # M5: recipient proximity to the documented violent milieu (fact-grounded
+        # classification of the RECIPIENT, not a probability about the donor).
+        d["recipient_proximity"] = recipient_proximity(d.get("recipient_org") or "")
         out.append(d)
     return JSONResponse(out)
 

@@ -451,6 +451,44 @@ def funding_transparency(confidence=0, verified=False, has_source=False):
 
     return {"score": score, "label": label, "components": components}
 
+
+# ── FUNDING RECIPIENT PROXIMITY (M5) ─────────────────────────────────────
+# A fact-grounded indicator of how closely a funding *recipient* is tied to the
+# documented violent milieu — derived strictly from the recipient's own
+# classification in KNOWN_ACTORS, NOT a speculative probability about the donor.
+# This deliberately avoids imputing that any specific donor "funds violence":
+# mainstream recipients (e.g. a party-affiliated foundation) that match no known
+# actor return level "none". The signal answers only: is the recipient itself
+# documented as a perpetrating / enabling / endorsing actor?
+_PROX_ORDER = {"act": 3, "enable": 2, "endorse": 1}
+_PROX_META = {
+    "act":     ("direkt", "Empfänger ist selbst als Tat-Akteur dokumentiert."),
+    "enable":  ("fördernd", "Empfänger unterstützt/finanziert das Spektrum (z. B. Solidaritäts-/Prozesskostenfonds)."),
+    "endorse": ("Bewegungsumfeld", "Empfänger gehört zum breiteren Bewegungsumfeld."),
+}
+
+def recipient_proximity(recipient_org):
+    """Classify a funding recipient by its documented proximity to the violent
+    milieu. Returns {"level", "label", "basis"}; level ∈ {act,enable,endorse,none}.
+
+    Pure: matches the recipient name against KNOWN_ACTORS patterns and takes the
+    strongest tier. No match → "none" (explicitly NOT an allegation). This is the
+    responsible form of "where does the money go" — a transparent recipient
+    classification, never a fabricated likelihood.
+    """
+    t = (recipient_org or "").lower()
+    best = None
+    for name, patterns, tier in KNOWN_ACTORS:
+        if tier in _PROX_ORDER and any(re.search(p, t) for p in patterns):
+            if best is None or _PROX_ORDER[tier] > _PROX_ORDER[best]:
+                best = tier
+    if best is None:
+        return {"level": "none", "label": "keine Einstufung",
+                "basis": "Empfänger ist nicht als dokumentierter Akteur klassifiziert."}
+    label, basis = _PROX_META[best]
+    return {"level": best, "label": label, "basis": basis}
+
+
 # Two independent sources reporting the same act is a strong credibility
 # signal. These pure helpers decide whether two incident records describe the
 # *same event*, so a DB pass can count distinct corroborating sources. Kept
