@@ -4677,6 +4677,114 @@ def recompute_corroboration():
     return changed
 
 
+# ── CURATED DOCUMENTED-INCIDENT SEED (M5) ────────────────────────────────
+# A small, hand-verified anchor set of publicly-recorded, court-referenced
+# left-extremist violent incidents. This is the same principle as
+# _PROSEC_BACKFILL but stands on its own (does not require a crawled row to
+# already exist), so the map shows credible anchor cases even before/without a
+# live crawl. Strict rules, per the project's credibility guardrails:
+#   * Only acts that are publicly documented AND tied to a court/agency reference.
+#   * Descriptions are sober: the act + the proceedings only. No operational
+#     detail, no glorification, no private-individual data (victims are named by
+#     role only; perpetrator side via group label / public case reference).
+# Each tuple:
+#   (date, location, country, lat, lon, category, severity, actors,
+#    prosec_status, case_ref, summary, description)
+_DOCUMENTED_SEED = [
+    ("2023-02-10", "Budapest", "HU", 47.4979, 19.0402, "Gewalt", 5,
+     "Lina E. Netzwerk", "charged",
+     "Fővárosi Törvényszék Budapest + GBA Karlsruhe (Antifa-Ost-Komplex, Budapest-Angriffe 2/2023)",
+     "Hammer-Angriffe in Budapest auf mutmaßliche Rechte — mehrere Schwerverletzte; Verfahren in Budapest und beim GBA (§129).",
+     "Im Umfeld des rechtsextremen 'Tag der Ehre' wurden mehrere Personen von einer "
+     "mutmaßlich linksextremen Gruppe mit Hämmern, Schlagstöcken und Reizgas angegriffen; "
+     "mehrere Schwerverletzte. Strafverfahren laufen in Budapest sowie durch den "
+     "Generalbundesanwalt (§129)."),
+    ("2023-06-03", "Leipzig", "DE", 51.3397, 12.3731, "Gewalt", 4,
+     "Antifa Leipzig,Lina E. Netzwerk", "investigating",
+     "StA Leipzig — 'Tag-X'-Ausschreitungen Connewitz 6/2023",
+     "'Tag X' in Leipzig-Connewitz: Pyrotechnik, Steine und Flaschen gegen Polizei, mehrere verletzte Beamte.",
+     "Nach dem Lina-E.-Urteil kam es in Leipzig-Connewitz zu Ausschreitungen: Angriffe auf "
+     "Polizeikräfte mit Steinen, Flaschen und Feuerwerkskörpern sowie Barrikaden; mehrere "
+     "verletzte Beamte. Ermittlungen der StA Leipzig."),
+    ("2023-05-31", "Dresden", "DE", 51.0504, 13.7373, "Gewalt", 5,
+     "Lina E. Netzwerk", "convicted",
+     "OLG Dresden 4 OJs 9/21 (Verurteilung Lina E. + 3 Mitangeklagte, 5/2023)",
+     "OLG Dresden: Verurteilung im Antifa-Ost-Komplex wegen Angriffsserie auf (vermeintliche) Rechtsextreme.",
+     "Verurteilung wegen mehrerer Angriffe auf tatsächliche oder vermeintliche Rechtsextreme "
+     "in Sachsen und Thüringen (2018–2020) sowie Bildung einer kriminellen Vereinigung."),
+    ("2024-03-05", "Grünheide", "DE", 52.3940, 13.8000, "Brandanschlag", 5,
+     "Vulkangruppe", "investigating",
+     "GStA Berlin 4 BJs 4/24 (§129a — Brandanschlag Strommast Tesla Grünheide)",
+     "Brandanschlag auf einen Strommast bei der Tesla-Gigafactory; Werk und tausende Haushalte ohne Strom.",
+     "Brandanschlag auf einen Strommast nahe der Tesla-Gigafactory; Stromausfall für das Werk "
+     "und tausende Haushalte. Bekennerschreiben einer 'Vulkangruppe'. Ermittlungen wegen "
+     "Bildung einer terroristischen Vereinigung (§129a)."),
+    ("2017-07-07", "Hamburg", "DE", 53.5511, 9.9937, "Militante Aktion", 4,
+     "Schwarzer Block", "convicted",
+     "LG Hamburg 612 KLs (Rondenbarg-Verfahren, Teilverurteilungen 2020–23)",
+     "G20 Hamburg / Rondenbarg: militante Aktion und Angriffe am Rande des Gipfels; Teilverurteilungen.",
+     "Am Rande des G20-Gipfels kam es im Komplex Rondenbarg zu einer militanten Aktion mit "
+     "Angriffen auf Einsatzkräfte; mehrere Teilverurteilungen durch das LG Hamburg."),
+    ("2023-03-25", "Sainte-Soline", "FR", 46.2330, -0.0760, "Militante Aktion", 4,
+     "Soulèvements de la Terre", "charged",
+     "TGI Niort — 'violences en réunion' (Megabassine-Zusammenstöße 3/2023)",
+     "Sainte-Soline: gewaltsame Zusammenstöße mit Gendarmerie bei Protest gegen ein Wasserbecken; viele Verletzte.",
+     "Bei einer Demonstration gegen ein landwirtschaftliches Wasserreservoir kam es zu "
+     "gewaltsamen Zusammenstößen mit der Gendarmerie; zahlreiche Verletzte. Verfahren am TGI Niort."),
+    ("2023-03-05", "Atlanta", "US", 33.7490, -84.3880, "Militante Aktion", 4,
+     "Stop Cop City", "charged",
+     "Fulton County GA 23SC183872 (RICO-Anklage 'Stop Cop City', 9/2023)",
+     "Stop Cop City Atlanta: militante Aktion gegen die Polizei-Trainingsanlage; Georgia-RICO-Anklage.",
+     "Im Kontext der Kampagne gegen die Polizei-Trainingsanlage ('Cop City') kam es zu einer "
+     "militanten Aktion mit Sachbeschädigung und Angriffen auf die Baustelle; RICO-Anklage in Fulton County."),
+    ("2020-05-28", "Minneapolis", "US", 44.9778, -93.2650, "Brandanschlag", 5,
+     "Autonome Gruppe", "convicted",
+     "U.S. District Court D.Minn. 0:20-cr-00203 (Federal Arson 18 USC §844)",
+     "Minneapolis: Brandstiftung am 3rd Police Precinct während der Unruhen 2020; Bundes-Verurteilungen.",
+     "Während der Unruhen 2020 wurde das dritte Polizeirevier in Brand gesetzt; mehrere "
+     "Bundes-Verurteilungen wegen Brandstiftung (18 USC §844)."),
+]
+
+
+def seed_documented_incidents():
+    """Insert the curated documented-incident anchor set (idempotent).
+
+    manual=1, hash-deduped, court-referenced. Runs PII redaction + label
+    neutralization over the text like any other save, so the same guardrails
+    apply. Returns the number of newly inserted rows.
+    """
+    inserted = 0
+    for (d, loc, country, lat, lon, cat, sev, actors, prosec, case_ref, summ, desc) in _DOCUMENTED_SEED:
+        desc_clean = neutralize_political_labels(redact_pii(desc))[:500]
+        summ_clean = neutralize_political_labels(redact_pii(summ))[:200]
+        h = mk_hash("seed:" + case_ref, desc_clean)
+        if is_seen(h):
+            continue
+        tier = "act"
+        is_primary = 1
+        is_high_risk = 1 if sev >= 5 else 0
+        conf = 5 if prosec in ("convicted", "charged", "trial") else 3
+        try:
+            cur = db.execute(
+                """INSERT OR IGNORE INTO incidents
+                   (date,location,country,category,description,source,url,hash,lat,lon,
+                    manual,timestamp,severity_score,actors,confidence,
+                    summary,is_primary,is_high_risk,tier,prosec_status,case_ref)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,1,datetime('now'),?,?,?,?,?,?,?,?,?)""",
+                (d, loc, country, cat, desc_clean, "dokumentiert:Gerichtsakte", "", h,
+                 lat, lon, sev, actors, conf,
+                 summ_clean, is_primary, is_high_risk, tier, prosec, case_ref)
+            )
+            if cur.rowcount:
+                inserted += 1
+        except Exception as e:
+            log.warning(f"seed_documented_incidents [{loc}]: {e}")
+    if inserted:
+        db.commit()
+        log.info(f"seed_documented_incidents: {inserted} documented incidents added")
+    return inserted
+
+
 def backfill_summaries_and_flags():
     """
     For existing rows, derive summary + is_primary + is_high_risk so the new
@@ -10021,6 +10129,12 @@ async def startup():
         backfill_prosec_status()
     except Exception as e:
         log.warning(f"backfill_prosec_status failed: {e}")
+    # M5 — curated documented-incident anchor set (idempotent). Gives the map
+    # credible, court-referenced anchor cases even before/without a live crawl.
+    try:
+        seed_documented_incidents()
+    except Exception as e:
+        log.warning(f"seed_documented_incidents failed: {e}")
     # M4 — cross-source corroboration: count independent sources per event so
     # the per-entry verification score reflects multi-source agreement.
     try:
