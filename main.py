@@ -1186,6 +1186,7 @@ from lex.scoring import (  # noqa: E402
     quality_score,
     corroboration_key,
     same_event,
+    funding_transparency,
 )
 
 # ── KEYWORD CLASSIFICATION (AI-free) ─────────────────────────────
@@ -8642,7 +8643,18 @@ async def get_funding(
     q += sort_map.get(sort, sort_map["year_desc"])
     q += " LIMIT ?"
     p.append(max(1, min(limit, 2000)))
-    return JSONResponse([dict(r) for r in db.execute(q, p).fetchall()])
+    out = []
+    for r in db.execute(q, p).fetchall():
+        d = dict(r)
+        # M5: per-record transparency score so the money trail is credibility-
+        # graded like the incidents (verified primary doc > confidence > citation).
+        d["transparency"] = funding_transparency(
+            confidence=d.get("confidence") or 0,
+            verified=bool(d.get("verified")),
+            has_source=bool((d.get("source_url") or "").strip()),
+        )
+        out.append(d)
+    return JSONResponse(out)
 
 # ── REGION EXTRACTION (Säule 3, MS-4 polish) ──────────────────────
 # Leitet aus donor_name eine grobe Region ab — Stadt > Land/Kanton > Bund.

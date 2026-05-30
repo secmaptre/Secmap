@@ -4192,6 +4192,20 @@ function escapeHtml(s){
   return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// M5: graded transparency badge for a funding record (from r.transparency,
+// lex.scoring.funding_transparency). Richer than the binary verified flag.
+const FND_TRANSP_META = {
+  'primärbelegt': {c:'#00e87a', bg:'rgba(0,232,122,0.12)'},
+  'belegt':       {c:'#00c8ff', bg:'rgba(0,200,255,0.12)'},
+  'teilbelegt':   {c:'#f0a500', bg:'rgba(240,165,0,0.12)'},
+  'indikativ':    {c:'#8a8a90', bg:'rgba(138,138,144,0.10)'},
+};
+function fndTranspBadge(t){
+  if(!t || !t.label) return '';
+  const m = FND_TRANSP_META[t.label] || FND_TRANSP_META['indikativ'];
+  const sc = (typeof t.score==='number') ? t.score : '';
+  return `<span class="ver-badge" style="color:${m.c};background:${m.bg};border-color:${m.c}" title="Transparenz-Score ${sc}/100 — Quelle, Primärdokument, Beleg-Link">${t.label.toUpperCase()}</span>`;
+}
 function renderFundingTable(){
   const tbody=document.getElementById('fnd-tbody');
   if(!fndVis.length){
@@ -4217,7 +4231,7 @@ function renderFundingTable(){
     const rowCls = verified ? 'fnd-row' : 'fnd-row fnd-row-unverified';
     return `<tr class="${rowCls}" data-rid="${r.id}" onclick="fndToggleDetail(${r.id})">
       <td class="fnd-yr">${escapeHtml(String(r.year||'—'))}</td>
-      <td><div class="fnd-org">${escapeHtml(r.recipient_org)}</div>${proj}<div class="fnd-vrow">${srcBadge}</div></td>
+      <td><div class="fnd-org">${escapeHtml(r.recipient_org)}</div>${proj}<div class="fnd-vrow">${fndTranspBadge(r.transparency)} ${srcBadge}</div></td>
       <td>${escapeHtml(r.donor_name)}</td>
       <td><span class="fnd-don-type">${escapeHtml(r.donor_type)}</span></td>
       <td class="fnd-amt" style="text-align:right">${fmtAmount(r.amount, r.currency)}</td>

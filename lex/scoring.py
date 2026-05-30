@@ -313,7 +313,45 @@ def quality_score(confidence=0, prosec_status="unknown", case_ref="",
     return {"score": score, "label": label, "components": components}
 
 
-# ── CROSS-SOURCE CORROBORATION (M4) ──────────────────────────────────────
+# ── FUNDING TRANSPARENCY SCORING (M5 — follow-the-money pillar) ───────────
+# The funding pillar is about structural/financial transparency of *registered
+# organisations* — the most defensible part of the project. Each funding record
+# gets a transparency score so the UI can show how well-documented a money flow
+# is, the same way incidents carry a verification badge.
+#
+# Inputs:
+#   confidence    int 1..5  — documentation strength (5 = official primary doc)
+#   verified      bool/int  — source_url points at a SPECIFIC primary document
+#                             (grant list, activity report, parliamentary paper)
+#   has_source    bool      — any source_url is present at all
+#
+# label ∈ {primärbelegt, belegt, teilbelegt, indikativ}
+
+def funding_transparency(confidence=0, verified=False, has_source=False):
+    """Return a transparency dict for one funding record.
+
+    {"score": int 0..100, "label": str, "components": {...}}. Deterministic and
+    side-effect-free (see tests/test_scoring.py). Higher = better documented.
+    """
+    conf = max(0, min(int(confidence or 0), 5))
+    components = {
+        "source": conf * 12,                       # 0..60
+        "verified": 30 if verified else 0,         # specific primary document
+        "has_source": 10 if has_source else 0,     # any citation at all
+    }
+    score = min(sum(components.values()), 100)
+
+    if verified:
+        label = "primärbelegt"
+    elif score >= 60:
+        label = "belegt"
+    elif score >= 35:
+        label = "teilbelegt"
+    else:
+        label = "indikativ"
+
+    return {"score": score, "label": label, "components": components}
+
 # Two independent sources reporting the same act is a strong credibility
 # signal. These pure helpers decide whether two incident records describe the
 # *same event*, so a DB pass can count distinct corroborating sources. Kept

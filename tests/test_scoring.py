@@ -6,6 +6,7 @@ from lex.scoring import (
     quality_score,
     corroboration_key,
     same_event,
+    funding_transparency,
     CATEGORIES,
     KNOWN_ACTORS,
     ACTOR_TIER,
@@ -186,6 +187,39 @@ class TestCorroboration:
 
     def test_corroboration_key_normalizes(self):
         assert corroboration_key("de", "Brandanschlag") == ("DE", "Brandanschlag")
+
+
+class TestFundingTransparency:
+    def test_verified_is_primary(self):
+        r = funding_transparency(confidence=5, verified=True, has_source=True)
+        assert r["label"] == "primärbelegt"
+        assert r["score"] == 100
+
+    def test_unverified_official_is_belegt(self):
+        # confidence 5, has source, not verified -> 60 + 10 = 70 -> belegt
+        r = funding_transparency(confidence=5, verified=False, has_source=True)
+        assert r["label"] == "belegt"
+        assert r["score"] == 70
+
+    def test_low_confidence_no_source_indicative(self):
+        r = funding_transparency(confidence=1, verified=False, has_source=False)
+        assert r["score"] == 12
+        assert r["label"] == "indikativ"
+
+    def test_teilbelegt_band(self):
+        # confidence 3 + source -> 36 + 10 = 46 -> teilbelegt
+        r = funding_transparency(confidence=3, verified=False, has_source=True)
+        assert r["label"] == "teilbelegt"
+
+    def test_capped_and_components(self):
+        r = funding_transparency(confidence=5, verified=True, has_source=True)
+        assert r["score"] == 100
+        assert set(r["components"]) == {"source", "verified", "has_source"}
+
+    def test_empty_safe(self):
+        r = funding_transparency()
+        assert r["score"] == 0
+        assert r["label"] == "indikativ"
 
 
 class TestDataIntegrity:
