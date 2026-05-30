@@ -4206,6 +4206,19 @@ function fndTranspBadge(t){
   const sc = (typeof t.score==='number') ? t.score : '';
   return `<span class="ver-badge" style="color:${m.c};background:${m.bg};border-color:${m.c}" title="Transparenz-Score ${sc}/100 — Quelle, Primärdokument, Beleg-Link">${t.label.toUpperCase()}</span>`;
 }
+// M5: recipient proximity to the documented violent milieu — a fact-grounded
+// classification of the RECIPIENT (act/enable/endorse), NOT a probability about
+// the donor. "keine Einstufung" recipients show no badge (no imputation).
+const FND_PROX_META = {
+  'act':     {t:'EMPF.: TAT-AKTEUR', c:'#d4495d', bg:'rgba(212,73,93,0.12)'},
+  'enable':  {t:'EMPF.: FÖRDERND',   c:'#f0a500', bg:'rgba(240,165,0,0.12)'},
+  'endorse': {t:'EMPF.: UMFELD',     c:'#7a8a99', bg:'rgba(122,138,153,0.10)'},
+};
+function fndProxBadge(p){
+  if(!p || !p.level || p.level==='none') return '';
+  const m = FND_PROX_META[p.level]; if(!m) return '';
+  return `<span class="ver-badge" style="color:${m.c};background:${m.bg};border-color:${m.c}" title="Einstufung des Empfängers: ${p.basis||''} — keine Aussage über den Geldgeber.">${m.t}</span>`;
+}
 function renderFundingTable(){
   const tbody=document.getElementById('fnd-tbody');
   if(!fndVis.length){
@@ -4231,7 +4244,7 @@ function renderFundingTable(){
     const rowCls = verified ? 'fnd-row' : 'fnd-row fnd-row-unverified';
     return `<tr class="${rowCls}" data-rid="${r.id}" onclick="fndToggleDetail(${r.id})">
       <td class="fnd-yr">${escapeHtml(String(r.year||'—'))}</td>
-      <td><div class="fnd-org">${escapeHtml(r.recipient_org)}</div>${proj}<div class="fnd-vrow">${fndTranspBadge(r.transparency)} ${srcBadge}</div></td>
+      <td><div class="fnd-org">${escapeHtml(r.recipient_org)}</div>${proj}<div class="fnd-vrow">${fndProxBadge(r.recipient_proximity)} ${fndTranspBadge(r.transparency)} ${srcBadge}</div></td>
       <td>${escapeHtml(r.donor_name)}</td>
       <td><span class="fnd-don-type">${escapeHtml(r.donor_type)}</span></td>
       <td class="fnd-amt" style="text-align:right">${fmtAmount(r.amount, r.currency)}</td>

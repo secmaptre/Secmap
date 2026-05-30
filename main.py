@@ -6,6 +6,7 @@ import xml.etree.ElementTree as ET
 import requests
 from lex.http_util import build_conditional_headers, parse_retry_after
 from lex.budget import month_key, over_budget
+from lex.forecast import scene_outlook
 from bs4 import BeautifulSoup
 import sqlite3
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -1188,6 +1189,7 @@ from lex.scoring import (  # noqa: E402
     same_event,
     funding_transparency,
     actor_profile,
+    recipient_proximity,
 )
 
 # ── KEYWORD CLASSIFICATION (AI-free) ─────────────────────────────
@@ -8581,6 +8583,58 @@ async def get_trends():
         "week_prev": week_prev,
     })
 
+@app.get("/api/outlook")
+async def get_outlook(horizon: int = 3):
+    """Data-grounded scene outlook ('Lage-Ausblick') — a sober extrapolation of
+    the documented trend, NOT editorial prophecy. Assembles the same signals as
+    /api/trends (slope, rising categories, hotspot, active clusters) and runs the
+    pure lex.forecast.scene_outlook(). Always returns an explicit caveat."""
+    months = db.execute("""
+        SELECT strftime('%Y-%m', date) as month, COUNT(*) as n FROM incidents
+        WHERE date >= date('now','-12 months') AND date IS NOT NULL AND length(date) >= 7
+        GROUP BY month ORDER BY month ASC
+    """).fetchall()
+    recent = [dict(r) for r in months]
+    n = len(recent)
+    slope = 0.0
+    if n >= 3:
+        xs = list(range(n)); ys = [r['n'] for r in recent]
+        xm = sum(xs)/n; ym = sum(ys)/n
+        den = sum((xs[i]-xm)**2 for i in range(n))
+        slope = (sum((xs[i]-xm)*(ys[i]-ym) for i in range(n))/den) if den else 0.0
+    monthly_avg = (sum(r['n'] for r in recent)/n) if n else 0.0
+    cat_curr = {r['category']: r['n'] for r in db.execute(
+        "SELECT category, COUNT(*) n FROM incidents WHERE date >= date('now','-3 months') GROUP BY category"
+    ).fetchall()}
+    cat_prev = {r['category']: r['n'] for r in db.execute(
+        "SELECT category, COUNT(*) n FROM incidents WHERE date >= date('now','-6 months') AND date < date('now','-3 months') GROUP BY category"
+    ).fetchall()}
+    rising = []
+    for cat in CATEGORIES:
+        curr = cat_curr.get(cat, 0); prev = cat_prev.get(cat, 0)
+        if curr > prev:
+            rising.append((cat, round((curr-prev)/max(prev, 1)*100)))
+    rising.sort(key=lambda x: x[1], reverse=True)
+    hot = db.execute("""
+        SELECT location FROM incidents
+        WHERE date >= date('now','-6 months')
+          AND location IS NOT NULL AND location NOT IN ('','Unbekannt','Unknown')
+        GROUP BY location ORDER BY COUNT(*) DESC LIMIT 1
+    """).fetchone()
+    active_clusters = db.execute(
+        "SELECT COUNT(*) FROM early_warning_clusters WHERE active=1"
+    ).fetchone()[0]
+    outlook = scene_outlook({
+        "trend_direction": "up" if slope > 0.1 else "down" if slope < -0.1 else "stable",
+        "slope": round(slope, 2),
+        "monthly_avg": monthly_avg,
+        "rising": rising,
+        "top_hotspot": hot["location"] if hot else "",
+        "active_clusters": active_clusters,
+        "horizon_months": max(1, min(horizon, 12)),
+    })
+    return JSONResponse(outlook)
+
 @app.get("/api/actors")
 async def get_actors():
     rows = db.execute(
@@ -8663,6 +8717,9 @@ async def get_funding(
             verified=bool(d.get("verified")),
             has_source=bool((d.get("source_url") or "").strip()),
         )
+        # M5: recipient proximity to the documented violent milieu (fact-grounded
+        # classification of the RECIPIENT, not a probability about the donor).
+        d["recipient_proximity"] = recipient_proximity(d.get("recipient_org") or "")
         out.append(d)
     return JSONResponse(out)
 
