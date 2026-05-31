@@ -1430,6 +1430,9 @@ button:focus-visible, a:focus-visible{
             <option>Schmiererei</option>
             <option>Sonstiges</option>
           </select>
+          <select class="fsel" id="f-ac" onchange="applyFilters()">
+            <option value="">AKTEUR: ALLE</option>
+          </select>
         </div>
         <div class="frow2" style="margin-top:7px">
           <input class="finput" id="f-von" type="date" onchange="applyFilters()" title="Von">
@@ -2716,6 +2719,7 @@ function renderChips(){
   const chips=[];
   if(co) chips.push(`<span class="chip-tag">${CO_FLAG[co]||''} ${co} <button onclick="clearChip('co')">✕</button></span>`);
   if(ca) chips.push(`<span class="chip-tag">${ca} <button onclick="clearChip('ca')">✕</button></span>`);
+  {const acv=(document.getElementById('f-ac')||{}).value; if(acv) chips.push(`<span class="chip-tag">AKTEUR: ${acv} <button onclick="clearChip('ac')">✕</button></span>`);}
   if(von) chips.push(`<span class="chip-tag">AB ${von} <button onclick="clearChip('von')">✕</button></span>`);
   if(bis) chips.push(`<span class="chip-tag">BIS ${bis} <button onclick="clearChip('bis')">✕</button></span>`);
   if(q) chips.push(`<span class="chip-tag">SUCHE: ${q.substring(0,16)} <button onclick="clearChip('srch')">✕</button></span>`);
@@ -2727,6 +2731,7 @@ function renderChips(){
 function clearChip(field){
   if(field==='co') document.getElementById('f-co').value='';
   else if(field==='ca') document.getElementById('f-ca').value='';
+  else if(field==='ac'){const e=document.getElementById('f-ac'); if(e)e.value='';}
   else if(field==='von') document.getElementById('f-von').value='';
   else if(field==='bis') document.getElementById('f-bis').value='';
   else if(field==='srch') document.getElementById('f-srch').value='';
@@ -2834,16 +2839,33 @@ async function loadTimeline(){
   }catch(e){}
 }
 
+// M6: populate the actor filter from the loaded incidents (top by frequency).
+function populateActorFilter(){
+  const sel=document.getElementById('f-ac');
+  if(!sel) return;
+  const counts={};
+  all.forEach(i=>(i.actors||'').split(',').forEach(a=>{
+    a=a.trim(); if(a) counts[a]=(counts[a]||0)+1;
+  }));
+  const top=Object.keys(counts).sort((x,y)=>counts[y]-counts[x]).slice(0,40);
+  const cur=sel.value;
+  sel.innerHTML='<option value="">AKTEUR: ALLE</option>'+
+    top.map(a=>`<option${a===cur?' selected':''}>${a.replace(/[<>&]/g,'')}</option>`).join('');
+}
+
 // ── FILTERS ────────────────────────────────────────────────────────
 function applyFilters(){
   const co=document.getElementById('f-co').value;
   const ca=document.getElementById('f-ca').value;
   const von=document.getElementById('f-von').value;
   const bis=document.getElementById('f-bis').value;
+  const acEl=document.getElementById('f-ac');
+  const ac=acEl?acEl.value:'';
   const srch=(document.getElementById('f-srch').value||'').toLowerCase().trim();
   vis=all.filter(i=>{
     if(co&&i.country!==co) return false;
     if(ca&&i.category!==ca) return false;
+    if(ac&&!((i.actors||'').split(',').map(s=>s.trim()).includes(ac))) return false;
     if(von&&i.date<von) return false;
     if(bis&&i.date>bis) return false;
     if(sevMin>0&&(i.severity_score||0)<sevMin) return false;
@@ -2864,7 +2886,7 @@ function applyFilters(){
 }
 
 function resetFilters(){
-  ['f-co','f-ca','f-von','f-bis'].forEach(id=>document.getElementById(id).value='');
+  ['f-co','f-ca','f-ac','f-von','f-bis'].forEach(id=>{const e=document.getElementById(id); if(e)e.value='';});
   document.getElementById('f-srch').value='';
   activeYr=null;
   document.querySelectorAll('.yrbtn').forEach(b=>b.classList.remove('on'));
@@ -3068,6 +3090,7 @@ async function loadData(){
       fetch('/api/stats').then(r=>r.json())
     ]);
     all=inc;
+    populateActorFilter();
     const tcEl=document.getElementById('tc');
     if(tcEl) animCount(tcEl,stats.total);
     const gp=stats.total>0?Math.round(stats.geocoded/stats.total*100):0;
