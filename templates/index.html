@@ -1430,6 +1430,9 @@ button:focus-visible, a:focus-visible{
             <option>Schmiererei</option>
             <option>Sonstiges</option>
           </select>
+          <select class="fsel" id="f-ac" onchange="applyFilters()">
+            <option value="">AKTEUR: ALLE</option>
+          </select>
         </div>
         <div class="frow2" style="margin-top:7px">
           <input class="finput" id="f-von" type="date" onchange="applyFilters()" title="Von">
@@ -1503,6 +1506,16 @@ button:focus-visible, a:focus-visible{
           <div style="display:flex;gap:14px;margin-top:4px;margin-bottom:13px">
             <span style="font-family:var(--mono);font-size:7px;color:rgba(197,197,200,0.55)">■ HISTORISCH</span>
             <span style="font-family:var(--mono);font-size:7px;color:rgba(217,154,43,0.75)">■ PROGNOSE</span>
+          </div>
+
+          <div class="stitle" style="margin-bottom:5px;display:flex;justify-content:space-between;align-items:center">
+            <span>LAGE-AUSBLICK</span>
+            <span id="eff-docstrength" title="Dokumentations-Stärke (Beleggrad der Datenbasis) — KEINE gemessene Stoppwirkung" style="font-family:var(--mono);font-size:8px;color:var(--accent)"></span>
+          </div>
+          <div id="outlook-box" style="margin-bottom:13px">
+            <div id="outlook-headline" style="font-family:var(--mono);font-size:9px;color:var(--t0);line-height:1.55">—</div>
+            <ul id="outlook-drivers" style="list-style:none;margin:6px 0 0;padding:0"></ul>
+            <div id="outlook-caveat" style="font-family:var(--mono);font-size:7px;color:var(--t3);margin-top:6px;line-height:1.5;font-style:italic"></div>
           </div>
 
           <div class="stitle" style="margin-bottom:5px">HOTSPOTS · 6 MONATE</div>
@@ -2137,7 +2150,7 @@ async function setLang(lang){
 // Boot screen entfernt — Daten werden direkt geladen, kein theatralisches Intro.
 function runBoot(){
   setLang(detectLang());     // load i18n before first render
-  loadData(); loadTrends(); loadTimeline();
+  loadData(); loadTrends(); loadOutlook(); loadTimeline();
   loadEffectiveness();        // Wirkungs-Counter im Status-Footer (§C5)
   loadHotwire();              // SITREP-Ticker im Header (rezente High-Sev)
   setInterval(loadHotwire, 5 * 60 * 1000); // refresh alle 5 Minuten
@@ -2706,6 +2719,7 @@ function renderChips(){
   const chips=[];
   if(co) chips.push(`<span class="chip-tag">${CO_FLAG[co]||''} ${co} <button onclick="clearChip('co')">✕</button></span>`);
   if(ca) chips.push(`<span class="chip-tag">${ca} <button onclick="clearChip('ca')">✕</button></span>`);
+  {const acv=(document.getElementById('f-ac')||{}).value; if(acv) chips.push(`<span class="chip-tag">AKTEUR: ${acv} <button onclick="clearChip('ac')">✕</button></span>`);}
   if(von) chips.push(`<span class="chip-tag">AB ${von} <button onclick="clearChip('von')">✕</button></span>`);
   if(bis) chips.push(`<span class="chip-tag">BIS ${bis} <button onclick="clearChip('bis')">✕</button></span>`);
   if(q) chips.push(`<span class="chip-tag">SUCHE: ${q.substring(0,16)} <button onclick="clearChip('srch')">✕</button></span>`);
@@ -2717,6 +2731,7 @@ function renderChips(){
 function clearChip(field){
   if(field==='co') document.getElementById('f-co').value='';
   else if(field==='ca') document.getElementById('f-ca').value='';
+  else if(field==='ac'){const e=document.getElementById('f-ac'); if(e)e.value='';}
   else if(field==='von') document.getElementById('f-von').value='';
   else if(field==='bis') document.getElementById('f-bis').value='';
   else if(field==='srch') document.getElementById('f-srch').value='';
@@ -2824,16 +2839,33 @@ async function loadTimeline(){
   }catch(e){}
 }
 
+// M6: populate the actor filter from the loaded incidents (top by frequency).
+function populateActorFilter(){
+  const sel=document.getElementById('f-ac');
+  if(!sel) return;
+  const counts={};
+  all.forEach(i=>(i.actors||'').split(',').forEach(a=>{
+    a=a.trim(); if(a) counts[a]=(counts[a]||0)+1;
+  }));
+  const top=Object.keys(counts).sort((x,y)=>counts[y]-counts[x]).slice(0,40);
+  const cur=sel.value;
+  sel.innerHTML='<option value="">AKTEUR: ALLE</option>'+
+    top.map(a=>`<option${a===cur?' selected':''}>${a.replace(/[<>&]/g,'')}</option>`).join('');
+}
+
 // ── FILTERS ────────────────────────────────────────────────────────
 function applyFilters(){
   const co=document.getElementById('f-co').value;
   const ca=document.getElementById('f-ca').value;
   const von=document.getElementById('f-von').value;
   const bis=document.getElementById('f-bis').value;
+  const acEl=document.getElementById('f-ac');
+  const ac=acEl?acEl.value:'';
   const srch=(document.getElementById('f-srch').value||'').toLowerCase().trim();
   vis=all.filter(i=>{
     if(co&&i.country!==co) return false;
     if(ca&&i.category!==ca) return false;
+    if(ac&&!((i.actors||'').split(',').map(s=>s.trim()).includes(ac))) return false;
     if(von&&i.date<von) return false;
     if(bis&&i.date>bis) return false;
     if(sevMin>0&&(i.severity_score||0)<sevMin) return false;
@@ -2854,7 +2886,7 @@ function applyFilters(){
 }
 
 function resetFilters(){
-  ['f-co','f-ca','f-von','f-bis'].forEach(id=>document.getElementById(id).value='');
+  ['f-co','f-ca','f-ac','f-von','f-bis'].forEach(id=>{const e=document.getElementById(id); if(e)e.value='';});
   document.getElementById('f-srch').value='';
   activeYr=null;
   document.querySelectorAll('.yrbtn').forEach(b=>b.classList.remove('on'));
@@ -3058,6 +3090,7 @@ async function loadData(){
       fetch('/api/stats').then(r=>r.json())
     ]);
     all=inc;
+    populateActorFilter();
     const tcEl=document.getElementById('tc');
     if(tcEl) animCount(tcEl,stats.total);
     const gp=stats.total>0?Math.round(stats.geocoded/stats.total*100):0;
@@ -3189,6 +3222,21 @@ async function loadTrends(){
     const d=await fetch('/api/trends').then(r=>r.json());
     renderTrends(d);
   }catch(e){console.error('trends:',e);}
+}
+
+// M-analysis: data-grounded scene outlook (/api/outlook). Sober extrapolation,
+// always shown with its uncertainty caveat — never presented as certainty.
+async function loadOutlook(){
+  try{
+    const o=await fetch('/api/outlook').then(r=>r.json());
+    const hl=document.getElementById('outlook-headline');
+    const ul=document.getElementById('outlook-drivers');
+    const cv=document.getElementById('outlook-caveat');
+    if(hl) hl.textContent=o.headline||'—';
+    if(ul) ul.innerHTML=(o.drivers||[]).map(d=>
+      `<li style="font-family:var(--mono);font-size:8px;color:var(--t2);padding:2px 0 2px 10px;border-left:1px solid rgba(255,255,255,0.08);margin-bottom:2px">${d.replace(/[<>&]/g,'')}</li>`).join('');
+    if(cv) cv.textContent=(o.caveat||'')+(o.confidence?` · Konfidenz: ${o.confidence}`:'');
+  }catch(e){console.error('outlook:',e);}
 }
 
 function renderTrends(d){
@@ -3335,6 +3383,12 @@ async function loadEffectiveness(){
     setEff('eff-cluster', d.cluster_active < 0 ? '—' : String(d.cluster_active), d.cluster_active < 0);
     setEff('eff-funding', '€' + formatEur(d.funding_year_eur) + ' · ' + d.funding_year, false);
     setEff('eff-evidence', d.evidence_pct < 0 ? '—' : (d.evidence_pct + '%'), d.evidence_pct < 0);
+    // M-analysis: documentation-strength (Beleggrad), explicitly not deterrence.
+    const ds=document.getElementById('eff-docstrength');
+    if(ds && typeof d.doc_strength==='number'){
+      ds.textContent='BELEGGRAD '+d.doc_strength+'%';
+      ds.title=(d.doc_strength_note||'')+` · gerichtsfest ${d.court_anchored_pct}% · Ø-Verifizierung ${d.avg_quality}/100 · n=${d.incidents_total}`;
+    }
   }catch(e){ /* keep last values */ }
   // Crawler-Quellen-Counter (öffentliche Visibility): X aktiv / Y konfiguriert
   try{
