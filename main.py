@@ -8261,6 +8261,39 @@ async def get_effectiveness():
     ).fetchone()[0] or 0
     evidence_pct = round(100.0 * ev_have / ev_base) if ev_base else 0
 
+    # ── DOKUMENTATIONS-STÄRKE (NICHT Abschreckungswirkung) ──────────────
+    # Honest, measurable proxy: how well-substantiated the dataset is. This is
+    # explicitly NOT a real-world "deterrence/stop effect" — that is not
+    # measurable from inside the tool. Credible documentation is what produces
+    # whatever deterrent effect exists; so we report documentation strength.
+    inc_rows = db.execute(
+        "SELECT confidence, prosec_status, case_ref, evidence_path, "
+        "COALESCE(corroboration,0) AS corroboration FROM incidents"
+    ).fetchall()
+    total_inc = len(inc_rows)
+    court_anchored = corroborated = 0
+    qsum = 0
+    PROSEC_OK = {"investigating", "charged", "trial", "convicted"}
+    for r in inc_rows:
+        ps = (r["prosec_status"] or "unknown").lower()
+        anchored = ps in PROSEC_OK or bool((r["case_ref"] or "").strip())
+        if anchored:
+            court_anchored += 1
+        if (r["corroboration"] or 0) >= 1:
+            corroborated += 1
+        qsum += quality_score(
+            confidence=r["confidence"] or 0,
+            prosec_status=ps,
+            case_ref=r["case_ref"] or "",
+            has_evidence=bool((r["evidence_path"] or "").strip()),
+            corroboration=r["corroboration"] or 0,
+        )["score"]
+    court_anchored_pct = round(100.0 * court_anchored / total_inc) if total_inc else 0
+    corroborated_pct   = round(100.0 * corroborated / total_inc) if total_inc else 0
+    avg_quality        = round(qsum / total_inc) if total_inc else 0
+    # Single documentation-strength index = mean of the four coverage signals.
+    doc_strength = round((court_anchored_pct + corroborated_pct + evidence_pct + avg_quality) / 4)
+
     return JSONResponse({
         "prosec_gap_pct":  prosec_gap_pct,
         "prosec_gap_n":    gap,
@@ -8271,6 +8304,13 @@ async def get_effectiveness():
         "evidence_pct":    evidence_pct,
         "evidence_have":   ev_have,
         "evidence_base":   ev_base,
+        # Documentation strength (NOT deterrence). See note above.
+        "doc_strength":        doc_strength,
+        "court_anchored_pct":  court_anchored_pct,
+        "corroborated_pct":    corroborated_pct,
+        "avg_quality":         avg_quality,
+        "incidents_total":     total_inc,
+        "doc_strength_note":   "Dokumentations-Stärke (Beleggrad) — KEINE gemessene Abschreckungs-/Stoppwirkung.",
         "asof":            today.isoformat(),
     })
 
