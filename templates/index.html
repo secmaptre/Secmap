@@ -1505,6 +1505,16 @@ button:focus-visible, a:focus-visible{
             <span style="font-family:var(--mono);font-size:7px;color:rgba(217,154,43,0.75)">■ PROGNOSE</span>
           </div>
 
+          <div class="stitle" style="margin-bottom:5px;display:flex;justify-content:space-between;align-items:center">
+            <span>LAGE-AUSBLICK</span>
+            <span id="eff-docstrength" title="Dokumentations-Stärke (Beleggrad der Datenbasis) — KEINE gemessene Stoppwirkung" style="font-family:var(--mono);font-size:8px;color:var(--accent)"></span>
+          </div>
+          <div id="outlook-box" style="margin-bottom:13px">
+            <div id="outlook-headline" style="font-family:var(--mono);font-size:9px;color:var(--t0);line-height:1.55">—</div>
+            <ul id="outlook-drivers" style="list-style:none;margin:6px 0 0;padding:0"></ul>
+            <div id="outlook-caveat" style="font-family:var(--mono);font-size:7px;color:var(--t3);margin-top:6px;line-height:1.5;font-style:italic"></div>
+          </div>
+
           <div class="stitle" style="margin-bottom:5px">HOTSPOTS · 6 MONATE</div>
           <div id="trend-hotspots" style="margin-bottom:13px"></div>
 
@@ -2137,7 +2147,7 @@ async function setLang(lang){
 // Boot screen entfernt — Daten werden direkt geladen, kein theatralisches Intro.
 function runBoot(){
   setLang(detectLang());     // load i18n before first render
-  loadData(); loadTrends(); loadTimeline();
+  loadData(); loadTrends(); loadOutlook(); loadTimeline();
   loadEffectiveness();        // Wirkungs-Counter im Status-Footer (§C5)
   loadHotwire();              // SITREP-Ticker im Header (rezente High-Sev)
   setInterval(loadHotwire, 5 * 60 * 1000); // refresh alle 5 Minuten
@@ -3191,6 +3201,21 @@ async function loadTrends(){
   }catch(e){console.error('trends:',e);}
 }
 
+// M-analysis: data-grounded scene outlook (/api/outlook). Sober extrapolation,
+// always shown with its uncertainty caveat — never presented as certainty.
+async function loadOutlook(){
+  try{
+    const o=await fetch('/api/outlook').then(r=>r.json());
+    const hl=document.getElementById('outlook-headline');
+    const ul=document.getElementById('outlook-drivers');
+    const cv=document.getElementById('outlook-caveat');
+    if(hl) hl.textContent=o.headline||'—';
+    if(ul) ul.innerHTML=(o.drivers||[]).map(d=>
+      `<li style="font-family:var(--mono);font-size:8px;color:var(--t2);padding:2px 0 2px 10px;border-left:1px solid rgba(255,255,255,0.08);margin-bottom:2px">${d.replace(/[<>&]/g,'')}</li>`).join('');
+    if(cv) cv.textContent=(o.caveat||'')+(o.confidence?` · Konfidenz: ${o.confidence}`:'');
+  }catch(e){console.error('outlook:',e);}
+}
+
 function renderTrends(d){
   // Trend direction
   const arrow=document.getElementById('trend-arrow');
@@ -3335,6 +3360,12 @@ async function loadEffectiveness(){
     setEff('eff-cluster', d.cluster_active < 0 ? '—' : String(d.cluster_active), d.cluster_active < 0);
     setEff('eff-funding', '€' + formatEur(d.funding_year_eur) + ' · ' + d.funding_year, false);
     setEff('eff-evidence', d.evidence_pct < 0 ? '—' : (d.evidence_pct + '%'), d.evidence_pct < 0);
+    // M-analysis: documentation-strength (Beleggrad), explicitly not deterrence.
+    const ds=document.getElementById('eff-docstrength');
+    if(ds && typeof d.doc_strength==='number'){
+      ds.textContent='BELEGGRAD '+d.doc_strength+'%';
+      ds.title=(d.doc_strength_note||'')+` · gerichtsfest ${d.court_anchored_pct}% · Ø-Verifizierung ${d.avg_quality}/100 · n=${d.incidents_total}`;
+    }
   }catch(e){ /* keep last values */ }
   // Crawler-Quellen-Counter (öffentliche Visibility): X aktiv / Y konfiguriert
   try{
